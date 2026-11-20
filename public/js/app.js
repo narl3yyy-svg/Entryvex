@@ -1,6 +1,7 @@
 import { getSymbols, get24h, getKlines, Stream, klineFromStream } from "./binance.js";
 import { COINS, coinName, DEFAULT_WATCHLIST } from "./coins.js";
 import * as fmt from "./format.js";
+import { createScanner } from "./scanner.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -23,7 +24,7 @@ const state = {
 
 let tickerStream = null;
 let klineStream = null;
-let chart, candles, volume;
+let chart, candles, volume, scanner;
 let lastCandle = null;
 let klineLoadToken = 0;
 
@@ -190,7 +191,7 @@ function initChart() {
     layout: { background: { type: "solid", color: "transparent" }, textColor: "#8a94a6", fontFamily: "Inter, system-ui, sans-serif" },
     grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
     rightPriceScale: { borderColor: "#232a35" },
-    timeScale: { borderColor: "#232a35", timeVisible: true, secondsVisible: false },
+    timeScale: { borderColor: "#232a35", timeVisible: true, secondsVisible: false, shiftVisibleRangeOnNewBar: true },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     localization: { priceFormatter: (p) => fmt.price(p) },
   });
@@ -207,6 +208,15 @@ function initChart() {
     if (!c) { $("candle-info").textContent = ""; return; }
     $("candle-info").textContent = `O ${fmt.price(c.open)}  H ${fmt.price(c.high)}  L ${fmt.price(c.low)}  C ${fmt.price(c.close)}`;
   });
+}
+
+// Keep the live candle in the middle of the chart, with empty space to its right.
+// New candles shift the view along, so it stays centered as time passes.
+const CENTER_BARS = 70; // candles visible on each side of the live one
+function centerLive(count) {
+  const last = (count ?? candles.data().length) - 1;
+  if (last < 0) return;
+  chart.timeScale().setVisibleLogicalRange({ from: last - CENTER_BARS, to: last + CENTER_BARS });
 }
 
 function chartMessage(text) {
@@ -233,9 +243,10 @@ async function loadChart() {
     candles.setData(data);
     volume.setData(data.map(volBar));
     lastCandle = data.at(-1) ?? null;
-    chart.timeScale().scrollToRealTime();
+    centerLive(data.length);
     chartMessage("");
     paintHeader();
+    scanner.analyzeSymbol(sym, interval);
   } catch (e) {
     console.warn(e);
     chartMessage("Couldn't load chart data from Binance.US. Retrying…");
@@ -252,6 +263,7 @@ async function loadChart() {
       candles.update(c);
       volume.update(volBar(c));
       lastCandle = c;
+      scanner.onCandle(c);
       if (!state.stats.has(sym)) paintHeader();
     },
   });
@@ -303,6 +315,15 @@ async function boot() {
   tickClock();
   setInterval(tickClock, 1000);
   initChart();
+  scanner = createScanner({
+    chartSeries: candles,
+    getWatchlist: () => state.watchlist.slice(),
+    getBase: () => state.bySymbol.get(state.selected)?.base ?? state.selected,
+    onPickSymbol: (sym) => { selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    // Zoom out to show all past trades on the chart; zoom back to the live candle when hidden.
+    onShowTrades: (showing) => (showing ? chart.timeScale().fitContent() : centerLive()),
+  });
+  $("center-live").addEventListener("click", () => centerLive());
 
   document.querySelectorAll("#intervals button").forEach((b) => {
     b.classList.toggle("on", b.dataset.i === state.interval);

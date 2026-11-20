@@ -46,6 +46,37 @@ export async function getKlines(symbol, interval, limit = 500) {
   return raw.map(parseKlineArray);
 }
 
+/**
+ * Longer candle history (pages backwards 1000 at a time). Cached for 5 minutes.
+ * The last candle returned may still be forming.
+ */
+const historyCache = new Map();
+export async function getKlineHistory(symbol, interval, total = 3000) {
+  const key = `${symbol}:${interval}:${total}`;
+  const hit = historyCache.get(key);
+  if (hit && Date.now() - hit.t < 300_000) return hit.v.slice();
+  let out = [];
+  let endTime = null;
+  while (out.length < total) {
+    const limit = Math.min(1000, total - out.length);
+    const raw = await getJSON(`/klines?symbol=${symbol}&interval=${interval}&limit=${limit}${endTime ? `&endTime=${endTime}` : ""}`);
+    if (!raw.length) break;
+    out = raw.map(parseKlineArray).concat(out);
+    endTime = raw[0][0] - 1;
+    if (raw.length < limit) break;
+  }
+  historyCache.set(key, { t: Date.now(), v: out });
+  return out.slice();
+}
+
+/** Best bid/ask right now. Used to measure the real cost of crossing the spread. */
+export async function getBookTicker(symbol) {
+  const t = await getJSON(`/ticker/bookTicker?symbol=${symbol}`);
+  const bid = +t.bidPrice, ask = +t.askPrice;
+  const mid = (bid + ask) / 2;
+  return { bid, ask, spreadPct: mid > 0 ? (ask - bid) / mid : NaN };
+}
+
 function parseKlineArray(k) {
   return { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] };
 }

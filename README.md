@@ -4,18 +4,22 @@ Live crypto market research in your browser: real-time prices, candle charts and
 
 > Entryvex is a research tool. It never places trades, never connects to your exchange account, and is not financial advice. You decide and you place every trade yourself.
 
-## What it does today (step 1)
+## What it does today
 
 - **Live watchlist:** streaming prices and 24h change for your coins, straight from Binance.US. Add any Binance.US pair with the search box.
 - **Live candle chart:** 1m / 5m / 15m / 1h / 4h / 1D candles with volume, updating tick by tick.
 - **Market stats:** 24h high, low and volume for the selected coin.
 - **News feed:** headlines from Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine and Google News, filtered to the coin you're looking at, or all crypto.
-- Works on desktop, tablet and phone. Your watchlist is remembered in your browser.
+- **Setup scanner (measured confidence):** detects 4 setups (volume breakout, trend pullback, oversold bounce, momentum turn-up) on the last closed candle, and replays every past occurrence on the last 3,000 candles of that coin + timeframe. Shows how often each one ended in profit (with a 95% range), average win/loss and average result per trade **after fees and the live bid/ask spread**, and a verdict: GO / CAUTION / UNPROVEN / NO TRADE / WAIT.
+- **Trade plan** for an active setup with a positive record: buy zone, take-profit, stop-loss, result per $100 after costs and typical time to resolve, drawn on the chart.
+- **Past trades on the chart:** click any setup to see where it fired before, marked W (win) or L (loss).
+- **Watchlist scan:** checks every coin in your watchlist on the current timeframe and ranks them.
+- Works on desktop, tablet and phone. Your watchlist and fee setting are remembered in your browser.
 
 ## Roadmap
 
 1. ✅ Live data: prices, charts, news
-2. Setup detection and scoring: a **measured** confidence %, based on how each setup has actually played out historically
+2. ✅ Setup detection and scoring: a **measured** confidence %, based on how each setup has actually played out historically
 3. Trade cards and money prompt: entry, stop, target, position size, expected value after fees, go/no-go
 4. News sentiment and plain-English coin/company summaries
 5. Dashboard polish and alerts
@@ -41,6 +45,12 @@ node dev-server.mjs
 ```
 
 Then open http://localhost:8788.
+
+To print the scanner's results for any coins from the command line:
+
+```
+node tools/engine-report.mjs BTCUSDT:15m ETHUSDT:1h
+```
 
 ## Data sources
 

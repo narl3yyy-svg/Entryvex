@@ -60,11 +60,31 @@
         <div class="seg" id="intervals" role="tablist" aria-label="Candle size">
           <button data-i="1m">1m</button><button data-i="5m">5m</button><button data-i="15m">15m</button><button data-i="1h">1h</button><button data-i="4h">4h</button><button data-i="1d">1D</button>
         </div>
-        <span id="candle-info" class="muted small mono"></span>
+        <div class="toolbar-right">
+          <span id="candle-info" class="muted small mono"></span>
+          <button id="center-live" class="ghost-btn" title="Put the live candle back in the middle of the chart"><i class="live-dot"></i>Live</button>
+        </div>
       </div>
       <div id="chart" class="chart"></div>
-      <div class="next-up">
-        <strong>Coming next:</strong> setup scoring with a measured confidence %, plus trade cards (entry, stop, target, size, expected value after fees).
+
+      <div class="scanner" id="scanner">
+        <div class="scan-head">
+          <div>
+            <h2>Setup scanner</h2>
+            <div id="scan-sub" class="muted small"></div>
+          </div>
+          <div class="scan-controls">
+            <label class="fee-label small muted" title="Your Binance.US trading fee per buy or sell. Spot taker fee is 0.02%, maker (limit orders) is 0%.">
+              Fee per side <input id="fee" type="number" step="0.01" min="0" max="2" inputmode="decimal" /> %
+            </label>
+            <button id="scan-all" class="btn">Scan watchlist</button>
+          </div>
+        </div>
+        <div id="verdict"></div>
+        <div id="plan" class="plan"></div>
+        <div class="table-wrap"><table id="setups" class="setups"></table></div>
+        <div id="scan-results" class="scan-results-box"></div>
+        <p id="method" class="method small muted"></p>
       </div>
     </section>
 
