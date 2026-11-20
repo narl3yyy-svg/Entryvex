@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entryvex</title>
+  <meta name="description" content="Entryvex: live crypto market research. Live prices, charts and news in one place." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="var(--accent)"/><path d="M10 21 L15 12 L18 17 L22 10" stroke="#08130c" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">Entryvex</span>
+      <span class="brand-tag">Market research</span>
+    </div>
+    <div class="topbar-right">
+      <span id="status" class="status" data-state="connecting"><i></i><span>Connecting…</span></span>
+      <span id="clock" class="clock mono"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel watch">
+      <div class="panel-head">
+        <h2>Watchlist</h2>
+        <span class="muted small">Binance.US · live</span>
+      </div>
+      <div class="search">
+        <input id="search" type="search" placeholder="Add a coin (e.g. PEPE, Solana)…" autocomplete="off" spellcheck="false" />
+        <div id="search-results" class="search-results" hidden></div>
+      </div>
+      <ul id="watchlist" class="watchlist"></ul>
+    </aside>
+
+    <section class="panel chart-panel">
+      <div class="chart-head">
+        <div class="symbol-block">
+          <div class="symbol-line">
+            <h1 id="sym-name">—</h1>
+            <span id="sym-pair" class="pair mono muted"></span>
+          </div>
+          <div class="price-line">
+            <span id="sym-price" class="big-price mono">—</span>
+            <span id="sym-change" class="chip mono">—</span>
+          </div>
+        </div>
+        <dl class="stats">
+          <div><dt>24h high</dt><dd id="sym-high" class="mono">—</dd></div>
+          <div><dt>24h low</dt><dd id="sym-low" class="mono">—</dd></div>
+          <div><dt>24h volume</dt><dd id="sym-vol" class="mono">—</dd></div>
+        </dl>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="intervals" role="tablist" aria-label="Candle size">
+          <button data-i="1m">1m</button><button data-i="5m">5m</button><button data-i="15m">15m</button><button data-i="1h">1h</button><button data-i="4h">4h</button><button data-i="1d">1D</button>
+        </div>
+        <span id="candle-info" class="muted small mono"></span>
+      </div>
+      <div id="chart" class="chart"></div>
+      <div class="next-up">
+        <strong>Coming next:</strong> setup scoring with a measured confidence %, plus trade cards (entry, stop, target, size, expected value after fees).
+      </div>
+    </section>
+
+    <aside class="panel news">
+      <div class="panel-head">
+        <h2>News</h2>
+        <div class="seg small-seg" id="news-tabs">
+          <button data-tab="coin" class="on" id="news-tab-coin">Coin</button>
+          <button data-tab="all">All crypto</button>
+        </div>
+      </div>
+      <div id="news-meta" class="muted small news-meta"></div>
+      <ul id="news-list" class="news-list"></ul>
+    </aside>
+  </main>
+
+  <footer class="foot muted small">
+    Entryvex shows market data and news for research only. It never places trades and is not financial advice. Data: Binance.US public market feed &amp; public news RSS.
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
