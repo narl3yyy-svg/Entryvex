@@ -65,10 +65,15 @@ export async function onRequestGet(context) {
   const results = await Promise.allSettled(feeds.map(fetchFeed));
   let items = [];
   const failed = [];
+  let perCoinOk = false;
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") items.push(...r.value);
-    else failed.push(feeds[i].source);
+    if (r.status === "fulfilled") {
+      items.push(...r.value);
+      if (feeds[i].perCoin) perCoinOk = true;
+    } else failed.push(feeds[i]);
   });
+  // Google/Bing are interchangeable backups: only report one as down if both are.
+  const failedNames = failed.filter((f) => !(f.perCoin && perCoinOk)).map((f) => f.source);
 
   // De-duplicate by normalized title, tag coins, sort newest first.
   const seen = new Set();
@@ -85,7 +90,7 @@ export async function onRequestGet(context) {
   items.sort((a, b) => (b.published || 0) - (a.published || 0));
   items = items.slice(0, MAX_ITEMS).map(({ perCoin, ...rest }) => rest);
 
-  const body = JSON.stringify({ coin: coin || null, updated: Date.now(), failedSources: failed, items });
+  const body = JSON.stringify({ coin: coin || null, updated: Date.now(), failedSources: failedNames, items });
   const res = new Response(body, {
     headers: {
       "content-type": "application/json; charset=utf-8",
