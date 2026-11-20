@@ -99,6 +99,12 @@ export async function onRequestGet(context) {
     it.coins = stock ? [stock] : tagCoins(it.title + " " + (it.summary || ""));
     it.mood = scoreHeadline(it.title);
   }
+  if (stock) {
+    // Yahoo's per-ticker feed mixes in general market stories; keep ones that mention the company.
+    const words = [stock.toLowerCase(), ...stockName.toLowerCase().split(/[\s,.]+/).filter((w) => w.length > 2 && !["the", "and", "inc", "corp", "company", "group", "holdings", "trust", "etf", "spdr", "class"].includes(w)).slice(0, 2)];
+    const mentions = (it) => { const t = ` ${(it.title + " " + (it.summary || "")).toLowerCase()} `; return words.some((w) => t.includes(w)); };
+    items = items.filter((it) => it.source !== "Yahoo Finance" || mentions(it));
+  }
   if (coin && !stock) {
     items = items.filter((it) => it.perCoin || it.coins.includes(coin));
   }
