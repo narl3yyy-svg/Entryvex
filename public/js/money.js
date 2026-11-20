@@ -1,6 +1,7 @@
 // "Your money": balance, risk settings, the daily loss guard, the dollar trade card
 // and a manual trade calculator. Everything is stored only in this browser.
 import { sizePosition, roundTick } from "./sizing.js";
+import { todayStats, onJournalChange } from "./journal.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -27,21 +28,20 @@ export function initMoney() {
   bind("m-risk", "riskPct", 1, 0.1, 10);
   bind("m-daily", "dailyPct", 3, 0.5, 50);
 
-  $("m-log-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const v = parseFloat($("m-log-usd").value);
-    if (!isFinite(v) || v === 0) return;
-    const j = journal();
-    j.results.push({ t: Date.now(), usd: v });
-    saveJournal(j);
-    $("m-log-usd").value = "";
-    changed();
+  // Fee presets: plain-language choices that set the % fee the scanner and sizing use.
+  const preset = $("fee-preset"), fee = $("fee"), customBox = document.querySelector(".fee-custom");
+  const current = String(store.get("feePct", 0.02));
+  const match = [...preset.options].find((o) => o.value === current);
+  preset.value = match ? current : "custom";
+  customBox.hidden = preset.value !== "custom";
+  preset.addEventListener("change", () => {
+    customBox.hidden = preset.value !== "custom";
+    if (preset.value !== "custom") {
+      fee.value = preset.value;
+      fee.dispatchEvent(new Event("change"));
+    } else fee.focus();
   });
-  $("m-day").addEventListener("click", (e) => {
-    if (e.target.closest("[data-undo]")) {
-      const j = journal(); j.results.pop(); saveJournal(j); changed();
-    }
-  });
+  onJournalChange(changed);
   $("calc").addEventListener("toggle", () => { if ($("calc").open) prefillCalc(true); });
   ["c-entry", "c-stop", "c-target"].forEach((id) => $(id).addEventListener("input", renderCalc));
   $("c-reset").addEventListener("click", (e) => { e.preventDefault(); prefillCalc(true); });
@@ -62,20 +62,11 @@ function bind(id, key, def, min, max) {
   });
 }
 
-/* ---------------- Daily loss guard ---------------- */
-function today() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
-function journal() {
-  const j = store.get("journal", null);
-  return j && j.date === today() ? j : { date: today(), results: [] };
-}
-function saveJournal(j) { store.set("journal", j); }
-
+/* ---------------- Daily loss guard (fed by My trades) ---------------- */
 export function guard() {
-  const j = journal();
-  const pnl = j.results.reduce((s, r) => s + r.usd, 0);
+  const d = todayStats();
   const limit = settings.balance * settings.dailyPct / 100;
-  const losses = j.results.filter((r) => r.usd < 0).length;
-  return { pnl, limit, trades: j.results.length, losses, locked: limit > 0 && pnl <= -limit };
+  return { pnl: d.pnl, limit, trades: d.trades, open: d.open, losses: d.losses, locked: limit > 0 && d.pnl <= -limit };
 }
 
 function renderDay() {
@@ -86,9 +77,8 @@ function renderDay() {
   el.innerHTML = `
     <div class="day-line">
       <span>Today: <strong class="mono ${pnlCls}">${g.pnl >= 0 ? "+" : "−"}$${Math.abs(g.pnl).toFixed(2)}</strong>
-      <span class="muted"> · ${g.trades} trade${g.trades === 1 ? "" : "s"} logged</span></span>
-      ${g.limit > 0 ? `<span class="muted">Daily loss limit: <span class="mono">−$${g.limit.toFixed(2)}</span></span>` : `<span class="muted">Set a balance to turn on the daily loss limit.</span>`}
-      ${g.trades ? `<button class="link-btn" data-undo>Undo last</button>` : ""}
+      <span class="muted"> · ${g.trades} closed${g.open ? ` · ${g.open} open` : ""} (from My trades)</span></span>
+      ${g.limit > 0 ? `<span class="muted">Stop for the day at <span class="mono">−$${g.limit.toFixed(2)}</span></span>` : `<span class="muted">Enter your balance to turn on the daily stop.</span>`}
     </div>
     ${g.limit > 0 ? `<div class="limit-bar ${g.locked ? "hit" : used > 0.66 ? "near" : ""}"><i style="width:${(used * 100).toFixed(1)}%"></i></div>` : ""}
     ${g.locked ? `<div class="guard-stop"><strong>Daily loss limit reached.</strong> You're down $${Math.abs(g.pnl).toFixed(2)} today. Stop trading for today. Tomorrow resets automatically.</div>` : ""}`;
@@ -152,11 +142,17 @@ export function renderTradeCard(c) {
         <li>Open Binance.US → <strong>Trade</strong> (Advanced/Spot trading, not the simple Buy/Sell screen, which charges more) → <strong>${fmt.esc(c.base)}/${fmt.esc(c.quote)}</strong>.</li>
         <li><strong>Limit buy</strong> ${copyable(trimQty(sz.qty))} ${fmt.esc(c.base)} at price ${copyable(fmt.price(sz.entry).replace(/,/g, ""))}. A limit order is a "maker" order and usually pays 0% fee.</li>
         <li>Once it fills, place an <strong>OCO sell</strong> for the same amount: limit price (take-profit) ${copyable(plain(sz.target))}, stop ${copyable(plain(sz.stop))}, stop-limit ${copyable(plain(ocoStopLimit))}.</li>
-        <li>Afterwards, log the result below ("Log a result") so the daily loss guard stays accurate.</li>
+        <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
       </ol>
       <p class="small muted">Prices move. If the price has already run past the buy zone, skip it rather than chasing.</p>
-    </details>` : ""}
+    </details>
+    <div class="take-row">${takeButton({ symbol: c.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval, source: "entryvex" })}
+      <span class="muted small">Only after you've actually placed the order.</span></div>` : ""}
   </div>`;
+}
+
+function takeButton(d) {
+  return `<button class="btn take-trade" data-take='${fmt.esc(JSON.stringify(d))}'>✓ I took this trade</button>`;
 }
 
 function copyable(v) { return `<button class="copy mono" data-copy="${fmt.esc(v)}" title="Copy">${fmt.esc(v)}</button>`; }
@@ -218,7 +214,9 @@ function renderCalc() {
     ${sz.reason === "too-small" ? `<div class="warn">Below Binance.US's minimum order (${fmt.esc(ctx.quote)} ${fmt.price(sz.minSpend)}).</div>` : ""}
     ${sz.reason === "costs-eat-target" ? `<div class="warn">Fees and spread are bigger than this target. It can't make money.</div>` : ""}
     ${sz.capped ? `<div class="note">Capped at your full balance; actual risk is $${sz.lossUsd.toFixed(2)}.</div>` : ""}
-    <p class="small muted">This calculator only does the math. Unlike the scanner, it has no measured track record behind it. You'd need to win at least ${Math.round(sz.breakevenWin * 100)}% of trades like this just to break even.</p>`;
+    <p class="small muted">This calculator only does the math. Unlike the scanner, it has no measured track record behind it. You'd need to win at least ${Math.round(sz.breakevenWin * 100)}% of trades like this just to break even.</p>
+    ${sz.ok ? `<div class="take-row">${takeButton({ symbol: ctx.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: "My own plan", source: "calculator" })}
+      <span class="muted small">Adds it to My trades so Entryvex tracks the result.</span></div>` : ""}`;
 }
 
 function humanMinutes(m) {

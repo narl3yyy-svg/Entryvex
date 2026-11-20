@@ -4,6 +4,7 @@ import { getKlineHistory, getBookTicker } from "./binance.js";
 import { coinName } from "./coins.js";
 import * as fmt from "./format.js";
 import { renderTradeCard, setMarketContext, onMoneyChange } from "./money.js";
+import { logFromAnalysis } from "./signals.js";
 
 const $ = (id) => document.getElementById(id);
 const HISTORY = 3000;
@@ -14,7 +15,7 @@ const store = {
   set(k, v) { try { localStorage.setItem("evx." + k, JSON.stringify(v)); } catch {} },
 };
 
-export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades }) {
+export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval }) {
   let ctx = null;          // { symbol, interval, candles, spreadPct }
   let result = null;
   let token = 0;
@@ -70,7 +71,46 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
 
   function recompute() {
     result = analyze(ctx.candles, { costPerSide: costPerSide(ctx.spreadPct) });
+    logFromAnalysis(ctx.symbol, ctx.interval, ctx.candles, result);
     render();
+    onAnalyzed?.(ctx, result);
+  }
+
+  /* ----- "Find an edge": test this coin on several candle sizes ----- */
+  $("find-edges").addEventListener("click", findEdges);
+  async function findEdges() {
+    if (!ctx) return;
+    const sym = ctx.symbol;
+    const box = $("edges");
+    const btn = $("find-edges");
+    btn.disabled = true;
+    box.innerHTML = `<div class="verdict-loading">Testing ${fmt.esc(coinName(getBase()))} on 5m, 15m, 1h and 4h candles…</div>`;
+    const rows = [];
+    for (const iv of ["5m", "15m", "1h", "4h"]) {
+      try {
+        const [c, book] = await Promise.all([getKlineHistory(sym, iv, HISTORY), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
+        const r = analyze(c, { costPerSide: costPerSide(book.spreadPct) });
+        for (const s of r.setups) if (s.stats.n) rows.push({ iv, s });
+      } catch {}
+    }
+    btn.disabled = false;
+    if (sym !== ctx?.symbol) return;
+    rows.sort((a, b) => b.s.stats.ev - a.s.stats.ev);
+    const good = rows.filter((x) => x.s.verdict.level === "edge" || x.s.verdict.level === "weak");
+    box.innerHTML = `<div class="edges-card">
+      <div class="edges-head"><strong>Where ${fmt.esc(coinName(getBase()))} has had an edge</strong><button class="link-btn" data-close-edges>Hide</button></div>
+      ${good.length ? `<p class="small muted">These setup + candle-size combos made money after costs in the past. Click one to switch to it; then wait for it to show "Active".</p>`
+        : `<p class="small">No setup has made money after costs on any candle size for this coin recently. <strong>That's useful to know: don't force trades here.</strong> Try another coin with "Scan watchlist".</p>`}
+      <div class="edge-list">${rows.slice(0, 8).map(({ iv, s }) => `
+        <button class="edge-row" data-iv="${iv}">
+          <span class="mono edge-iv">${iv}</span><span>${fmt.esc(s.name)}</span>
+          <span class="pill pill-${s.verdict.level}">${s.verdict.label}</span>
+          <span class="mono small">${pctRound(s.stats.winRate)} of ${s.stats.n}</span>
+          <span class="mono small ${s.stats.ev > 0 ? "up" : "down"}">${fmt.pct(s.stats.ev * 100)}/trade</span>
+          ${s.activeNow ? `<span class="pill pill-on">Active now</span>` : ""}
+        </button>`).join("")}</div></div>`;
+    box.querySelectorAll(".edge-row").forEach((b) => b.addEventListener("click", () => onPickInterval?.(b.dataset.iv)));
+    box.querySelector("[data-close-edges]").addEventListener("click", () => (box.innerHTML = ""));
   }
 
   function render() {
@@ -107,6 +147,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
       const p = r.plan;
       $("plan").innerHTML = renderTradeCard({
         plan: p, setup: best, costPerSide: r.costPerSide, rules,
+        symbol: ctx.symbol, interval, verdictLevel: best.verdict.level,
         base: info.base || getBase(), quote: info.quote || "USDT",
         minutesToResolve: (p.medianBars || 0) * (MINUTES[interval] || 0),
         maxBarsText: `${RULES.maxBars} candles (${humanMinutes(RULES.maxBars * (MINUTES[interval] || 0))})`,
@@ -119,6 +160,20 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     } else {
       $("plan").innerHTML = "";
     }
+
+    // Context: what it's watching and when something last fired
+    let last = null;
+    for (const s of r.setups) {
+      const t = s.trades[s.trades.length - 1];
+      if (t && (!last || t.signalTime > last.t.signalTime)) last = { s, t };
+    }
+    const lastTxt = last
+      ? `Last setup here: <strong>${fmt.esc(last.s.name)}</strong> ${fmt.ago(last.t.signalTime * 1000)}, which ${last.t.net > 0 ? `<span class="up">ended in profit (${fmt.pct(last.t.net * 100)})</span>` : `<span class="down">ended in a loss (${fmt.pct(last.t.net * 100)})</span>`}.`
+      : "No setup has fired in the loaded history.";
+    const edgeCount = r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").length;
+    $("scan-context").innerHTML = `<span>Watching for 4 setups on <strong>${interval}</strong> candles; checks again every time a candle closes. ${lastTxt}</span>
+      <span>${edgeCount ? `<strong>${edgeCount}</strong> of 4 setups have a positive record here; you'll get a trade card when one is active.` : `None of the 4 setups has made money here after costs. Try <button class="link-btn" data-find-edge>Find an edge</button> or another coin.`}</span>`;
+    $("scan-context").querySelector("[data-find-edge]")?.addEventListener("click", findEdges);
 
     // Setups table
     $("setups").innerHTML = `
@@ -205,6 +260,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
         try {
           const [c, book] = await Promise.all([getKlineHistory(sym, interval, HISTORY), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
           const r = analyze(c, { costPerSide: costPerSide(book.spreadPct) });
+          logFromAnalysis(sym, interval, c, r);
           const b = r.best;
           rows.push({
             sym, base: sym.replace(/(USDT|USDC|USD)$/, ""), level: r.overall.level, label: r.overall.label, ev: b?.stats.ev,

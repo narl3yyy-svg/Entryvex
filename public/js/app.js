@@ -4,8 +4,12 @@ import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
 import { initMoney } from "./money.js";
 import { getProfile, plainEnglish, moodOf, moodHtml } from "./research.js";
-import { initAlerts, onTicker, openPriceAlert } from "./alerts.js";
+import { initAlerts, onTicker, openPriceAlert, pushAlert } from "./alerts.js";
 import { ema } from "./indicators.js";
+import { forecast, describeOdds, reliability } from "./forecast.js";
+import { initJournal, onTicker as journalTicker } from "./journal.js";
+import { initSignals } from "./signals.js";
+import { initAI, setAIContext } from "./ai.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -25,12 +29,77 @@ const state = {
   newsTab: store.get("newsTab", "report"),
   badges: {},
   showEma: store.get("ema", true),
+  showForecast: store.get("forecast", true),
+  forecast: null,
+  analysis: null,
   status: { ticker: "connecting", kline: "connecting" },
 };
 
 let tickerStream = null;
 let klineStream = null;
-let chart, candles, volume, scanner, emaLines;
+let chart, candles, volume, scanner, emaLines, fcLines = [];
+const INTERVAL_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+const FC_H = 20;
+
+/* ---------- Forecast: measured price range for the next FC_H candles ---------- */
+function updateForecast(ctx, result) {
+  const f = forecast(ctx.candles, INTERVAL_SEC[ctx.interval] || 900, FC_H);
+  state.forecast = f ? { ...f, interval: ctx.interval, symbol: ctx.symbol } : null;
+  state.analysis = { result, interval: ctx.interval, symbol: ctx.symbol };
+  drawForecast();
+  renderForecastBox();
+  pushAIContext();
+}
+function drawForecast() {
+  const f = state.forecast;
+  if (!f || !state.showForecast || f.symbol !== state.selected) { fcLines.forEach((l) => l.setData([])); return; }
+  const start = { time: f.t0, value: f.live };
+  fcLines.forEach((line, k) => line.setData([start, ...f.bands.map((b) => ({ time: b.time, value: b.q[4 - k] }))]));
+}
+function horizonText(f) {
+  const mins = (f.H * f.intervalSec) / 60;
+  return mins < 60 ? `${Math.round(mins)} minutes` : mins < 1440 ? `${+(mins / 60).toFixed(1)} hours` : `${+(mins / 1440).toFixed(1)} days`;
+}
+function renderForecastBox() {
+  const f = state.forecast, box = $("forecast-box");
+  $("forecast-toggle").classList.toggle("on", state.showForecast);
+  if (!f || f.symbol !== state.selected) { box.innerHTML = ""; return; }
+  const rel = reliability(f.accuracy80);
+  const base = currentBase();
+  const chg = (v) => `${v >= f.live ? "+" : ""}${(((v - f.live) / f.live) * 100).toFixed(1)}%`;
+  box.innerHTML = `
+    <div class="fc-main">
+      <div class="fc-title">Forecast · next ${f.H} candles (~${horizonText(f)})</div>
+      <div class="fc-range"><span class="muted">80% likely between</span>
+        <strong class="mono down">${fmt.price(f.range80[0])}</strong><span class="muted small">(${chg(f.range80[0])})</span>
+        <span class="muted">and</span>
+        <strong class="mono up">${fmt.price(f.range80[1])}</strong><span class="muted small">(${chg(f.range80[1])})</span>
+        <span class="muted">· middle ${fmt.price(f.mid)}</span></div>
+    </div>
+    <div class="fc-facts">
+      <div title="How often price really finished inside the 80% range, tested on recent data the forecast wasn't built from"><span>Forecast accuracy</span>
+        <strong class="fc-${rel.level}">${Math.round(f.accuracy80 * 100)}% inside range</strong><small class="muted">${rel.label} · ${f.tested.toLocaleString()} tests</small></div>
+      <div><span>Chance ${fmt.esc(base)} is higher in ~${horizonText(f)}</span>
+        <strong class="mono">${Math.round(f.pUp * 100)}%</strong><small class="muted">${describeOdds(f.pUp)}</small></div>
+      <div title="Only counting past moments when the trend looked like it does now"><span>When the trend looked like now</span>
+        <strong class="mono">${isFinite(f.pUpTrend) ? Math.round(f.pUpTrend * 100) + "% higher" : "—"}</strong><small class="muted">price ${f.trendLabel.split(" (")[0]} · ${f.nTrend.toLocaleString()} cases</small></div>
+    </div>`;
+}
+function toggleForecast() {
+  state.showForecast = !state.showForecast;
+  store.set("forecast", state.showForecast);
+  drawForecast(); renderForecastBox();
+}
+
+function pushAIContext() {
+  const sym = state.selected, info = state.bySymbol.get(sym), s = state.stats.get(sym);
+  setAIContext({
+    symbol: sym, base: info?.base, quote: info?.quote, name: coinName(info?.base ?? sym), interval: state.interval,
+    price: s?.last ?? lastCandle?.close, change24h: s?.changePct, high24h: s?.high, low24h: s?.low, volume24h: s?.quoteVolume,
+    forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
+    analysis: state.analysis && state.analysis.symbol === sym ? state.analysis : null,
+  });
+}
 let emaState = null; // { closes: [], times: [], v: {20: [], 50: []} }
 
 /* EMA 20/50 overlay: full calculation on load, then incremental updates per tick. */
@@ -167,6 +236,7 @@ async function refreshTickers() {
         paintRow(d.s, prev?.last);
         if (d.s === state.selected) paintHeader();
         onTicker(d.s, last);
+        journalTicker(d.s, last);
       },
     }
   );
@@ -225,6 +295,7 @@ function paintHeader() {
   $("sym-low").textContent = fmt.price(s?.low);
   $("sym-vol").textContent = s ? "$" + fmt.compact(s.quoteVolume) : "—";
   if (last) document.title = `${fmt.price(last)} ${base} · Entryvex`;
+  pushAIContext();
 }
 
 /* ---------- Chart ---------- */
@@ -249,6 +320,15 @@ function initChart() {
     20: chart.addLineSeries({ ...lineOpts, color: "rgba(224,179,65,0.85)", title: "" }),
     50: chart.addLineSeries({ ...lineOpts, color: "rgba(122,162,255,0.85)", title: "" }),
   };
+  // Forecast range lines (80% outer, 50% inner, middle)
+  const fc = { lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false };
+  fcLines = [
+    chart.addLineSeries({ ...fc, color: "rgba(46,229,157,0.45)", lineStyle: 2, title: "80% high" }),
+    chart.addLineSeries({ ...fc, color: "rgba(46,229,157,0.8)", lineStyle: 2, title: "", lastValueVisible: false }),
+    chart.addLineSeries({ ...fc, color: "rgba(230,234,240,0.7)", lineStyle: 1, title: "middle" }),
+    chart.addLineSeries({ ...fc, color: "rgba(240,80,110,0.8)", lineStyle: 2, title: "", lastValueVisible: false }),
+    chart.addLineSeries({ ...fc, color: "rgba(240,80,110,0.45)", lineStyle: 2, title: "80% low" }),
+  ];
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
   chart.subscribeCrosshairMove((p) => {
@@ -283,6 +363,7 @@ async function loadChart() {
   const sym = state.selected, interval = state.interval;
   const token = ++klineLoadToken;
   if (klineStream) { klineStream.close(); klineStream = null; }
+  state.forecast = null; drawForecast(); renderForecastBox();
   chartMessage("Loading chart…");
   try {
     const data = await getKlines(sym, interval, 500);
@@ -455,6 +536,7 @@ function initShortcuts() {
     else if (k >= "1" && k <= "6") { document.querySelector(`#intervals button[data-i="${intervals[+k - 1]}"]`)?.click(); }
     else if (k === "l" || k === "L") centerLive();
     else if (k === "e" || k === "E") toggleEma();
+    else if (k === "f" || k === "F") toggleForecast();
     else if (k === "a" || k === "A") $("alerts-btn").click();
     else if (k === "?") $("help").hidden = !$("help").hidden;
     else if (k === "Escape") $("help").hidden = true;
@@ -486,6 +568,8 @@ async function boot() {
     onPickSymbol: (sym) => { selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
     // Zoom out to show all past trades on the chart; zoom back to the live candle when hidden.
     onShowTrades: (showing) => (showing ? chart.timeScale().fitContent() : centerLive()),
+    onAnalyzed: updateForecast,
+    onPickInterval: (iv) => document.querySelector(`#intervals button[data-i="${iv}"]`)?.click(),
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("ema-toggle").addEventListener("click", toggleEma);
@@ -500,6 +584,30 @@ async function boot() {
     onBadges: (b) => { state.badges = b; renderWatchlist(); },
   });
   initShortcuts();
+  $("forecast-toggle").addEventListener("click", toggleForecast);
+
+  // Center tabs: Scanner / My trades / Signal record / AI
+  const showTab = (tab) => {
+    store.set("centerTab", tab);
+    document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+    for (const t of ["scanner", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    if (tab === "ai") $("ai-input").focus({ preventScroll: true });
+  };
+  document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  showTab(store.get("centerTab", "scanner"));
+
+  const pick = (sym) => { if (!state.watchlist.includes(sym)) addToWatchlist(sym); else selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  initJournal({
+    getWatchlist: () => state.watchlist.slice(),
+    ensureWatched: (sym) => { if (!state.watchlist.includes(sym)) { state.watchlist.push(sym); store.set("watchlist", state.watchlist); refreshTickers(); } },
+    getInfo: (sym) => state.bySymbol.get(sym),
+    getPrice: (sym) => state.stats.get(sym)?.last,
+    onPick: pick,
+    notify: pushAlert,
+    showTab: (t) => { showTab(t); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); },
+  });
+  initSignals({ getInfo: (sym) => state.bySymbol.get(sym), onPick: pick });
+  initAI({ getSettings: () => ({ balance: +store.get("balance", 0), riskPct: +store.get("riskPct", 1), feePct: +store.get("feePct", 0.02) }) });
 
   document.querySelectorAll("#intervals button").forEach((b) => {
     b.classList.toggle("on", b.dataset.i === state.interval);

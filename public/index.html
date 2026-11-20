@@ -44,6 +44,7 @@
       <div><dt>↑ ↓</dt><dd>Previous / next coin in watchlist</dd></div>
       <div><dt>L</dt><dd>Center the live candle</dd></div>
       <div><dt>E</dt><dd>Show / hide EMA lines</dd></div>
+      <div><dt>F</dt><dd>Show / hide the forecast range</dd></div>
       <div><dt>A</dt><dd>Open alerts</dd></div>
       <div><dt>?</dt><dd>This help</dd></div>
     </dl>
@@ -86,6 +87,7 @@
         </div>
         <div class="toolbar-right">
           <span id="candle-info" class="muted small mono"></span>
+          <button id="forecast-toggle" class="ghost-btn" title="Show/hide the measured price range for the next candles (F)"><i class="fc-swatch"></i>Forecast</button>
           <button id="ema-toggle" class="ghost-btn" title="Show/hide the 20 and 50 moving averages (E)"><i class="ema-swatch"></i>EMA 20/50</button>
           <button id="price-alert-btn" class="ghost-btn" title="Set a price alert for this coin">🔔 Alert</button>
           <button id="center-live" class="ghost-btn" title="Put the live candle back in the middle of the chart (L)"><i class="live-dot"></i>Live</button>
@@ -93,47 +95,69 @@
       </div>
       <div id="chart" class="chart"></div>
 
+      <div id="forecast-box" class="forecast-box"></div>
+
       <div class="scanner" id="scanner">
+        <div class="money" id="money">
+          <div class="money-fields">
+            <label title="The cash in your exchange account you're willing to trade with. Stored only in this browser.">
+              <span>Trading balance</span>
+              <span class="inp"><em>$</em><input id="m-balance" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 1000" /></span>
+            </label>
+            <label title="The most one trade may lose if its stop-loss is hit, as a % of your balance. Most pros use 0.5–2%.">
+              <span>Max loss per trade</span>
+              <span class="inp"><input id="m-risk" type="number" min="0.1" max="10" step="0.1" inputmode="decimal" /><em>%</em></span>
+            </label>
+            <label title="When today's losses (from My trades) reach this % of your balance, Entryvex tells you to stop for the day.">
+              <span>Stop for the day at</span>
+              <span class="inp"><input id="m-daily" type="number" min="0.5" max="50" step="0.5" inputmode="decimal" /><em>% loss</em></span>
+            </label>
+            <label title="What your exchange charges each time you buy or sell. Entryvex counts it twice (the buy and the sell), plus the gap between buy and sell prices.">
+              <span>How you'll place orders</span>
+              <select id="fee-preset">
+                <option value="0">Binance.US · limit order (0% fee)</option>
+                <option value="0.02">Binance.US · market order (0.02%)</option>
+                <option value="0.6">Coinbase / app "Buy" button (~0.6%)</option>
+                <option value="custom">Custom fee…</option>
+              </select>
+              <span class="inp fee-custom" hidden><input id="fee" type="number" step="0.01" min="0" max="2" inputmode="decimal" /><em>% each buy/sell</em></span>
+            </label>
+          </div>
+          <div class="money-day"><div id="m-day"></div></div>
+        </div>
+
+        <div class="tabs" id="center-tabs" role="tablist">
+          <button data-tab="scanner" class="on">Scanner</button>
+          <button data-tab="trades">My trades <span id="trades-count" class="count-inline" hidden>0</span></button>
+          <button data-tab="signals">Signal record</button>
+          <button data-tab="ai" class="ai-tab-btn"><span class="ai-badge">AI</span> Ask the analyst</button>
+        </div>
+
+        <div id="tab-scanner" class="tab-body">
         <div class="scan-head">
           <div>
             <h2>Setup scanner</h2>
             <div id="scan-sub" class="muted small"></div>
           </div>
           <div class="scan-controls">
+            <button id="find-edges" class="ghost-btn" title="Test this coin on 5m, 15m, 1h and 4h candles to find where a setup has a real track record">Find an edge for this coin</button>
             <button id="scan-all" class="btn">Scan watchlist</button>
           </div>
         </div>
-
-        <div class="money" id="money">
-          <div class="money-fields">
-            <label title="The cash in your Binance.US account you're willing to trade with. Stored only in this browser.">
-              <span>Trading balance</span>
-              <span class="inp"><em>$</em><input id="m-balance" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 1000" /></span>
-            </label>
-            <label title="How much of your balance you accept losing on one trade if the stop-loss is hit. Pros typically use 0.5–2%.">
-              <span>Risk per trade</span>
-              <span class="inp"><input id="m-risk" type="number" min="0.1" max="10" step="0.1" inputmode="decimal" /><em>%</em></span>
-            </label>
-            <label title="When today's logged losses reach this, Entryvex tells you to stop for the day.">
-              <span>Daily loss limit</span>
-              <span class="inp"><input id="m-daily" type="number" min="0.5" max="50" step="0.5" inputmode="decimal" /><em>%</em></span>
-            </label>
-            <label title="Your Binance.US fee per buy or sell. Spot taker (market orders) is 0.02%; maker (limit orders) is 0%.">
-              <span>Fee per side</span>
-              <span class="inp"><input id="fee" type="number" step="0.01" min="0" max="2" inputmode="decimal" /><em>%</em></span>
-            </label>
-          </div>
-          <div class="money-day">
-            <div id="m-day"></div>
-            <form id="m-log-form" class="log-form">
-              <label for="m-log-usd" class="small muted">Log a result</label>
-              <span class="inp"><em>$</em><input id="m-log-usd" type="number" step="0.01" inputmode="decimal" placeholder="+12.50 or −8" /></span>
-              <button class="ghost-btn" type="submit">Add</button>
-            </form>
-          </div>
-        </div>
-
+        <details class="howto-scan" id="howto-scan">
+          <summary>What does the scanner do?</summary>
+          <ol>
+            <li>It watches for <strong>4 common trading setups</strong> (patterns traders buy on) on the coin and candle size you're viewing.</li>
+            <li>For each one, it looks back at <strong>every time that setup happened</strong> in the last 3,000 candles and checks what would have happened if you bought: did it hit the profit target or the stop-loss first, after fees?</li>
+            <li>That gives a <strong>measured confidence</strong>: e.g. "ended in profit 21 of 38 times". Not a guess.</li>
+            <li>When a setup is active <em>right now</em>, you get a verdict: <span class="pill pill-edge">GO</span> proven edge · <span class="pill pill-weak">CAUTION</span> slight edge ·
+              <span class="pill pill-thin">UNPROVEN</span> too few examples · <span class="pill pill-negative">NO TRADE</span> it loses money. <strong>WAIT</strong> means no setup is active: there's nothing to do.</li>
+            <li>Most of the time it says WAIT or NO TRADE. That's normal: most patterns don't beat fees. Use <strong>Find an edge</strong> to see which candle size works best for this coin, and turn on <strong>setup alerts</strong> (🔔) so you're told when a GO appears.</li>
+          </ol>
+        </details>
         <div id="verdict"></div>
+        <div id="scan-context" class="scan-context"></div>
+        <div id="edges" class="edges"></div>
         <div id="plan" class="plan"></div>
 
         <details id="calc" class="calc">
@@ -149,6 +173,20 @@
         <div class="table-wrap"><table id="setups" class="setups"></table></div>
         <div id="scan-results" class="scan-results-box"></div>
         <p id="method" class="method small muted"></p>
+        </div>
+
+        <div id="tab-trades" class="tab-body" hidden></div>
+        <div id="tab-signals" class="tab-body" hidden></div>
+        <div id="tab-ai" class="tab-body" hidden>
+          <p class="muted small explain">Ask anything about the coin you're viewing. The analyst sees the <strong>live price, chart stats, forecast range, scanner results, news and your settings</strong>, and answers in plain English.
+            It explains what the data says; it can't see the future and it can be wrong.</p>
+          <div id="ai-chat" class="ai-chat"></div>
+          <div class="ai-suggest" id="ai-suggest"></div>
+          <form id="ai-form" class="ai-form">
+            <textarea id="ai-input" rows="2" maxlength="600" placeholder="e.g. Is now a good time to buy? What's the risk if I put $500 in?"></textarea>
+            <button class="btn" type="submit">Ask</button>
+          </form>
+        </div>
       </div>
     </section>
 

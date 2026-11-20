@@ -1,79 +1,79 @@
-# Entryvex
+# Entryvex™
 
-Live crypto market research in your browser: real-time prices, candle charts and the latest news, all on one screen.
+### ▶ Open the app: **[entryvex.trade](https://entryvex.trade)**
 
-> Entryvex is a research tool. It never places trades, never connects to your exchange account, and is not financial advice. You decide and you place every trade yourself.
+Entryvex is a live crypto trading research dashboard. It watches the market for you, tells you **when a trade is (and isn't) worth taking**, backs every number with **measured history instead of guesses**, sizes the trade to your money, and tracks your results. It works in any browser, on desktop or phone. Nothing to install.
 
-## What it does today
+> Entryvex never places trades and never connects to your exchange account. It shows you the data and a plan; **you** decide and place the order yourself (for example on Binance.US). It is a research tool, not financial advice. Trading can lose money.
 
-- **Live watchlist:** streaming prices and 24h change for your coins, straight from Binance.US. Add any Binance.US pair with the search box.
-- **Live candle chart:** 1m / 5m / 15m / 1h / 4h / 1D candles with volume, updating tick by tick.
-- **Market stats:** 24h high, low and volume for the selected coin.
-- **News feed:** headlines from Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine and Google News, filtered to the coin you're looking at, or all crypto.
-- **Setup scanner (measured confidence):** detects 4 setups (volume breakout, trend pullback, oversold bounce, momentum turn-up) on the last closed candle, and replays every past occurrence on the last 3,000 candles of that coin + timeframe. Shows how often each one ended in profit (with a 95% range), average win/loss and average result per trade **after fees and the live bid/ask spread**, and a verdict: GO / CAUTION / UNPROVEN / NO TRADE / WAIT.
-- **Trade plan** for an active setup with a positive record: buy zone, take-profit, stop-loss, result per $100 after costs and typical time to resolve, drawn on the chart.
-- **Past trades on the chart:** click any setup to see where it fired before, marked W (win) or L (loss).
-- **Watchlist scan:** checks every coin in your watchlist on the current timeframe and ranks them.
-- **Your money:** enter your trading balance, risk per trade (default 1%) and daily loss limit (default 3%). Stored only in your browser.
-- **Dollar trade card:** for an active setup, shows exactly how much to buy (rounded to Binance.US's quantity, price and minimum-order rules), what you make if the target hits and lose if the stop hits (after fees and spread), the measured average result in dollars, and step-by-step instructions for placing it on Binance.US (limit buy, then an OCO take-profit/stop sell) with copy buttons.
-- **Daily loss guard:** log each trade's result; when today's losses reach your limit, Entryvex hides trade cards and tells you to stop for the day.
-- **Trade calculator:** plan any trade yourself (entry, stop, target) and get the position size, dollar outcomes and break-even win rate.
-- **Research panel → Report:** an AI-written "What's happening" summary of the latest headlines (Cloudflare Workers AI, cached 30 min), the coin's **news mood** for the last 24h, and a plain-English **report card** from CoinGecko: rank and size, distance from its all-time high, week/month/year trend, supply (capped or unlimited), trading activity, what the project is and when it launched.
-- **Headline mood:** every headline is tagged ▲ positive / ▼ negative / • neutral with a transparent keyword scorer (`functions/api/sentiment.js`). News mood is shown for context only; it doesn't change the measured confidence, because there's no historical news data to test it against.
-- **Alerts (🔔 in the top bar):**
-  - *Setup alerts*: after every candle closes (5m/15m/1h/4h), checks your whole watchlist and alerts you when a setup with a proven (or, optionally, weak) positive track record becomes active. Watchlist rows get GO / CAUTION / NO TRADE badges.
-  - *Big move alerts*: when a watchlist coin moves more than X% within N minutes.
-  - *Price alerts*: when a coin goes above or below a price (one-shot).
-  - Delivered as an on-page toast, a sound, a flashing tab title and (optionally) desktop notifications. Alerts run while Entryvex is open in a tab; a background tab is fine.
-- **Chart polish:** EMA 20/50 lines (toggle), price-alert button, live candle centered.
-- **Keyboard shortcuts:** `/` search · `1`–`6` candle size · `↑`/`↓` previous/next coin · `L` center live · `E` EMA lines · `A` alerts · `?` help.
-- Works on desktop, tablet and phone. Your watchlist, settings and alerts are remembered in your browser.
+---
 
-## Roadmap
+## Quick start
 
-1. ✅ Live data: prices, charts, news
-2. ✅ Setup detection and scoring: a **measured** confidence %, based on how each setup has actually played out historically
-3. ✅ Trade cards and money prompt: entry, stop, target, position size, expected value after fees, go/no-go, daily loss guard
-4. ✅ News sentiment and plain-English coin summaries
-5. ✅ Dashboard polish and alerts
-6. Track record of every signal, plus a daily loss-limit "session guard"
+1. Go to **[entryvex.trade](https://entryvex.trade)**.
+2. Pick a coin from the **watchlist** on the left (or search for one).
+3. Under the chart, enter your **trading balance** and how much you're willing to lose per trade (1% is a good start).
+4. Look at the **Scanner** tab. It tells you GO, CAUTION, NO TRADE or WAIT.
+5. Turn on **setup alerts** with the 🔔 bell so Entryvex tells you when a good setup appears.
+6. If you take a trade, click **"I took this trade"** so Entryvex tracks it in **My trades**.
 
-## How it's built
+---
 
-| Part | Where it runs | Notes |
-|---|---|---|
-| `public/` | The visitor's browser | Plain HTML/CSS/JS, no build step. Market data comes directly from the Binance.US public API and WebSocket (read-only, no keys). |
-| `src/worker.js` + `functions/api/news.js` | Cloudflare Worker | Fetches and merges RSS news feeds (browsers can't read them directly), scores headline mood, cached for 3 minutes. |
-| `functions/api/summary.js` | Cloudflare Worker + Workers AI | Plain-English AI summary of a coin's latest headlines, cached for 30 minutes. |
+## What's on the screen
 
-## Hosting
+### Chart + forecast
+- Live candles straight from Binance.US, with volume and the 20/50 moving averages.
+- **Forecast:** dashed lines to the right of the live candle show where price has historically landed over the next 20 candles: an 80% range (outer lines), a 50% range, and the middle. Below the chart you'll see the range in dollars, **how accurate this forecast has been** (tested on past data it wasn't built from), and the measured chance the price is higher by then.
 
-See **[docs/SETUP.md](docs/SETUP.md)** for buying the domain and putting the site online with Cloudflare Workers. After setup, every push to `main` redeploys automatically.
+### Scanner tab: "should I trade right now?"
+- Watches 4 common setups on the coin and candle size you're viewing.
+- For each one, it checks **every past time it happened** (last 3,000 candles) and what would have happened after fees: did it hit the profit target or the stop-loss first? That's the **measured confidence**, e.g. "ended in profit 21 of 38 times".
+- Verdicts: **GO** proven edge · **CAUTION** slight edge · **UNPROVEN** too few examples · **NO TRADE** it loses money · **WAIT** nothing is happening right now.
+- **Most of the time you'll see WAIT or NO TRADE.** That's normal: most patterns don't beat fees, and not trading is often the best move.
+- **Find an edge for this coin** tests 5m, 15m, 1h and 4h candles to show where this coin has actually had an edge.
+- **Scan watchlist** checks every coin at once.
+- When a setup with a good record is active you get a **trade card**: exactly how much to buy, the take-profit and stop-loss, what you'd make or lose in dollars after fees, and step-by-step instructions for placing it on Binance.US.
 
-## Preview locally (optional)
+### My trades tab
+- Click **"I took this trade"** on a trade card (or add a trade by hand).
+- Entryvex follows the live price and **records the result automatically** when your take-profit or stop-loss is hit. If you sell yourself, enter the sale price.
+- Shows your total result, win rate and history, and powers the **daily stop**: when today's losses hit your limit, Entryvex tells you to stop for the day.
 
-Requires [Node.js](https://nodejs.org) 18+. No packages to install.
+### Signal record tab: can you trust the confidence?
+- Every signal Entryvex gives while it's open is saved with its verdict, then checked afterwards against real prices.
+- Over time you can see whether **GO signals really win as often as the scanner said**, and what would have happened to the NO TRADE ones.
 
-```
-node dev-server.mjs
-```
+### Ask the analyst (AI)
+- Ask questions in plain English: *"Is now a good time to buy ETH?"*, *"If I put $500 in, what's my risk?"*, *"What's the news saying?"*
+- The analyst sees the live price, forecast, scanner results, news and your settings, and explains what the data says. It can't see the future and it can be wrong.
 
-Then open http://localhost:8788.
+### Research panel (right side)
+- **Report:** an AI summary of the latest news, the news mood (positive vs negative headlines), and a plain-English report card for the coin: its size, how far it is from its all-time high, recent trend, supply and what the project is.
+- **News:** live headlines, each marked ▲ positive, ▼ negative or • neutral.
 
-To print the scanner's results for any coins from the command line:
+### Alerts 🔔
+- **Setup alerts:** when a setup with a positive track record appears anywhere on your watchlist.
+- **Big move alerts:** when a coin moves more than X% in N minutes.
+- **Price alerts:** when a coin goes above or below a price.
+- Shown on screen with a sound, and optionally as desktop notifications. Alerts work while Entryvex is open in a browser tab (a background tab is fine).
 
-```
-node tools/engine-report.mjs BTCUSDT:15m ETHUSDT:1h
-```
+### Settings explained
+| Setting | What it means |
+|---|---|
+| Trading balance | The money in your exchange account you're willing to trade with. |
+| Max loss per trade | The most one trade may lose if its stop-loss is hit, as a % of your balance. Entryvex sizes every trade so you never lose more than this. |
+| Stop for the day at | When today's losses reach this %, Entryvex tells you to stop. |
+| How you'll place orders | Picks the trading fee. On Binance.US, a **limit order** (you set the price) costs 0%; a **market order** (buy instantly) costs 0.02%. Simple "Buy" buttons in apps usually charge much more. |
 
-Run the tests:
+All settings, trades and alerts are stored **only in your own browser**.
 
-```
-node --test tests/
-```
+### Keyboard shortcuts
+`/` search · `1`–`6` candle size · `↑` `↓` previous/next coin · `L` center live candle · `F` forecast · `E` moving averages · `A` alerts · `?` help
 
-## Data sources
+---
 
-- Binance.US public market data API (`api.binance.us`, `stream.binance.us`). Binance.US serves US users; visitors outside the US may be blocked by Binance.US.
-- Public RSS feeds from the news outlets listed above. Headlines link to the original articles.
-- CoinGecko public API (fetched by the visitor's browser) for the coin report card.
+## Good to know
+- **Markets:** crypto pairs on Binance.US (spot). Binance.US only serves US users.
+- **No shorting:** Binance.US spot accounts can only buy then sell, so Entryvex only suggests buy-first trades.
+- **Data sources:** Binance.US market data, CoinGecko coin data, and public news feeds (Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Google News, Bing News).
+- **Honesty first:** every confidence number in Entryvex is measured from real past data and checked again live. When the numbers say "don't trade", Entryvex says so.

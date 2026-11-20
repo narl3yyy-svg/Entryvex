@@ -5,6 +5,7 @@
 import { analyze } from "./engine.js";
 import { getKlineHistory, getKlines, getBookTicker } from "./binance.js";
 import { coinName } from "./coins.js";
+import { logFromAnalysis } from "./signals.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -72,6 +73,9 @@ function notify({ title, body, symbol, kind }) {
   }
   renderDrawer();
 }
+
+/** Let other parts of the app (e.g. My trades) raise an alert. */
+export function pushAlert(a) { notify(a); }
 
 function toast(title, body, symbol, kind) {
   const box = $("toasts");
@@ -169,6 +173,7 @@ export async function runScan() {
       try {
         const [c, book] = await Promise.all([loadCandles(sym, interval), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
         const r = analyze(c, { costPerSide: fee + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0) });
+        logFromAnalysis(sym, interval, c, r);
         next[sym] = { level: r.overall.level, label: r.overall.label, interval };
         const ok = r.overall.level === "go" || (cfg.setup.min === "caution" && r.overall.level === "caution" && r.best?.verdict.level === "weak");
         const key = `${sym}:${c[c.length - 2]?.time}`;
