@@ -3,7 +3,7 @@
 // (a background tab is fine). Delivered as an on-page toast, an optional sound,
 // and an optional desktop notification.
 import { analyze } from "./engine.js";
-import { getKlineHistory, getKlines, getBookTicker } from "./binance.js";
+import { getKlineHistory, getKlines, getBookTicker, isStock } from "./market.js";
 import { coinName } from "./coins.js";
 import { logFromAnalysis } from "./signals.js";
 import * as fmt from "./format.js";
@@ -172,7 +172,7 @@ export async function runScan() {
       const sym = queue.shift();
       try {
         const [c, book] = await Promise.all([loadCandles(sym, interval), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
-        const r = analyze(c, { costPerSide: fee + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0) });
+        const r = analyze(c, { costPerSide: (isStock(sym) ? 0 : fee) + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0) });
         logFromAnalysis(sym, interval, c, r);
         next[sym] = { level: r.overall.level, label: r.overall.label, interval };
         const ok = r.overall.level === "go" || (cfg.setup.min === "caution" && r.overall.level === "caution" && r.best?.verdict.level === "weak");

@@ -40,16 +40,26 @@ const MAX_ITEMS = 60;
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const coin = (url.searchParams.get("coin") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  const stock = (url.searchParams.get("stock") || "").toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+  const stockName = (url.searchParams.get("name") || stock).replace(/[^\w .,&'-]/g, "").slice(0, 60)
+    .replace(/,?\s+(Inc\.?|Corporation|Corp\.?|Company|Co\.?|Ltd\.?|plc|Holdings|Class [A-C])$/i, "").trim();
 
-  const cacheKey = new Request(`${url.origin}/api/news?coin=${coin}`);
+  const cacheKey = new Request(`${url.origin}/api/news?coin=${coin}&stock=${stock}`);
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
   }
 
-  const feeds = [...GENERAL_FEEDS];
-  if (coin) {
+  let feeds = [...GENERAL_FEEDS];
+  if (stock) {
+    // Stock news: Yahoo Finance's per-ticker feed, plus Google/Bing searches for the company.
+    feeds = [
+      { source: "Yahoo Finance", url: `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(stock)}&region=US&lang=en-US`, perCoin: true },
+      { source: "Google News", url: `https://news.google.com/rss/search?q=${encodeURIComponent(`"${stockName}" stock when:2d`)}&hl=en-US&gl=US&ceid=US:en`, perCoin: true },
+      { source: "Bing News", url: `https://www.bing.com/news/search?q=${encodeURIComponent(`"${stockName}" stock`)}&format=rss`, perCoin: true },
+    ];
+  } else if (coin) {
     const q = `"${COIN_NAMES[coin] || coin}" crypto when:2d`;
     feeds.push({
       source: "Google News",
@@ -86,16 +96,16 @@ export async function onRequestGet(context) {
     return true;
   });
   for (const it of items) {
-    it.coins = tagCoins(it.title + " " + (it.summary || ""));
+    it.coins = stock ? [stock] : tagCoins(it.title + " " + (it.summary || ""));
     it.mood = scoreHeadline(it.title);
   }
-  if (coin) {
+  if (coin && !stock) {
     items = items.filter((it) => it.perCoin || it.coins.includes(coin));
   }
   items.sort((a, b) => (b.published || 0) - (a.published || 0));
   items = items.slice(0, MAX_ITEMS).map(({ perCoin, ...rest }) => rest);
 
-  const body = JSON.stringify({ coin: coin || null, updated: Date.now(), failedSources: failedNames, items });
+  const body = JSON.stringify({ coin: coin || null, stock: stock || null, updated: Date.now(), failedSources: failedNames, items });
   const res = new Response(body, {
     headers: {
       "content-type": "application/json; charset=utf-8",

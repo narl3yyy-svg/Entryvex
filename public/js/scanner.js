@@ -1,6 +1,6 @@
 // Setup Scanner panel: runs the engine for the selected coin and draws the results.
 import { analyze, RULES } from "./engine.js";
-import { getKlineHistory, getBookTicker } from "./binance.js";
+import { getKlineHistory, getBookTicker, isStock } from "./market.js";
 import { coinName } from "./coins.js";
 import * as fmt from "./format.js";
 import { renderTradeCard, setMarketContext, onMoneyChange } from "./money.js";
@@ -33,8 +33,9 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
   $("scan-all").addEventListener("click", scanWatchlist);
   onMoneyChange(() => { if (ctx && result) render(); });
 
-  function costPerSide(spreadPct) {
-    const fee = (+feeInput.value || 0) / 100;
+  // Stocks: US brokers charge $0 commission, so only the (estimated) spread counts.
+  function costPerSide(spreadPct, sym = ctx?.symbol) {
+    const fee = isStock(sym) ? 0 : (+feeInput.value || 0) / 100;
     return fee + (isFinite(spreadPct) ? spreadPct / 2 : 0);
   }
 
@@ -70,7 +71,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
   }
 
   function recompute() {
-    result = analyze(ctx.candles, { costPerSide: costPerSide(ctx.spreadPct) });
+    result = analyze(ctx.candles, { costPerSide: costPerSide(ctx.spreadPct, ctx.symbol) });
     logFromAnalysis(ctx.symbol, ctx.interval, ctx.candles, result);
     render();
     onAnalyzed?.(ctx, result);
@@ -89,7 +90,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     for (const iv of ["5m", "15m", "1h", "4h"]) {
       try {
         const [c, book] = await Promise.all([getKlineHistory(sym, iv, HISTORY), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
-        const r = analyze(c, { costPerSide: costPerSide(book.spreadPct) });
+        const r = analyze(c, { costPerSide: costPerSide(book.spreadPct, sym) });
         for (const s of r.setups) if (s.stats.n) rows.push({ iv, s });
       } catch {}
     }
@@ -199,11 +200,12 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     // Method note
     const from = r.sample.from ? new Date(r.sample.from * 1000) : null;
     const to = r.sample.to ? new Date(r.sample.to * 1000) : null;
+    const stockMode = isStock(ctx.symbol);
     const spread = isFinite(ctx.spreadPct) ? (ctx.spreadPct * 100).toFixed(3) + "%" : "unknown";
     $("method").innerHTML = `How this is measured: every past time a setup appeared ${from ? `between ${from.toLocaleDateString()} and ${to.toLocaleDateString()}` : ""},
       we "bought" at the next candle's open, set a stop ${RULES.stopAtr}× ATR below and a target ${RULES.targetAtr}× ATR above, and exited at whichever hit first
-      (if both hit in one candle, we count the loss). Costs: ${(+feeInput.value).toFixed(2)}% fee + ${spread} spread (measured live) on both the buy and the sell.
-      Long trades only (Binance.US spot can't short). Past results don't guarantee future results.`;
+      (if both hit in one candle, we count the loss). Costs: ${stockMode ? `$0 commission + ${spread} spread (estimated)` : `${(+feeInput.value).toFixed(2)}% fee + ${spread} spread (measured live)`} on both the buy and the sell.
+      ${stockMode ? "Regular trading hours only (9:30am–4pm New York time); long trades only." : "Long trades only (Binance.US spot can't short)."} Past results don't guarantee future results.`;
 
     if (shownSetup) showTrades(shownSetup, false);
   }
@@ -259,7 +261,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
         const sym = queue.shift();
         try {
           const [c, book] = await Promise.all([getKlineHistory(sym, interval, HISTORY), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
-          const r = analyze(c, { costPerSide: costPerSide(book.spreadPct) });
+          const r = analyze(c, { costPerSide: costPerSide(book.spreadPct, sym) });
           logFromAnalysis(sym, interval, c, r);
           const b = r.best;
           rows.push({

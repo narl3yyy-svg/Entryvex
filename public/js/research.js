@@ -101,6 +101,106 @@ export function plainEnglish({ m, d }) {
   return lines;
 }
 
+/* ---------------- Stocks: company report card from SEC filings ---------------- */
+let secTickers = null;
+async function secCik(ticker) {
+  if (!secTickers) {
+    const res = await fetch("/api/market?src=sec-tickers");
+    if (!res.ok) throw new Error("SEC " + res.status);
+    const j = await res.json();
+    secTickers = new Map(Object.values(j).map((x) => [x.ticker.toUpperCase(), { cik: String(x.cik_str).padStart(10, "0"), title: x.title }]));
+  }
+  return secTickers.get(ticker.toUpperCase().replace(".", "-")) || null;
+}
+
+async function secConcept(cik, tax, concept) {
+  const res = await fetch(`/api/market?src=sec-concept&cik=${cik}&tax=${tax}&concept=${concept}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** Quarterly values (3-month periods) keyed by calendar frame like "CY2026Q2". */
+function quarterly(fact, unit = "USD") {
+  const rows = fact?.units?.[unit] || [];
+  const map = new Map();
+  for (const r of rows) if (r.frame && /^CY\d{4}Q[1-4]$/.test(r.frame)) map.set(r.frame, r);
+  return [...map.values()].sort((a, b) => a.end.localeCompare(b.end));
+}
+const prevYearFrame = (f) => f.replace(/CY(\d{4})/, (_, y) => `CY${+y - 1}`);
+const fmtDate = (s) => new Date(s + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+function growth(now, then) {
+  if (!then || !isFinite(now) || !isFinite(then) || then === 0) return "";
+  const g = ((now - then) / Math.abs(then)) * 100;
+  return ` <span class="${g >= 0 ? "up" : "down"}">(${g >= 0 ? "+" : ""}${g.toFixed(0)}% vs. a year ago)</span>`;
+}
+
+export async function getStockProfile(ticker, q = {}) {
+  const lines = [];
+  const price = q?.last;
+  // Price position
+  if (q && price) {
+    lines.push({ k: "Today", t: `$${fmt.price(price)}, <strong class="${q.changePct >= 0 ? "up" : "down"}">${q.changePct >= 0 ? "+" : ""}${(q.changePct || 0).toFixed(2)}%</strong> vs. yesterday's close${q.marketOpen === false ? " (market is closed now)" : ""}.` });
+    if (q.hi52 && q.lo52) {
+      const pos = (price - q.lo52) / (q.hi52 - q.lo52);
+      lines.push({ k: "52-week range", t: `$${fmt.price(q.lo52)} – $${fmt.price(q.hi52)}. It's ${((1 - price / q.hi52) * 100).toFixed(0)}% below its 1-year high, ${pos > 0.8 ? "near the top" : pos < 0.2 ? "near the bottom" : "in the middle"} of its range.` });
+    }
+  }
+
+  const sec = await secCik(ticker).catch(() => null);
+  if (!sec) {
+    lines.push({ k: "Earnings", t: "No company filings found. This is probably an ETF or fund, which holds a basket of stocks and doesn't report its own earnings." });
+    return { lines, source: "Data: Yahoo Finance prices." };
+  }
+
+  const [rev1, rev2, ni, eps, sh] = await Promise.all([
+    secConcept(sec.cik, "us-gaap", "RevenueFromContractWithCustomerExcludingAssessedTax"),
+    secConcept(sec.cik, "us-gaap", "Revenues"),
+    secConcept(sec.cik, "us-gaap", "NetIncomeLoss"),
+    secConcept(sec.cik, "us-gaap", "EarningsPerShareDiluted"),
+    secConcept(sec.cik, "dei", "EntityCommonStockSharesOutstanding"),
+  ]);
+  const revQ = [quarterly(rev1), quarterly(rev2)].sort((a, b) => (b.at(-1)?.end || "").localeCompare(a.at(-1)?.end || ""))[0];
+  const niQ = quarterly(ni);
+  const epsQ = quarterly(eps, "USD/shares");
+  const byFrame = (arr) => new Map(arr.map((r) => [r.frame, r]));
+  const R = byFrame(revQ), N = byFrame(niQ), E = byFrame(epsQ);
+
+  lines.unshift({ k: "Company", t: `${fmt.esc(sec.title)}` });
+
+  const last = revQ.at(-1) || niQ.at(-1);
+  if (last) {
+    const f = last.frame;
+    const r = R.get(f), n = N.get(f), e = E.get(f);
+    const parts = [];
+    if (r) parts.push(`sales of <strong>${usdBig(r.val)}</strong>${growth(r.val, R.get(prevYearFrame(f))?.val)}`);
+    if (n) parts.push(`${n.val >= 0 ? "profit" : "a loss"} of <strong class="${n.val >= 0 ? "up" : "down"}">${usdBig(Math.abs(n.val))}</strong>${growth(n.val, N.get(prevYearFrame(f))?.val)}`);
+    if (e) parts.push(`earnings per share $${e.val.toFixed(2)}`);
+    lines.push({ k: `Latest quarter (ended ${fmtDate(last.end)})`, t: parts.join("; ") + "." });
+    if (r && n && r.val) lines.push({ k: "Profit margin", t: `It kept <strong>${((n.val / r.val) * 100).toFixed(1)}¢</strong> of profit from every $1 of sales last quarter.` });
+  }
+  // Last 4 quarters
+  const last4 = revQ.slice(-4), last4n = niQ.slice(-4), last4e = epsQ.slice(-4);
+  if (last4.length === 4 && last4n.length === 4) {
+    const rs = last4.reduce((s, x) => s + x.val, 0), ns = last4n.reduce((s, x) => s + x.val, 0);
+    lines.push({ k: "Last 12 months", t: `Sales ${usdBig(rs)}, ${ns >= 0 ? "profit" : "loss"} ${usdBig(Math.abs(ns))}.` });
+  }
+  const shares = (sh?.units?.shares || []).at(-1)?.val;
+  if (shares && price) {
+    const cap = shares * price;
+    let pe = "";
+    if (last4e.length === 4) {
+      const e4 = last4e.reduce((s, x) => s + x.val, 0);
+      pe = e4 > 0 ? ` Price is <strong>${(price / e4).toFixed(1)}×</strong> its last 12 months of earnings (P/E); the US market average is usually around 20–25×.` : " It has lost money over the last 12 months, so there's no P/E.";
+    }
+    lines.push({ k: "Company value", t: `About <strong>${usdBig(cap)}</strong> in total (market cap).${pe}` });
+  }
+  if (lines.length < 4) lines.push({ k: "Earnings", t: "This company's filings don't include standard quarterly figures Entryvex can read." });
+  return {
+    lines,
+    source: `Data: <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${sec.cik}&type=10-Q" target="_blank" rel="noopener noreferrer">SEC EDGAR filings</a> (quarterly 10-Q / annual 10-K) and Yahoo Finance prices.`,
+  };
+}
+
 /* ---------------- Mood ---------------- */
 export function moodOf(items, hours = 24) {
   const since = Date.now() - hours * 3600 * 1000;

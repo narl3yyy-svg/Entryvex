@@ -10,23 +10,26 @@ const CACHE_SECONDS = 1800;
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
-  const coin = (url.searchParams.get("coin") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
-  const name = (url.searchParams.get("name") || coin).replace(/[^\w .-]/g, "").slice(0, 40);
+  const stock = (url.searchParams.get("stock") || "").toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+  const coin = stock || (url.searchParams.get("coin") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  const name = (url.searchParams.get("name") || coin).replace(/[^\w .,&'-]/g, "").slice(0, 60);
   if (!coin) return json({ error: "coin required" }, 400);
+  const kind = stock ? "stock" : "crypto";
 
   if (!env || !env.AI) {
     return json({ available: false, reason: "AI summaries run on the hosted site only." });
   }
 
   const bucket = Math.floor(Date.now() / (CACHE_SECONDS * 1000));
-  const cacheKey = new Request(`${url.origin}/api/summary?coin=${coin}&b=${bucket}`);
+  const cacheKey = new Request(`${url.origin}/api/summary?${kind}=${coin}&b=${bucket}`);
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
   }
 
-  const newsRes = await getNews({ request: new Request(`${url.origin}/api/news?coin=${coin}`), waitUntil: context.waitUntil });
+  const newsUrl = stock ? `${url.origin}/api/news?stock=${stock}&name=${encodeURIComponent(name)}` : `${url.origin}/api/news?coin=${coin}`;
+  const newsRes = await getNews({ request: new Request(newsUrl), waitUntil: context.waitUntil });
   const news = await newsRes.json();
   const dayAgo = Date.now() - 36 * 3600 * 1000;
   const items = news.items.filter((i) => !i.published || i.published > dayAgo).slice(0, 25);
@@ -39,13 +42,13 @@ export async function onRequestGet(context) {
     {
       role: "system",
       content:
-        "You summarize crypto news headlines for a beginner investor in plain English. " +
+        `You summarize ${kind} news headlines for a beginner investor in plain English. ` +
         "Use ONLY the headlines provided; do not add facts, numbers or events that are not in them. " +
         "Do not give buy/sell advice and do not predict prices. " +
         "Write exactly 3 bullet points, each starting with '- ' and under 30 words. " +
         "Then a final line exactly in the form 'Mood: positive' or 'Mood: negative' or 'Mood: mixed' or 'Mood: neutral'.",
     },
-    { role: "user", content: `Coin: ${name} (${coin}). Latest headlines:\n${headlines}` },
+    { role: "user", content: `${stock ? "Company" : "Coin"}: ${name} (${coin}). Latest headlines:\n${headlines}` },
   ];
 
   let text = null, model = null, lastErr = null;

@@ -2,6 +2,7 @@
 // and a manual trade calculator. Everything is stored only in this browser.
 import { sizePosition, roundTick } from "./sizing.js";
 import { todayStats, onJournalChange } from "./journal.js";
+import { isStock } from "./market.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -117,13 +118,25 @@ export function renderTradeCard(c) {
 
   const evUsd = c.setup.stats.ev * sz.spend;
   const s = c.setup.stats;
+  const stock = isStock(c.symbol);
   let warn = "";
-  if (sz.reason === "too-small") warn = `<div class="warn">This trade would be smaller than Binance.US's minimum order (${c.quote} ${fmt.price(sz.minSpend)}). Increase your balance or risk %.</div>`;
+  if (sz.reason === "too-small") warn = stock
+    ? `<div class="warn">One share ($${fmt.price(sz.entry)}) costs more than this trade's size allows. Increase your balance or max loss %, or pick a cheaper stock.</div>`
+    : `<div class="warn">This trade would be smaller than Binance.US's minimum order (${c.quote} ${fmt.price(sz.minSpend)}). Increase your balance or risk %.</div>`;
   else if (sz.reason === "costs-eat-target") warn = `<div class="warn">Fees and spread are bigger than the profit target. This trade can't make money. Skip it.</div>`;
   else if (sz.capped) warn = `<div class="note">Capped at your full balance: the stop is so close that risking ${settings.riskPct}% would need more money than you have. Actual risk is $${sz.lossUsd.toFixed(2)}.</div>`;
 
   const ocoStopLimit = roundTick(sz.stop * 0.998, c.rules.tickSize);
-  const q = `${trimQty(sz.qty)} ${fmt.esc(c.base)}`;
+  const q = stock ? `${trimQty(sz.qty)} share${sz.qty === 1 ? "" : "s"} of ${fmt.esc(c.base)}` : `${trimQty(sz.qty)} ${fmt.esc(c.base)}`;
+  const steps = stock ? `<details class="howto"><summary>How to place this at your broker (Schwab, Fidelity, Robinhood…)</summary>
+      <ol>
+        <li>Open your broker's app or website → <strong>Trade → Stocks &amp; ETFs</strong> → symbol <strong>${fmt.esc(c.base)}</strong>. US stock trades have $0 commission at most big brokers.</li>
+        <li><strong>Buy</strong> ${copyable(trimQty(sz.qty))} shares as a <strong>limit order</strong> at ${copyable(plain(sz.entry))}, time-in-force <strong>Day</strong>. Only during market hours (9:30am–4pm New York time).</li>
+        <li>Once it fills, protect it with a <strong>One-Cancels-Other (OCO)</strong> sell for the same ${trimQty(sz.qty)} shares: a <strong>limit sell</strong> at ${copyable(plain(sz.target))} (take-profit) and a <strong>stop sell</strong> at ${copyable(plain(sz.stop))} (stop-loss). Schwab lists this under conditional orders; other brokers call it OCO or a bracket order. If your broker doesn't offer it, at least place the stop sell.</li>
+        <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
+      </ol>
+      <p class="small muted">Stocks can jump overnight: a stop-loss can fill below your stop price if the stock opens lower ("gap down").</p>
+    </details>` : null;
 
   return `<div class="card">
     <div class="card-title">Trade card · ${fmt.esc(c.setup.name)}</div>
@@ -137,7 +150,7 @@ export function renderTradeCard(c) {
       <div><span>Usually resolves in</span><strong class="mono">${c.minutesToResolve ? humanMinutes(c.minutesToResolve) : "—"}</strong><small class="muted">exit at market after ${c.maxBarsText}</small></div>
     </div>
     ${warn}
-    ${sz.ok ? `<details class="howto"><summary>How to place this on Binance.US</summary>
+    ${sz.ok ? `${steps ?? `<details class="howto"><summary>How to place this on Binance.US</summary>
       <ol>
         <li>Open Binance.US → <strong>Trade</strong> (Advanced/Spot trading, not the simple Buy/Sell screen, which charges more) → <strong>${fmt.esc(c.base)}/${fmt.esc(c.quote)}</strong>.</li>
         <li><strong>Limit buy</strong> ${copyable(trimQty(sz.qty))} ${fmt.esc(c.base)} at price ${copyable(fmt.price(sz.entry).replace(/,/g, ""))}. A limit order is a "maker" order and usually pays 0% fee.</li>
@@ -145,7 +158,7 @@ export function renderTradeCard(c) {
         <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
       </ol>
       <p class="small muted">Prices move. If the price has already run past the buy zone, skip it rather than chasing.</p>
-    </details>
+    </details>`}
     <div class="take-row">${takeButton({ symbol: c.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval, source: "entryvex" })}
       <span class="muted small">Only after you've actually placed the order.</span></div>` : ""}
   </div>`;

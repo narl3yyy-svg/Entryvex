@@ -5,6 +5,7 @@
 // backtest (buy next candle's open, 1×ATR stop, 1.5×ATR target, 24-candle limit, costs).
 // Over time this shows whether Entryvex's live confidence actually holds up.
 import { RULES } from "./engine.js";
+import { getKlinesSince, isStock } from "./market.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -53,12 +54,10 @@ async function resolveOpen() {
       const sec = SEC[s.interval] || 900;
       const entryTime = s.signalTime + sec;
       if (now < entryTime + sec) continue;  // entry candle hasn't closed yet
-      const url = `https://api.binance.us/api/v3/klines?symbol=${s.symbol}&interval=${s.interval}&startTime=${entryTime * 1000}&limit=${RULES.maxBars + 1}`;
       let raw;
-      try { raw = await (await fetch(url)).json(); } catch { continue; }
+      try { raw = await getKlinesSince(s.symbol, s.interval, entryTime, RULES.maxBars + 1); } catch { continue; }
       if (!Array.isArray(raw) || !raw.length) continue;
-      const c = raw.map((k) => ({ time: k[0] / 1000, open: +k[1], high: +k[2], low: +k[3], close: +k[4], closeTime: k[6] / 1000 }))
-        .filter((k) => k.closeTime < now);  // closed candles only
+      const c = raw.filter((k) => k.closeTime < now);  // closed candles only
       if (!c.length) continue;
       const entry = c[0].open;
       const stop = entry - RULES.stopAtr * s.atr, target = entry + RULES.targetAtr * s.atr;

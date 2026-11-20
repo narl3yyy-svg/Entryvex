@@ -49,7 +49,7 @@ async function snapshot() {
   const f = live.forecast, a = live.analysis?.result;
   let news = null;
   try {
-    const r = await fetch(`/api/news?coin=${encodeURIComponent(live.base || "")}`);
+    const r = await fetch(live.isStock ? `/api/news?stock=${encodeURIComponent(live.base || "")}&name=${encodeURIComponent(live.name || "")}` : `/api/news?coin=${encodeURIComponent(live.base || "")}`);
     const d = await r.json();
     const items = d.items.slice(0, 12);
     const c = { positive: 0, negative: 0, neutral: 0 };
@@ -58,8 +58,10 @@ async function snapshot() {
   } catch {}
   const s = hooks.getSettings();
   return {
-    coin: { name: live.name, ticker: live.base, pair: `${live.base}/${live.quote}`, exchange: "Binance.US (spot only; you can buy then sell, no shorting)" },
-    price: { now: round(live.price), change24hPct: round(live.change24h, 3), high24h: round(live.high24h), low24h: round(live.low24h), volume24hUsd: round(live.volume24h, 4) },
+    asset: live.isStock
+      ? { type: "US stock/ETF", name: live.name, ticker: live.base, market: "US stock market, bought through the user's broker (e.g. Schwab); regular hours 9:30am-4pm New York time; $0 commission", marketOpenNow: live.marketOpen }
+      : { type: "crypto", name: live.name, ticker: live.base, pair: `${live.base}/${live.quote}`, market: "Binance.US spot (buy then sell, no shorting), trades 24/7" },
+    price: { now: round(live.price), [live.isStock ? "changeVsYesterdayClosePct" : "change24hPct"]: round(live.change24h, 3), high24h: round(live.high24h), low24h: round(live.low24h), volume24hUsd: round(live.volume24h, 4) },
     candleSize: live.interval,
     forecast: f ? {
       horizon: `next ${f.H} candles of ${f.interval}`,

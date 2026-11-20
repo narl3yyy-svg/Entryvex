@@ -499,3 +499,11 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 
 .money-fields { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr); }
 @media (max-width: 760px) { .money-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .money-fields label:last-child { grid-column: 1 / -1; } }
+
+/* Stocks */
+.kind-tag { display: inline-block; margin-left: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: rgba(122,162,255,.16); color: #a9c1ff; vertical-align: 1px; }
+.sr-head { padding: 7px 11px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-top: 1px solid var(--line); }
+.sr-head:first-child { border-top: 0; }
+.mkt { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; font-family: var(--font); }
+.mkt.open { background: rgba(34,197,94,.16); color: #6ee7a0; }
+.mkt.closed { background: #2a3140; color: var(--muted); }

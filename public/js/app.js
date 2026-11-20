@@ -1,9 +1,10 @@
-import { getSymbols, get24h, getKlines, Stream, klineFromStream } from "./binance.js";
+import { getSymbols } from "./binance.js";
+import { get24h, getKlines, createTickerFeed, createKlineFeed, isStock, stockInfo, registerStock, searchStocks } from "./market.js";
 import { COINS, coinName, DEFAULT_WATCHLIST } from "./coins.js";
 import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
 import { initMoney } from "./money.js";
-import { getProfile, plainEnglish, moodOf, moodHtml } from "./research.js";
+import { getProfile, plainEnglish, moodOf, moodHtml, getStockProfile } from "./research.js";
 import { initAlerts, onTicker, openPriceAlert, pushAlert } from "./alerts.js";
 import { ema } from "./indicators.js";
 import { forecast, describeOdds, reliability } from "./forecast.js";
@@ -94,7 +95,8 @@ function toggleForecast() {
 function pushAIContext() {
   const sym = state.selected, info = state.bySymbol.get(sym), s = state.stats.get(sym);
   setAIContext({
-    symbol: sym, base: info?.base, quote: info?.quote, name: coinName(info?.base ?? sym), interval: state.interval,
+    symbol: sym, base: info?.base, quote: info?.quote, name: nameFor(sym), interval: state.interval,
+    isStock: isStock(sym), marketOpen: s?.marketOpen,
     price: s?.last ?? lastCandle?.close, change24h: s?.changePct, high24h: s?.high, low24h: s?.low, volume24h: s?.quoteVolume,
     forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
     analysis: state.analysis && state.analysis.symbol === sym ? state.analysis : null,
@@ -160,9 +162,9 @@ function renderWatchlist() {
     li.dataset.sym = sym;
     if (sym === state.selected) li.classList.add("active");
     li.innerHTML = `
-      <span class="wl-base">${fmt.esc(base)}<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>${badgeHtml(sym)}</span>
+      <span class="wl-base">${fmt.esc(base)}${isStock(sym) ? `<span class="kind-tag">${fmt.esc(info?.kind || "Stock")}</span>` : `<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>`}${badgeHtml(sym)}</span>
       <span class="wl-price" data-f="price">—</span>
-      <span class="wl-name">${fmt.esc(coinName(base))}</span>
+      <span class="wl-name">${fmt.esc(nameFor(sym))}</span>
       <span class="wl-chg" data-f="chg">—</span>
       <button class="wl-remove" title="Remove from watchlist" aria-label="Remove ${fmt.esc(base)}">×</button>`;
     li.addEventListener("click", (e) => {
@@ -222,24 +224,24 @@ async function refreshTickers() {
   } catch (e) { console.warn(e); }
 
   if (tickerStream) tickerStream.close();
-  tickerStream = new Stream(
-    state.watchlist.map((s) => s.toLowerCase() + "@miniTicker"),
-    {
-      onStatus: (s) => setStatus("ticker", s),
-      onMessage: (_stream, d) => {
-        const prev = state.stats.get(d.s);
-        const open = +d.o, last = +d.c;
-        state.stats.set(d.s, {
-          symbol: d.s, last, open, high: +d.h, low: +d.l, quoteVolume: +d.q,
-          changePct: open ? ((last - open) / open) * 100 : 0,
-        });
-        paintRow(d.s, prev?.last);
-        if (d.s === state.selected) paintHeader();
-        onTicker(d.s, last);
-        journalTicker(d.s, last);
-      },
-    }
-  );
+  tickerStream = createTickerFeed(state.watchlist.slice(), {
+    onStatus: (s) => setStatus("ticker", s),
+    onTick: (t) => {
+      const prev = state.stats.get(t.symbol);
+      state.stats.set(t.symbol, { ...prev, ...t });
+      if (isStock(t.symbol)) state.bySymbol.set(t.symbol, stockInfo(t.symbol));
+      paintRow(t.symbol, prev?.last);
+      if (t.symbol === state.selected) paintHeader();
+      onTicker(t.symbol, t.last);
+      journalTicker(t.symbol, t.last);
+    },
+  });
+}
+
+/** Display name for any symbol: coin name for crypto, company name for stocks. */
+function nameFor(sym) {
+  if (isStock(sym)) return stockInfo(sym).name;
+  return coinName(state.bySymbol.get(sym)?.base ?? sym);
 }
 
 /* ---------- Search ---------- */
@@ -262,19 +264,48 @@ function runSearch(q) {
     .sort((a, b) => a.score - b.score)
     .slice(0, 8)
     .map((x) => x.s);
+  searchHits = searchHits.slice(0, 5).map((s) => ({ ...s, kind: "crypto" }));
   searchIdx = 0;
-  box.innerHTML = searchHits.length
-    ? searchHits.map((s, i) => `<button data-i="${i}" class="${i === 0 ? "active" : ""}">
-        <span><strong>${fmt.esc(s.base)}</strong> <span class="muted">/ ${fmt.esc(s.quote)}</span></span>
-        <span class="muted small">${fmt.esc(coinName(s.base))}${state.watchlist.includes(s.symbol) ? " · added" : ""}</span></button>`).join("")
-    : `<div class="empty">No Binance.US pair matches “${fmt.esc(q)}”.</div>`;
+  drawSearch(q, true);
   box.hidden = false;
+  // Stocks & ETFs come from a server search (debounced).
+  clearTimeout(stockSearchTimer);
+  const token = ++stockSearchToken;
+  stockSearchTimer = setTimeout(async () => {
+    let stocks = [];
+    try { stocks = await searchStocks(q); } catch {}
+    if (token !== stockSearchToken) return;
+    searchHits = searchHits.filter((h) => h.kind === "crypto").concat(stocks.map((s) => ({ ...s, kind: "stock" })));
+    drawSearch(q, false);
+  }, 250);
+}
+let stockSearchTimer = null, stockSearchToken = 0;
+function drawSearch(q, loadingStocks) {
+  const box = $("search-results");
+  const crypto = searchHits.filter((h) => h.kind === "crypto");
+  const stocks = searchHits.filter((h) => h.kind === "stock");
+  const row = (s) => {
+    const i = searchHits.indexOf(s);
+    const added = state.watchlist.includes(s.symbol) ? " · added" : "";
+    return s.kind === "crypto"
+      ? `<button data-i="${i}" class="${i === searchIdx ? "active" : ""}"><span><strong>${fmt.esc(s.base)}</strong> <span class="muted">/ ${fmt.esc(s.quote)}</span></span>
+          <span class="muted small">${fmt.esc(coinName(s.base))}${added}</span></button>`
+      : `<button data-i="${i}" class="${i === searchIdx ? "active" : ""}"><span><strong>${fmt.esc(s.ticker)}</strong> <span class="kind-tag">${fmt.esc(s.kind)}</span></span>
+          <span class="muted small">${fmt.esc(s.name)} · ${fmt.esc(s.exchange || "")}${added}</span></button>`;
+  };
+  box.innerHTML =
+    `<div class="sr-head">Crypto · Binance.US</div>` + (crypto.length ? crypto.map(row).join("") : `<div class="empty">No crypto pair matches “${fmt.esc(q)}”.</div>`) +
+    `<div class="sr-head">US stocks &amp; ETFs</div>` + (stocks.length ? stocks.map(row).join("") : `<div class="empty">${loadingStocks ? "Searching…" : `No US stock matches “${fmt.esc(q)}”.`}</div>`);
 }
 function pickSearch(i) {
   const s = searchHits[i];
   if (!s) return;
   $("search").value = "";
   $("search-results").hidden = true;
+  if (s.kind === "stock") {
+    registerStock(s.symbol, { name: s.name, exchange: s.exchange, kind: s.kind });
+    state.bySymbol.set(s.symbol, stockInfo(s.symbol));
+  }
   addToWatchlist(s.symbol);
 }
 
@@ -284,13 +315,19 @@ function paintHeader() {
   const info = state.bySymbol.get(sym);
   const s = state.stats.get(sym);
   const base = info?.base ?? sym;
-  $("sym-name").textContent = coinName(base);
-  $("sym-pair").textContent = info ? `${info.base}/${info.quote}` : sym;
+  const stock = isStock(sym);
+  $("sym-name").textContent = nameFor(sym);
+  $("sym-pair").innerHTML = stock
+    ? `${fmt.esc(base)} · ${fmt.esc(info?.exchange || "US market")}${s && s.marketOpen != null ? ` <span class="mkt ${s.marketOpen ? "open" : "closed"}">${s.marketOpen ? "Market open" : "Market closed"}</span>` : ""}`
+    : fmt.esc(info ? `${info.base}/${info.quote}` : sym);
   const last = s?.last ?? lastCandle?.close;
-  $("sym-price").textContent = fmt.price(last);
+  $("sym-price").textContent = (stock ? "$" : "") + fmt.price(last);
   const chg = $("sym-change");
-  chg.textContent = s ? fmt.pct(s.changePct) + " 24h" : "—";
+  chg.textContent = s ? fmt.pct(s.changePct) + (stock ? " today" : " 24h") : "—";
   chg.className = "chip mono " + (s ? (s.changePct >= 0 ? "up" : "down") : "");
+  document.querySelectorAll(".stats dt")[0].textContent = stock ? "Day high" : "24h high";
+  document.querySelectorAll(".stats dt")[1].textContent = stock ? "Day low" : "24h low";
+  document.querySelectorAll(".stats dt")[2].textContent = stock ? "Day volume" : "24h volume";
   $("sym-high").textContent = fmt.price(s?.high);
   $("sym-low").textContent = fmt.price(s?.low);
   $("sym-vol").textContent = s ? "$" + fmt.compact(s.quoteVolume) : "—";
@@ -396,16 +433,15 @@ async function loadChart() {
     scanner.analyzeSymbol(sym, interval);
   } catch (e) {
     console.warn(e);
-    chartMessage("Couldn't load chart data from Binance.US. Retrying…");
+    chartMessage(`Couldn't load chart data${isStock(sym) ? "" : " from Binance.US"}. Retrying…`);
     setTimeout(() => token === klineLoadToken && loadChart(), 5000);
     return;
   }
 
-  klineStream = new Stream([`${sym.toLowerCase()}@kline_${interval}`], {
+  klineStream = createKlineFeed(sym, interval, {
     onStatus: (s) => setStatus("kline", s),
-    onMessage: (_stream, d) => {
+    onCandle: (c) => {
       if (token !== klineLoadToken) return;
-      const c = klineFromStream(d);
       if (lastCandle && c.time < lastCandle.time) return;
       candles.update(c);
       volume.update(volBar(c));
@@ -431,11 +467,15 @@ function selectSymbol(sym) {
 /* ---------- News ---------- */
 let newsToken = 0;
 const newsCache = new Map();
+/** News for a crypto coin ("BTC"), a stock symbol ("S:AAPL"), or all crypto (""). */
 async function fetchNews(coin) {
   const key = coin || "*";
   const hit = newsCache.get(key);
   if (hit && Date.now() - hit.t < 120_000) return hit.v;
-  const res = await fetch(`/api/news${coin ? "?coin=" + encodeURIComponent(coin) : ""}`);
+  const qs = !coin ? "" : isStock(coin)
+    ? `?stock=${encodeURIComponent(coin.slice(2))}&name=${encodeURIComponent(stockInfo(coin).name)}`
+    : `?coin=${encodeURIComponent(coin)}`;
+  const res = await fetch(`/api/news${qs}`);
   if (!res.ok) throw new Error("HTTP " + res.status);
   const v = await res.json();
   newsCache.set(key, { t: Date.now(), v });
@@ -465,7 +505,7 @@ async function loadNews() {
   $("news-list").hidden = reportTab;
   if (reportTab) return loadReport(base, token);
 
-  const coin = state.newsTab === "coin" ? base : "";
+  const coin = state.newsTab === "coin" ? (isStock(state.selected) ? state.selected : base) : "";
   const list = $("news-list");
   $("news-meta").textContent = "Loading headlines…";
   try {
@@ -477,7 +517,7 @@ async function loadNews() {
     $("news-meta").innerHTML = (coin ? moodHtml(moodOf(data.items)) : "") + `<div>${fmt.esc(meta)}</div>`;
     list.innerHTML = data.items.length
       ? data.items.map(newsItemHtml).join("")
-      : `<li class="news-empty">No recent headlines for ${fmt.esc(coinName(base))}.</li>`;
+      : `<li class="news-empty">No recent headlines for ${fmt.esc(nameFor(state.selected))}.</li>`;
   } catch (e) {
     if (token !== newsToken) return;
     $("news-meta").textContent = "";
@@ -488,20 +528,23 @@ async function loadNews() {
 /* ---------- Report tab ---------- */
 async function loadReport(base, token) {
   const el = $("report");
-  const name = coinName(base);
+  const sym = state.selected;
+  const stock = isStock(sym);
+  const name = nameFor(sym);
+  const newsKey = stock ? sym : base;
   el.innerHTML = `
     <section class="r-sec" id="r-ai"><h3>What's happening</h3><div class="muted small">Reading the latest ${fmt.esc(name)} headlines…</div></section>
     <section class="r-sec" id="r-mood"></section>
-    <section class="r-sec" id="r-card"><h3>${fmt.esc(name)} report card</h3><div class="muted small">Loading coin data…</div></section>`;
+    <section class="r-sec" id="r-card"><h3>${fmt.esc(name)} report card</h3><div class="muted small">Loading ${stock ? "company" : "coin"} data…</div></section>`;
 
   // News mood + AI summary
-  fetchNews(base).then((data) => {
+  fetchNews(newsKey).then((data) => {
     if (token !== newsToken) return;
     $("r-mood").innerHTML = moodHtml(moodOf(data.items)) +
       `<button class="link-btn" data-goto="coin">See all ${data.items.length} ${fmt.esc(base)} headlines →</button>`;
   }).catch(() => { if (token === newsToken) $("r-mood").innerHTML = `<div class="muted small">News unavailable.</div>`; });
 
-  fetch(`/api/summary?coin=${encodeURIComponent(base)}&name=${encodeURIComponent(name)}`)
+  fetch(`/api/summary?${stock ? "stock" : "coin"}=${encodeURIComponent(base)}&name=${encodeURIComponent(name)}`)
     .then((r) => r.json())
     .then((s) => {
       if (token !== newsToken) return;
@@ -517,6 +560,19 @@ async function loadReport(base, token) {
     .catch(() => { if (token === newsToken) $("r-ai").innerHTML = `<h3>What's happening</h3><div class="muted small">AI summary unavailable right now.</div>`; });
 
   // Fundamentals
+  if (stock) {
+    try {
+      const p = await getStockProfile(base, state.stats.get(sym));
+      if (token !== newsToken) return;
+      $("r-card").innerHTML = `<h3>${fmt.esc(name)} report card</h3>
+        <dl class="rc">${p.lines.map((l) => `<div><dt>${l.k}</dt><dd>${l.t}</dd></div>`).join("")}</dl>
+        <p class="muted tiny">${p.source}</p>`;
+    } catch (e) {
+      if (token !== newsToken) return;
+      $("r-card").innerHTML = `<h3>${fmt.esc(name)} report card</h3><div class="muted small">Couldn't load company filings right now.</div>`;
+    }
+    return;
+  }
   try {
     const p = await getProfile(base);
     if (token !== newsToken) return;
@@ -667,11 +723,23 @@ async function boot() {
   });
   input.addEventListener("blur", () => setTimeout(() => ($("search-results").hidden = true), 120));
 
+  // Stocks: add a few well-known ones the first time, and register every stock in the watchlist.
+  if (!store.get("stocksAdded", false)) {
+    const defaults = [["S:SPY", "SPDR S&P 500 ETF", "ETF"], ["S:AAPL", "Apple Inc.", "Stock"], ["S:NVDA", "NVIDIA Corporation", "Stock"], ["S:TSLA", "Tesla, Inc.", "Stock"], ["S:MSFT", "Microsoft Corporation", "Stock"]];
+    for (const [sym, name, kind] of defaults) {
+      registerStock(sym, { name, kind });
+      if (!state.watchlist.includes(sym)) state.watchlist.push(sym);
+    }
+    store.set("stocksAdded", true);
+    store.set("watchlist", state.watchlist);
+  }
+  for (const sym of state.watchlist) if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym));
+
   try {
     state.allSymbols = await getSymbols();
     for (const s of state.allSymbols) state.bySymbol.set(s.symbol, s);
-    // Drop pairs that no longer trade.
-    state.watchlist = state.watchlist.filter((s) => state.bySymbol.has(s));
+    // Drop crypto pairs that no longer trade (stocks are kept).
+    state.watchlist = state.watchlist.filter((s) => isStock(s) || state.bySymbol.has(s));
     if (!state.watchlist.length) state.watchlist = DEFAULT_WATCHLIST.filter((s) => state.bySymbol.has(s));
     store.set("watchlist", state.watchlist);
   } catch (e) {
