@@ -299,6 +299,22 @@ function paintHeader() {
 }
 
 /* ---------- Chart ---------- */
+// The chart library works in UTC; show every time in the device's own time zone instead.
+const toDate = (t) => new Date((typeof t === "number" ? t : Date.UTC(t.year, t.month - 1, t.day) / 1000) * 1000);
+function localTick(time, type) {
+  const d = toDate(time);
+  switch (type) {
+    case 0: return String(d.getFullYear());                                        // year
+    case 1: return d.toLocaleDateString([], { month: "short" });                  // month
+    case 2: return d.toLocaleDateString([], { month: "short", day: "numeric" });  // day
+    case 4: return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    default: return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+}
+function localCrosshairTime(time) {
+  const d = toDate(time);
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 function initChart() {
   const el = $("chart");
   chart = LightweightCharts.createChart(el, {
@@ -306,9 +322,9 @@ function initChart() {
     layout: { background: { type: "solid", color: "transparent" }, textColor: "#8a94a6", fontFamily: "Inter, system-ui, sans-serif" },
     grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
     rightPriceScale: { borderColor: "#232a35" },
-    timeScale: { borderColor: "#232a35", timeVisible: true, secondsVisible: false, shiftVisibleRangeOnNewBar: true },
+    timeScale: { borderColor: "#232a35", timeVisible: true, secondsVisible: false, shiftVisibleRangeOnNewBar: true, tickMarkFormatter: localTick },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-    localization: { priceFormatter: (p) => fmt.price(p) },
+    localization: { priceFormatter: (p) => fmt.price(p), timeFormatter: localCrosshairTime },
   });
   candles = chart.addCandlestickSeries({
     upColor: "#22c55e", downColor: "#f0506e", borderVisible: false,
