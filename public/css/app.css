@@ -168,3 +168,4 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
   .watchlist li { padding-right: 34px; }
   .wl-remove { opacity: 1; top: 50%; transform: translateY(-50%); right: 6px; }
 }
+.tm { font-size: 9px; font-weight: 500; color: var(--muted); margin-left: 1px; vertical-align: super; }

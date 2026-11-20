@@ -1,36 +1,21 @@
 # Putting Entryvex online
 
-Once this is done, you open **https://entryvex.com** (or whichever domain you buy) from any computer or phone. Nothing runs on your PC. Every time new code is pushed to GitHub, the site updates itself within about a minute.
+Once this is done, you open **https://entryvex.trade** from any computer or phone. Nothing runs on your PC. Every time new code is pushed to GitHub, the site updates itself within about a minute.
 
 **What you'll use:** [Cloudflare](https://www.cloudflare.com), for both the domain and the hosting.
 
 - Hosting on Cloudflare Pages is **free**: unlimited visitors, plus 100,000 news requests per day on the free plan, far more than you need.
-- Domains are sold **at cost** with no markup and free privacy protection. Check the exact price at checkout. Roughly:
-  - **.com** about $10–11/year (recommended: it's what people type by default)
-  - **.xyz** about $10–15/year
-  - **.io** about $50–60/year
-
-Total cost: **about $10–11 a year** for a .com. Everything else is free.
-
-> Before buying, it's worth running the name through the official [USPTO trademark search](https://tmsearch.uspto.gov/) one more time.
+- The domain **entryvex.trade** is registered with Cloudflare Registrar (bought 2026-11-20).
 
 ---
 
-## Step 1: Create a Cloudflare account (5 min)
+## Step 1: Cloudflare account ✅ done
 
-1. Go to **https://dash.cloudflare.com/sign-up** and sign up with your email.
-2. Verify your email.
-3. Turn on two-factor login: profile icon (top right) → **My Profile** → **Authentication** → **Two-Factor Authentication**. Your domain lives here, so protect it.
+Make sure two-factor login is on: profile icon (top right) → **My Profile** → **Authentication** → **Two-Factor Authentication**. Your domain lives here, so protect it.
 
-## Step 2: Buy the domain (5 min)
+## Step 2: Domain ✅ done (entryvex.trade)
 
-1. In the Cloudflare dashboard's left menu, open **Domain Registration** → **Register Domains**.
-2. Search for `entryvex`.
-3. Pick **entryvex.com**. Optionally also grab `.io` / `.xyz` so nobody else can take them; they can just point to the same site.
-4. Turn **auto-renew** ON so you never lose it.
-5. Fill in the contact details and pay. Cloudflare keeps your personal details private in the public WHOIS lookup.
-
-The domain shows up under **Websites** (or **Domains**) in the dashboard after a few minutes.
+Check that **auto-renew** is ON: **Domain Registration** → **Manage Domains** → entryvex.trade → **Auto-renew**. That way you never lose the domain.
 
 ## Step 3: Connect the GitHub repo to Cloudflare Pages (5 min)
 
@@ -55,9 +40,9 @@ The domain shows up under **Websites** (or **Domains**) in the dashboard after a
 ## Step 4: Attach your domain (2 min)
 
 1. In **Workers & Pages** → **entryvex** → the **Custom domains** tab → **Set up a custom domain**.
-2. Type `entryvex.com` → **Continue** → **Activate domain**. Because the domain is already in Cloudflare, it sets up the DNS and the HTTPS certificate for you.
-3. Repeat for `www.entryvex.com`.
-4. Wait about 5–15 minutes, then open **https://entryvex.com**. 🎉
+2. Type `entryvex.trade` → **Continue** → **Activate domain**. Because the domain is already in Cloudflare, it sets up the DNS and the HTTPS certificate for you.
+3. Repeat for `www.entryvex.trade`.
+4. Wait about 5–15 minutes, then open **https://entryvex.trade**. 🎉
 
 If you bought .io or .xyz too, add them the same way.
 
@@ -67,7 +52,7 @@ Right now anyone who finds the URL can use the site. To restrict it to just you 
 
 1. Left menu → **Zero Trust** (free for up to 50 users; pick the **Free** plan when asked, no card charge).
 2. **Access** → **Applications** → **Add an application** → **Self-hosted**.
-3. Application domain: `entryvex.com` (add `www.entryvex.com` and `entryvex.pages.dev` too).
+3. Application domain: `entryvex.trade` (add `www.entryvex.trade` and `entryvex.pages.dev` too).
 4. Add a policy: **Action: Allow**, **Include → Emails →** your email address.
 5. Save. Visiting the site now asks for your email and sends you a one-time login code.
 
@@ -76,7 +61,7 @@ Right now anyone who finds the URL can use the site. To restrict it to just you 
 ## How updates work from now on
 
 ```
-code pushed to GitHub (main)  →  Cloudflare rebuilds automatically  →  entryvex.com updated (~1 min)
+code pushed to GitHub (main)  →  Cloudflare rebuilds automatically  →  entryvex.trade updated (~1 min)
 ```
 
 You can watch each deploy under **Workers & Pages → entryvex → Deployments**, and roll back to any earlier version with one click.
