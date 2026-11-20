@@ -2,6 +2,7 @@ import { getSymbols, get24h, getKlines, Stream, klineFromStream } from "./binanc
 import { COINS, coinName, DEFAULT_WATCHLIST } from "./coins.js";
 import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
+import { initMoney } from "./money.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -315,10 +316,12 @@ async function boot() {
   tickClock();
   setInterval(tickClock, 1000);
   initChart();
+  initMoney();
   scanner = createScanner({
     chartSeries: candles,
     getWatchlist: () => state.watchlist.slice(),
     getBase: () => state.bySymbol.get(state.selected)?.base ?? state.selected,
+    getInfo: (sym) => state.bySymbol.get(sym),
     onPickSymbol: (sym) => { selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
     // Zoom out to show all past trades on the chart; zoom back to the live candle when hidden.
     onShowTrades: (showing) => (showing ? chart.timeScale().fitContent() : centerLive()),

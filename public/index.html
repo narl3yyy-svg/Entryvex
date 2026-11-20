@@ -74,14 +74,52 @@
             <div id="scan-sub" class="muted small"></div>
           </div>
           <div class="scan-controls">
-            <label class="fee-label small muted" title="Your Binance.US trading fee per buy or sell. Spot taker fee is 0.02%, maker (limit orders) is 0%.">
-              Fee per side <input id="fee" type="number" step="0.01" min="0" max="2" inputmode="decimal" /> %
-            </label>
             <button id="scan-all" class="btn">Scan watchlist</button>
           </div>
         </div>
+
+        <div class="money" id="money">
+          <div class="money-fields">
+            <label title="The cash in your Binance.US account you're willing to trade with. Stored only in this browser.">
+              <span>Trading balance</span>
+              <span class="inp"><em>$</em><input id="m-balance" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 1000" /></span>
+            </label>
+            <label title="How much of your balance you accept losing on one trade if the stop-loss is hit. Pros typically use 0.5–2%.">
+              <span>Risk per trade</span>
+              <span class="inp"><input id="m-risk" type="number" min="0.1" max="10" step="0.1" inputmode="decimal" /><em>%</em></span>
+            </label>
+            <label title="When today's logged losses reach this, Entryvex tells you to stop for the day.">
+              <span>Daily loss limit</span>
+              <span class="inp"><input id="m-daily" type="number" min="0.5" max="50" step="0.5" inputmode="decimal" /><em>%</em></span>
+            </label>
+            <label title="Your Binance.US fee per buy or sell. Spot taker (market orders) is 0.02%; maker (limit orders) is 0%.">
+              <span>Fee per side</span>
+              <span class="inp"><input id="fee" type="number" step="0.01" min="0" max="2" inputmode="decimal" /><em>%</em></span>
+            </label>
+          </div>
+          <div class="money-day">
+            <div id="m-day"></div>
+            <form id="m-log-form" class="log-form">
+              <label for="m-log-usd" class="small muted">Log a result</label>
+              <span class="inp"><em>$</em><input id="m-log-usd" type="number" step="0.01" inputmode="decimal" placeholder="+12.50 or −8" /></span>
+              <button class="ghost-btn" type="submit">Add</button>
+            </form>
+          </div>
+        </div>
+
         <div id="verdict"></div>
         <div id="plan" class="plan"></div>
+
+        <details id="calc" class="calc">
+          <summary>Plan your own trade <span class="muted small">(position-size calculator for <span id="c-pair">—</span>)</span></summary>
+          <div class="calc-inputs">
+            <label><span>Entry price</span><input id="c-entry" type="number" step="any" inputmode="decimal" /></label>
+            <label><span>Stop-loss</span><input id="c-stop" type="number" step="any" inputmode="decimal" /></label>
+            <label><span>Take-profit</span><input id="c-target" type="number" step="any" inputmode="decimal" /></label>
+            <button id="c-reset" class="ghost-btn" title="Reset to current price with typical stop/target">Use current price</button>
+          </div>
+          <div id="c-out"></div>
+        </details>
         <div class="table-wrap"><table id="setups" class="setups"></table></div>
         <div id="scan-results" class="scan-results-box"></div>
         <p id="method" class="method small muted"></p>

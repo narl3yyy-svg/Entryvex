@@ -5,6 +5,7 @@
   "description": "Live crypto market research dashboard: prices, charts and news.",
   "type": "module",
   "scripts": {
-    "dev": "node dev-server.mjs"
+    "dev": "node dev-server.mjs",
+    "test": "node --test tests/"
   }
 }

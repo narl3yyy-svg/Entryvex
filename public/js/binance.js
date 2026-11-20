@@ -10,17 +10,30 @@ async function getJSON(path) {
   return res.json();
 }
 
-/** All trading spot pairs: [{symbol, base, quote}] (cached for the session). */
+/**
+ * All trading spot pairs (cached for the session), with the exchange's order rules:
+ * stepSize/minQty (quantity increments), tickSize (price increments), minNotional (smallest order in quote currency).
+ */
 export async function getSymbols() {
   try {
-    const cached = JSON.parse(sessionStorage.getItem("evx.symbols") || "null");
+    const cached = JSON.parse(sessionStorage.getItem("evx.symbols.v2") || "null");
     if (cached && Date.now() - cached.t < 3600_000) return cached.v;
   } catch {}
   const info = await getJSON("/exchangeInfo");
   const v = info.symbols
     .filter((s) => s.status === "TRADING")
-    .map((s) => ({ symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset }));
-  try { sessionStorage.setItem("evx.symbols", JSON.stringify({ t: Date.now(), v })); } catch {}
+    .map((s) => {
+      const f = Object.fromEntries((s.filters || []).map((x) => [x.filterType, x]));
+      return {
+        symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset,
+        stepSize: +(f.LOT_SIZE?.stepSize ?? 0),
+        minQty: +(f.LOT_SIZE?.minQty ?? 0),
+        tickSize: +(f.PRICE_FILTER?.tickSize ?? 0),
+        minNotional: +(f.NOTIONAL?.minNotional ?? f.MIN_NOTIONAL?.minNotional ?? 0),
+        oco: !!s.ocoAllowed,
+      };
+    });
+  try { sessionStorage.setItem("evx.symbols.v2", JSON.stringify({ t: Date.now(), v })); } catch {}
   return v;
 }
 

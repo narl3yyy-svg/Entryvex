@@ -95,7 +95,7 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
   } : null;
 
   return {
-    setups, overall, best, plan, costPerSide,
+    setups, overall, best, plan, costPerSide, atr: a, price,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,

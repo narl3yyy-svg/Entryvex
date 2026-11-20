@@ -3,6 +3,7 @@ import { analyze, RULES } from "./engine.js";
 import { getKlineHistory, getBookTicker } from "./binance.js";
 import { coinName } from "./coins.js";
 import * as fmt from "./format.js";
+import { renderTradeCard, setMarketContext, onMoneyChange } from "./money.js";
 
 const $ = (id) => document.getElementById(id);
 const HISTORY = 3000;
@@ -13,7 +14,7 @@ const store = {
   set(k, v) { try { localStorage.setItem("evx." + k, JSON.stringify(v)); } catch {} },
 };
 
-export function createScanner({ chartSeries, getWatchlist, getBase, onPickSymbol, onShowTrades }) {
+export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades }) {
   let ctx = null;          // { symbol, interval, candles, spreadPct }
   let result = null;
   let token = 0;
@@ -29,6 +30,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, onPickSymbol
     if (ctx) recompute();
   });
   $("scan-all").addEventListener("click", scanWatchlist);
+  onMoneyChange(() => { if (ctx && result) render(); });
 
   function costPerSide(spreadPct) {
     const fee = (+feeInput.value || 0) / 100;
@@ -95,21 +97,20 @@ export function createScanner({ chartSeries, getWatchlist, getBase, onPickSymbol
 
     // Trade plan for the active setup
     clearPriceLines();
+    const info = getInfo(ctx.symbol) || {};
+    const rules = { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional };
+    setMarketContext({
+      symbol: ctx.symbol, base: info.base || getBase(), quote: info.quote || "USDT",
+      price: r.price, atr: r.atr, costPerSide: r.costPerSide, rules,
+    });
     if (r.plan && best && best.verdict.level !== "negative") {
       const p = r.plan;
-      const win100 = 100 * (p.targetPct - 2 * r.costPerSide);
-      const loss100 = 100 * (p.stopPct + 2 * r.costPerSide);
-      const mins = (p.medianBars || 0) * (MINUTES[interval] || 0);
-      $("plan").innerHTML = `
-        <div class="plan-grid">
-          <div><span>Buy around</span><strong class="mono">${fmt.price(p.entry)}</strong></div>
-          <div><span>Take profit</span><strong class="mono up">${fmt.price(p.target)} <small>(+${(p.targetPct * 100).toFixed(2)}%)</small></strong></div>
-          <div><span>Stop-loss</span><strong class="mono down">${fmt.price(p.stop)} <small>(−${(p.stopPct * 100).toFixed(2)}%)</small></strong></div>
-          <div><span>Per $100, after costs</span><strong class="mono"><span class="up">+$${win100.toFixed(2)}</span> / <span class="down">−$${loss100.toFixed(2)}</span></strong></div>
-          <div><span>Average result per trade</span><strong class="mono ${best.stats.ev >= 0 ? "up" : "down"}">${fmt.pct(best.stats.ev * 100)}</strong></div>
-          <div><span>Usually resolves in</span><strong class="mono">${mins ? humanMinutes(mins) : "—"}</strong></div>
-        </div>
-        <p class="small muted">If it hasn't hit either level after ${RULES.maxBars} candles (${humanMinutes(RULES.maxBars * (MINUTES[interval] || 0))}), the plan is to exit at market. Position sizing comes in the next update.</p>`;
+      $("plan").innerHTML = renderTradeCard({
+        plan: p, setup: best, costPerSide: r.costPerSide, rules,
+        base: info.base || getBase(), quote: info.quote || "USDT",
+        minutesToResolve: (p.medianBars || 0) * (MINUTES[interval] || 0),
+        maxBarsText: `${RULES.maxBars} candles (${humanMinutes(RULES.maxBars * (MINUTES[interval] || 0))})`,
+      });
       priceLines = [
         chartSeries.createPriceLine({ price: p.target, color: "#22c55e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "Target" }),
         chartSeries.createPriceLine({ price: p.entry, color: "#8a94a6", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "Entry" }),
