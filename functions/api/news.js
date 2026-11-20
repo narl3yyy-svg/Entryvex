@@ -124,7 +124,7 @@ export async function onRequestGet(context) {
 
 async function fetchFeed(feed) {
   const res = await fetch(feed.url, {
-    headers: { "user-agent": "Mozilla/5.0 (compatible; Entryvex/0.1; +https://github.com/narl3yyy-svg/Entryvex)" },
+    headers: { "user-agent": "Mozilla/5.0 (compatible; Entryvex/0.1; +https://entryvex.trade)" },
     redirect: "follow",
     cf: { cacheTtl: CACHE_SECONDS },
   });

@@ -118,10 +118,8 @@ function backtest(c, x, setup, lastClosed, cost) {
     const target = entry + RULES.targetAtr * a;
     let exit = null, outcome = null, j = entryIdx;
     for (; j <= Math.min(entryIdx + RULES.maxBars - 1, lastClosed); j++) {
-      const hitStop = c[j].low <= stop;
-      const hitTarget = c[j].high >= target;
-      if (hitStop) { exit = stop; outcome = "stop"; break; }       // if both in one candle, assume the worst
-      if (hitTarget) { exit = target; outcome = "target"; break; }
+      const r = exitOnCandle(c[j], stop, target);
+      if (r) { exit = r.exit; outcome = r.outcome; break; }
     }
     if (!outcome) {
       if (entryIdx + RULES.maxBars - 1 > lastClosed) break;         // not finished yet: don't count it
@@ -133,6 +131,20 @@ function backtest(c, x, setup, lastClosed, cost) {
     i = j; // no overlapping trades: next signal only after this one is closed
   }
   return trades;
+}
+
+/**
+ * Did this candle take us out of the trade, and at what price?
+ * - Opened beyond a level (a gap): you get the OPEN price, which is worse than the stop
+ *   (or better than the target), not the level itself.
+ * - Both levels inside one candle: we can't know which came first, so assume the stop (worst case).
+ */
+export function exitOnCandle(k, stop, target) {
+  if (k.open <= stop) return { exit: k.open, outcome: "stop" };
+  if (k.open >= target) return { exit: k.open, outcome: "target" };
+  if (k.low <= stop) return { exit: stop, outcome: "stop" };
+  if (k.high >= target) return { exit: target, outcome: "target" };
+  return null;
 }
 
 function summarize(trades) {

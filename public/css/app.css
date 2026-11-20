@@ -507,3 +507,71 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 .mkt { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; font-family: var(--font); }
 .mkt.open { background: rgba(34,197,94,.16); color: #6ee7a0; }
 .mkt.closed { background: #2a3140; color: var(--muted); }
+
+/* Watchlist: keep the color of the last price move */
+.watchlist li.tick-up .wl-price { color: var(--up); }
+.watchlist li.tick-down .wl-price { color: var(--down); }
+.watchlist li.tick-up { box-shadow: inset 3px 0 0 rgba(34,197,94,.55); background: rgba(34,197,94,.05); }
+.watchlist li.tick-down { box-shadow: inset 3px 0 0 rgba(240,80,110,.55); background: rgba(240,80,110,.05); }
+.watchlist li.active { background: #1c2330; box-shadow: inset 3px 0 0 var(--accent); }
+.watchlist li.active.tick-up .wl-price::before { content: "▲ "; font-size: 10px; }
+.watchlist li.active.tick-down .wl-price::before { content: "▼ "; font-size: 10px; }
+.watchlist li:not(.active) .wl-price::before { content: ""; }
+.watchlist li.tick-up:not(.active) .wl-price::before { content: "▲ "; font-size: 10px; }
+.watchlist li.tick-down:not(.active) .wl-price::before { content: "▼ "; font-size: 10px; }
+/* Remove button no longer covers the price: the row makes room for it on hover */
+.watchlist li { transition: padding-right .12s; }
+.watchlist li:hover { padding-right: 34px; }
+.wl-remove { top: 50%; transform: translateY(-50%); right: 6px; }
+
+/* "Entryvex says" decision panel */
+.decision:empty { display: none; }
+.decision { margin: 4px 18px 10px; }
+.d-card { border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.d-top { display: flex; gap: 16px; align-items: center; }
+.d-verdict { display: flex; flex-direction: column; gap: 2px; min-width: 150px; }
+.d-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.d-verdict strong { font-size: 22px; font-weight: 800; letter-spacing: .01em; line-height: 1.15; }
+.d-headline { line-height: 1.5; font-size: 14px; }
+.d-buy { border-color: rgba(34,197,94,.45); background: linear-gradient(180deg, rgba(34,197,94,.10), var(--panel-2) 70%); }
+.d-buy .d-verdict strong, .d-hold .d-verdict strong { color: #4ade80; }
+.d-caution { border-color: rgba(224,179,65,.45); background: linear-gradient(180deg, rgba(224,179,65,.09), var(--panel-2) 70%); }
+.d-caution .d-verdict strong { color: #f0cb6a; }
+.d-no { border-color: rgba(240,80,110,.4); background: linear-gradient(180deg, rgba(240,80,110,.08), var(--panel-2) 70%); }
+.d-no .d-verdict strong, .d-sell .d-verdict strong { color: #ff7d97; }
+.d-sell { border-color: rgba(240,80,110,.6); background: linear-gradient(180deg, rgba(240,80,110,.14), var(--panel-2) 70%); animation: dpulse 2s infinite; }
+@keyframes dpulse { 50% { box-shadow: 0 0 0 3px rgba(240,80,110,.15); } }
+.d-hold { border-color: rgba(46,229,157,.4); }
+.d-wait .d-verdict strong { color: var(--text); }
+.d-steps { margin: 0; padding-left: 20px; line-height: 1.7; }
+.d-steps li { padding-left: 2px; }
+.d-meter-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.d-meter-top strong { font-size: 18px; color: var(--text); font-family: var(--mono); }
+.d-bar { position: relative; height: 10px; border-radius: 5px; background: #232a35; margin-top: 6px; overflow: hidden; }
+.d-bar i { position: absolute; top: 0; bottom: 0; }
+.d-range { background: rgba(122,162,255,.25); }
+.d-fill { left: 0; background: linear-gradient(90deg, #2e7d5b, var(--up)); opacity: .85; }
+.d-be { width: 2px; background: #f0cb6a; }
+.d-more summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.d-more[open] summary { margin-bottom: 8px; }
+.d-checks { display: flex; flex-direction: column; gap: 6px; }
+.d-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.45; }
+.d-check strong { font-weight: 600; margin-right: 4px; }
+.d-ico { width: 14px; flex: none; font-size: 11px; margin-top: 2px; }
+.eff-pos .d-ico { color: var(--up); }
+.eff-neg .d-ico { color: var(--down); }
+.eff-neu .d-ico { color: #5d677a; }
+.d-more p { margin: 8px 0 0; }
+
+/* Open trade advice in My trades */
+.j-advice { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.45; }
+.j-advice strong { font-weight: 800; white-space: nowrap; }
+.adv-hold { background: rgba(46,229,157,.08); }
+.adv-hold strong { color: #4ade80; }
+.adv-sell { background: rgba(240,80,110,.14); }
+.adv-sell strong { color: #ff7d97; }
+
+@media (max-width: 760px) {
+  .decision { margin: 4px 14px 10px; }
+  .d-top { flex-direction: column; align-items: flex-start; gap: 6px; }
+}

@@ -2,6 +2,10 @@ name = "entryvex"
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
+# Only serve the site on entryvex.trade (no public *.workers.dev or preview addresses).
+workers_dev = false
+preview_urls = false
+
 # Serve the website from ./public. Requests for real files never hit the Worker;
 # everything else (like /api/news) runs src/worker.js.
 [assets]

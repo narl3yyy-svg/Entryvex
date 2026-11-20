@@ -45,6 +45,9 @@ export function addTrade(t) {
     source: t.source || "manual", fee: feeRate(),
     openedAt: Date.now(), status: "open",
   };
+  // Entryvex's plan has a time limit: if neither level is hit within 24 candles, sell at market.
+  const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 }[trade.interval];
+  if (sec && trade.source !== "manual") trade.sellBy = trade.openedAt + 24 * sec * 1000;
   hooks.ensureWatched(trade.symbol);
   trades.push(trade);
   if (t.exit) closeTrade(trade.id, +t.exit, "manual");
@@ -77,6 +80,31 @@ export function onTicker(symbol, price) {
   }
   if (changed) save();
   else if (!$("tab-trades")?.hidden) paintLive();
+}
+
+/** Time-limit check: tell the user to sell when the plan's time is up. */
+function checkTimeLimits() {
+  let changed = false;
+  for (const t of openTrades()) {
+    if (!t.sellBy || t.timeAlerted || Date.now() < t.sellBy) continue;
+    t.timeAlerted = true; changed = true;
+    hooks.notify({ kind: "caution", symbol: t.symbol, title: `SELL NOW: ${baseOf(t.symbol)} time limit reached`,
+      body: "Neither the take-profit nor the stop-loss was hit in time. Entryvex's plan is to sell at the market price now. Then record the sale in My trades." });
+  }
+  if (changed) save();
+}
+
+/** Plain-language status of an open trade: what to do right now. */
+export function tradeAdvice(t, price) {
+  const now = Date.now();
+  if (t.sellBy && now >= t.sellBy) return { action: "SELL NOW", level: "sell", why: "The plan's time limit has passed without hitting the target or stop. Sell at the market price." };
+  if (price && t.target && price >= t.target) return { action: "SELL NOW", level: "sell", why: "The take-profit price has been reached." };
+  if (price && t.stop && price <= t.stop) return { action: "SELL NOW", level: "sell", why: "The stop-loss price has been reached. Selling limits the loss." };
+  const parts = [];
+  if (t.target) parts.push(`sell for a profit at <strong>${fmt.price(t.target)}</strong>`);
+  if (t.stop) parts.push(`sell to limit the loss at <strong>${fmt.price(t.stop)}</strong>`);
+  if (t.sellBy) parts.push(`otherwise sell by <strong>${new Date(t.sellBy).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</strong>`);
+  return { action: "HOLD", level: "hold", why: parts.length ? `Keep holding. Plan: ${parts.join("; ")}.` : "No sell plan set. Add a stop-loss and take-profit below." };
 }
 function closeQuiet(t, exit, reason) { t.status = "closed"; t.exit = exit; t.closedAt = Date.now(); t.reason = reason; t.pnl = pnl(t, exit); }
 
@@ -127,6 +155,8 @@ export function initJournal(h) {
     hooks.showTab?.("trades");
   });
   render();
+  checkTimeLimits();
+  setInterval(checkTimeLimits, 30_000);
 }
 
 function stats() {
@@ -203,7 +233,9 @@ function openCard(t) {
     progress = `<div class="j-progress" title="Where the price is between your stop-loss (left) and take-profit (right)"><i style="left:${(pct * 100).toFixed(1)}%"></i></div>
       <div class="j-progress-labels mono small"><span class="down">stop ${fmt.price(t.stop)}</span><span class="up">target ${fmt.price(t.target)}</span></div>`;
   }
+  const adv = tradeAdvice(t, price);
   return `<div class="j-card" data-open="${t.id}">
+    <div class="j-advice adv-${adv.level}"><strong>${adv.action}</strong><span>${adv.why}</span></div>
     <div class="j-card-top">
       <button class="link-btn j-coin" data-act="pick" data-sym="${t.symbol}">${fmt.esc(baseOf(t.symbol))}</button>
       <span class="muted small">${t.setup ? fmt.esc(t.setup) + " · " : ""}opened ${fmt.ago(t.openedAt)}</span>

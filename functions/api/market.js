@@ -54,6 +54,10 @@ export async function onRequestGet(context) {
     } catch { upstream = null; }
   }
   if (!upstream) return new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 502, headers: { "content-type": "application/json" } });
+  // A company that simply doesn't report a given figure isn't an error: answer "missing" quietly.
+  if (upstream.status === 404 && url.searchParams.get("src") === "sec-concept") {
+    return new Response(JSON.stringify({ missing: true }), { headers: { "content-type": "application/json", "cache-control": `public, max-age=${r.ttl}` } });
+  }
 
   const res = new Response(upstream.body, {
     status: upstream.status,

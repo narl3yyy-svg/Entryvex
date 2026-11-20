@@ -26,6 +26,14 @@ Entryvex is a live trading research dashboard for **crypto and US stocks/ETFs**.
 - **US stocks & ETFs:** any stock or ETF on the NYSE/Nasdaq (Apple, NVIDIA, Tesla, SPY…). Prices update every few seconds during market hours (9:30am–4pm New York time); the header shows whether the market is open.
 - Everything below (scanner, forecast, trade cards, My trades, alerts, AI) works for both. Stock trade cards tell you how many **shares** to buy and how to place the order at your broker (Schwab, Fidelity, Robinhood…).
 
+### "Entryvex says": what to do right now
+Right under the chart, one plain answer for whatever you're looking at:
+- **BUY**: how much to buy, at what price, where to take profit, where to cut the loss, and the time to sell by if neither happens.
+- **SMALL BUY OR SKIP**: only a slight edge.
+- **DON'T BUY / WAIT**: why not, and what to do instead (alerts, other coins or stocks).
+- **HOLD / SELL NOW**: once you own it (tracked in My trades), Entryvex tells you when to sell.
+- **Outside checks**: the bigger trend, the overall market (Bitcoin or the S&P 500), the fear gauge (Crypto Fear & Greed or the VIX), news mood and the measured odds. Shown as helping ▲ / against ▼.
+
 ### Chart + forecast
 - Live candles with volume and the 20/50 moving averages.
 - **Forecast:** dashed lines to the right of the live candle show where price has historically landed over the next 20 candles: an 80% range (outer lines), a 50% range, and the middle. Below the chart you'll see the range in dollars, **how accurate this forecast has been** (tested on past data it wasn't built from), and the measured chance the price is higher by then.
@@ -83,5 +91,7 @@ All settings, trades and alerts are stored **only in your own browser**.
 - **Markets:** crypto pairs on Binance.US (spot; Binance.US only serves US users) and US-listed stocks & ETFs.
 - **Buy-first trades only:** Entryvex suggests buying first and selling later, never shorting.
 - **Stocks:** regular trading hours only. Stock prices refresh every ~10 seconds (not tick-by-tick), and a stop-loss can fill lower than planned if a stock opens with a gap.
-- **Data sources:** Binance.US market data; Yahoo Finance stock prices; SEC EDGAR company filings; CoinGecko coin data; public news feeds (Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News, Bing News).
+- **Data sources:** Binance.US market data; Yahoo Finance stock prices and the VIX; SEC EDGAR company filings; CoinGecko coin data; the Crypto Fear & Greed index (alternative.me); public news feeds (Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News, Bing News).
 - **Honesty first:** every confidence number in Entryvex is measured from real past data and checked again live. When the numbers say "don't trade", Entryvex says so.
+- **Privacy:** no sign-up, no accounts, no tracking or ads. Your balance, trades, alerts and settings never leave your browser. Entryvex never asks for exchange logins or API keys.
+- **Security:** strict browser security headers (content security policy, no framing, HTTPS only) and all app code served from entryvex.trade itself.

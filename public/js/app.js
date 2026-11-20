@@ -11,6 +11,9 @@ import { forecast, describeOdds, reliability } from "./forecast.js";
 import { initJournal, onTicker as journalTicker } from "./journal.js";
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
+import { renderDecision, refreshDecision } from "./decision.js";
+import { onMoneyChange } from "./money.js";
+import { onJournalChange } from "./journal.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -50,6 +53,26 @@ function updateForecast(ctx, result) {
   drawForecast();
   renderForecastBox();
   pushAIContext();
+  renderDecision(decisionCtx());
+}
+
+/* "Entryvex says" panel */
+function decisionCtx() {
+  const sym = state.selected, info = state.bySymbol.get(sym) || {}, s = state.stats.get(sym);
+  return {
+    symbol: sym, base: info.base ?? sym, name: nameFor(sym), interval: state.interval,
+    price: s?.last ?? lastCandle?.close, marketOpen: s?.marketOpen,
+    analysis: state.analysis && state.analysis.symbol === sym && state.analysis.interval === state.interval ? state.analysis.result : null,
+    forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
+    rules: { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional },
+  };
+}
+let decisionTimer = 0;
+function tickDecision() {
+  const now = Date.now();
+  if (now - decisionTimer < 1500) return;
+  decisionTimer = now;
+  refreshDecision(decisionCtx());
 }
 function drawForecast() {
   const f = state.forecast;
@@ -191,12 +214,20 @@ function paintRow(sym, prevLast) {
   p.textContent = fmt.price(s.last);
   c.textContent = fmt.pct(s.changePct);
   c.className = "wl-chg " + (s.changePct >= 0 ? "up" : "down");
+  // Remember the direction of the LAST price change and keep showing it until the next change.
   if (prevLast != null && prevLast !== s.last) {
+    const dir = s.last > prevLast ? "up" : "down";
+    tickDir.set(sym, dir);
     li.classList.remove("flash-up", "flash-down");
     void li.offsetWidth;
-    li.classList.add(s.last > prevLast ? "flash-up" : "flash-down");
+    li.classList.add(dir === "up" ? "flash-up" : "flash-down");
   }
+  const dir = tickDir.get(sym);
+  li.classList.toggle("tick-up", dir === "up");
+  li.classList.toggle("tick-down", dir === "down");
+  p.title = dir ? `Last price change was ${dir === "up" ? "UP ▲" : "DOWN ▼"}` : "";
 }
+const tickDir = new Map();
 
 function addToWatchlist(sym) {
   if (!state.watchlist.includes(sym)) {
@@ -333,6 +364,7 @@ function paintHeader() {
   $("sym-vol").textContent = s ? "$" + fmt.compact(s.quoteVolume) : "—";
   if (last) document.title = `${fmt.price(last)} ${base} · Entryvex`;
   pushAIContext();
+  tickDecision();
 }
 
 /* ---------- Chart ---------- */
@@ -416,7 +448,8 @@ async function loadChart() {
   const sym = state.selected, interval = state.interval;
   const token = ++klineLoadToken;
   if (klineStream) { klineStream.close(); klineStream = null; }
-  state.forecast = null; drawForecast(); renderForecastBox();
+  state.forecast = null; state.analysis = null; drawForecast(); renderForecastBox();
+  renderDecision(decisionCtx());
   chartMessage("Loading chart…");
   try {
     const data = await getKlines(sym, interval, 500);
@@ -644,6 +677,15 @@ async function boot() {
     onPickInterval: (iv) => document.querySelector(`#intervals button[data-i="${iv}"]`)?.click(),
   });
   $("center-live").addEventListener("click", () => centerLive());
+  onMoneyChange(() => refreshDecision(decisionCtx()));
+  onJournalChange(() => refreshDecision(decisionCtx()));
+  $("decision").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.hasAttribute("data-open-alerts")) $("alerts-btn").click();
+    if (b.hasAttribute("data-find-edge")) { document.querySelector('#center-tabs button[data-tab="scanner"]')?.click(); $("find-edges").click(); $("edges").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    if (b.hasAttribute("data-scan-all")) { document.querySelector('#center-tabs button[data-tab="scanner"]')?.click(); $("scan-all").click(); }
+  });
   $("ema-toggle").addEventListener("click", toggleEma);
   $("price-alert-btn").addEventListener("click", () => openPriceAlert(state.selected));
   $("help-btn").addEventListener("click", () => ($("help").hidden = !$("help").hidden));

@@ -3,7 +3,7 @@
 // Runs on Cloudflare Workers AI.
 
 const MODELS = ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/meta/llama-3.1-8b-instruct-fast"];
-const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^https:\/\/[a-z0-9-]+\.narl3y\.workers\.dev$/, /^http:\/\/localhost(:\d+)?$/];
+const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^http:\/\/localhost(:\d+)?$/];
 
 const SYSTEM = `You are the Entryvex Analyst, built into the Entryvex trading research website. You help a beginner understand LIVE market data for crypto coins and US stocks/ETFs so they can make their own decisions.
 
