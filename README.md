@@ -26,11 +26,11 @@ Live crypto market research in your browser: real-time prices, candle charts and
 | Part | Where it runs | Notes |
 |---|---|---|
 | `public/` | The visitor's browser | Plain HTML/CSS/JS, no build step. Market data comes directly from the Binance.US public API and WebSocket (read-only, no keys). |
-| `functions/api/news.js` | Cloudflare Pages Functions | Fetches and merges RSS news feeds (browsers can't read them directly), cached for 3 minutes. |
+| `src/worker.js` + `functions/api/news.js` | Cloudflare Worker | Fetches and merges RSS news feeds (browsers can't read them directly), cached for 3 minutes. |
 
 ## Hosting
 
-See **[docs/SETUP.md](docs/SETUP.md)** for buying the domain and putting the site online with Cloudflare Pages. After setup, every push to `main` redeploys automatically.
+See **[docs/SETUP.md](docs/SETUP.md)** for buying the domain and putting the site online with Cloudflare Workers. After setup, every push to `main` redeploys automatically.
 
 ## Preview locally (optional)
 

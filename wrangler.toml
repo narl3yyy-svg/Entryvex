@@ -1,3 +1,9 @@
 name = "entryvex"
+main = "src/worker.js"
 compatibility_date = "2025-06-01"
-pages_build_output_dir = "public"
+
+# Serve the website from ./public. Requests for real files never hit the Worker;
+# everything else (like /api/news) runs src/worker.js.
+[assets]
+directory = "./public"
+binding = "ASSETS"

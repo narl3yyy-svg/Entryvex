@@ -4,7 +4,7 @@ Once this is done, you open **https://entryvex.trade** from any computer or phon
 
 **What you'll use:** [Cloudflare](https://www.cloudflare.com), for both the domain and the hosting.
 
-- Hosting on Cloudflare Pages is **free**: unlimited visitors, plus 100,000 news requests per day on the free plan, far more than you need.
+- Hosting on Cloudflare Workers is **free**: unlimited visitors, plus 100,000 news requests per day on the free plan, far more than you need.
 - The domain **entryvex.trade** is registered with Cloudflare Registrar (bought 2026-11-20).
 
 ---
@@ -17,34 +17,31 @@ Make sure two-factor login is on: profile icon (top right) → **My Profile** �
 
 Check that **auto-renew** is ON: **Domain Registration** → **Manage Domains** → entryvex.trade → **Auto-renew**. That way you never lose the domain.
 
-## Step 3: Connect the GitHub repo to Cloudflare Pages (5 min)
+## Step 3: Connect the GitHub repo to Cloudflare Workers (5 min)
 
-1. Left menu → **Workers & Pages** → **Create application**.
-2. Choose the **Pages** option, then **Import an existing Git repository** (labeled "Connect to Git" on some screens).
-   - If you only see Workers options, look for the link **"Looking to deploy Pages? Get started"** at the bottom.
-3. Click **Connect GitHub**. On GitHub's permission screen, choose **Only select repositories** → **narl3yyy-svg/Entryvex** → **Install & Authorize**.
-4. Back in Cloudflare, select **Entryvex** → **Begin setup**.
-5. Fill in the build settings exactly like this:
+Entryvex deploys as a **Cloudflare Worker with static assets** (Cloudflare's default for new projects). The settings live in `wrangler.toml`, so there's nothing to build.
+
+1. Left menu → **Workers & Pages** → **Create application** → **Import a repository** (Continue with GitHub).
+2. On GitHub's permission screen, choose **Only select repositories** → **narl3yyy-svg/Entryvex** → **Install & Authorize**.
+3. Select **narl3yyy-svg/Entryvex**. On **Set up your application**, use:
 
    | Setting | Value |
    |---|---|
-   | Project name | `entryvex` |
-   | Production branch | `main` |
-   | Framework preset | **None** |
+   | Project name | `entryvex` (must match `name` in wrangler.toml) |
    | Build command | *(leave empty)* |
-   | Build output directory | `public` |
+   | Deploy command | `npx wrangler deploy` (the default) |
+   | Preview command | `npx wrangler versions upload` (or leave the default) |
+   | Builds for non-production branches | on (optional: gives preview links) |
 
-6. Click **Save and Deploy**. It takes about a minute.
-7. When it finishes, you get a free link like **https://entryvex.pages.dev**. Open it: you should see live prices, the chart and news.
+4. Click **Deploy**. It takes about a minute.
+5. When it finishes, you get a free link like **https://entryvex.<your-subdomain>.workers.dev**. Open it: you should see live prices, the chart and news.
 
 ## Step 4: Attach your domain (2 min)
 
-1. In **Workers & Pages** → **entryvex** → the **Custom domains** tab → **Set up a custom domain**.
-2. Type `entryvex.trade` → **Continue** → **Activate domain**. Because the domain is already in Cloudflare, it sets up the DNS and the HTTPS certificate for you.
+1. **Workers & Pages** → **entryvex** → **Settings** → **Domains & Routes** → **+ Add** → **Custom domain**.
+2. Type `entryvex.trade` → **Add domain**. Because the domain is already in Cloudflare, it creates the DNS record and HTTPS certificate for you.
 3. Repeat for `www.entryvex.trade`.
 4. Wait about 5–15 minutes, then open **https://entryvex.trade**. 🎉
-
-If you bought .io or .xyz too, add them the same way.
 
 ## Step 5 (optional but recommended): make it private
 
@@ -52,7 +49,7 @@ Right now anyone who finds the URL can use the site. To restrict it to just you 
 
 1. Left menu → **Zero Trust** (free for up to 50 users; pick the **Free** plan when asked, no card charge).
 2. **Access** → **Applications** → **Add an application** → **Self-hosted**.
-3. Application domain: `entryvex.trade` (add `www.entryvex.trade` and `entryvex.pages.dev` too).
+3. Application domain: `entryvex.trade` (add `www.entryvex.trade` too). Also turn off the workers.dev link: Workers & Pages → entryvex → Settings → Domains & Routes → workers.dev → Disable.
 4. Add a policy: **Action: Allow**, **Include → Emails →** your email address.
 5. Save. Visiting the site now asks for your email and sends you a one-time login code.
 
