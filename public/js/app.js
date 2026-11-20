@@ -4,6 +4,8 @@ import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
 import { initMoney } from "./money.js";
 import { getProfile, plainEnglish, moodOf, moodHtml } from "./research.js";
+import { initAlerts, onTicker, openPriceAlert } from "./alerts.js";
+import { ema } from "./indicators.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -21,12 +23,45 @@ const state = {
   interval: store.get("interval", "15m"),
   stats: new Map(),
   newsTab: store.get("newsTab", "report"),
+  badges: {},
+  showEma: store.get("ema", true),
   status: { ticker: "connecting", kline: "connecting" },
 };
 
 let tickerStream = null;
 let klineStream = null;
-let chart, candles, volume, scanner;
+let chart, candles, volume, scanner, emaLines;
+let emaState = null; // { closes: [], times: [], v: {20: [], 50: []} }
+
+/* EMA 20/50 overlay: full calculation on load, then incremental updates per tick. */
+function setEmaData(data) {
+  const closes = data.map((c) => c.close);
+  emaState = { closes, times: data.map((c) => c.time), v: { 20: ema(closes, 20), 50: ema(closes, 50) } };
+  for (const p of [20, 50]) {
+    emaLines[p].setData(emaState.v[p].map((v, i) => ({ time: emaState.times[i], value: v })).filter((x) => isFinite(x.value)));
+  }
+  applyEmaVisibility();
+}
+function updateEma(c) {
+  if (!emaState) return;
+  const { closes, times, v } = emaState;
+  const n = times.length;
+  if (n && times[n - 1] === c.time) closes[n - 1] = c.close;
+  else if (!n || c.time > times[n - 1]) { closes.push(c.close); times.push(c.time); v[20].push(NaN); v[50].push(NaN); }
+  else return;
+  const i = closes.length - 1;
+  for (const p of [20, 50]) {
+    const prev = v[p][i - 1];
+    if (!isFinite(prev)) continue;
+    const k = 2 / (p + 1);
+    v[p][i] = c.close * k + prev * (1 - k);
+    emaLines[p].update({ time: c.time, value: v[p][i] });
+  }
+}
+function applyEmaVisibility() {
+  for (const p of [20, 50]) emaLines[p].applyOptions({ visible: state.showEma });
+  $("ema-toggle").classList.toggle("on", state.showEma);
+}
 let lastCandle = null;
 let klineLoadToken = 0;
 
@@ -56,7 +91,7 @@ function renderWatchlist() {
     li.dataset.sym = sym;
     if (sym === state.selected) li.classList.add("active");
     li.innerHTML = `
-      <span class="wl-base">${fmt.esc(base)}<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span></span>
+      <span class="wl-base">${fmt.esc(base)}<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>${badgeHtml(sym)}</span>
       <span class="wl-price" data-f="price">—</span>
       <span class="wl-name">${fmt.esc(coinName(base))}</span>
       <span class="wl-chg" data-f="chg">—</span>
@@ -68,6 +103,12 @@ function renderWatchlist() {
     ul.appendChild(li);
     paintRow(sym);
   }
+}
+
+function badgeHtml(sym) {
+  const b = state.badges[sym];
+  if (!b || !["go", "caution", "no"].includes(b.level)) return "";
+  return `<span class="wl-badge ${b.level}" title="Setup alert scan on ${b.interval} candles">${fmt.esc(b.label)}</span>`;
 }
 
 function paintRow(sym, prevLast) {
@@ -125,6 +166,7 @@ async function refreshTickers() {
         });
         paintRow(d.s, prev?.last);
         if (d.s === state.selected) paintHeader();
+        onTicker(d.s, last);
       },
     }
   );
@@ -202,6 +244,11 @@ function initChart() {
     wickUpColor: "#22c55e", wickDownColor: "#f0506e",
   });
   volume = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+  const lineOpts = { lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+  emaLines = {
+    20: chart.addLineSeries({ ...lineOpts, color: "rgba(224,179,65,0.85)", title: "" }),
+    50: chart.addLineSeries({ ...lineOpts, color: "rgba(122,162,255,0.85)", title: "" }),
+  };
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
   chart.subscribeCrosshairMove((p) => {
@@ -244,6 +291,7 @@ async function loadChart() {
     candles.applyOptions({ priceFormat: { type: "price", precision: prec, minMove: 1 / 10 ** prec } });
     candles.setData(data);
     volume.setData(data.map(volBar));
+    setEmaData(data);
     lastCandle = data.at(-1) ?? null;
     centerLive(data.length);
     chartMessage("");
@@ -264,6 +312,7 @@ async function loadChart() {
       if (lastCandle && c.time < lastCandle.time) return;
       candles.update(c);
       volume.update(volBar(c));
+      updateEma(c);
       lastCandle = c;
       scanner.onCandle(c);
       if (!state.stats.has(sym)) paintHeader();
@@ -388,6 +437,41 @@ async function loadReport(base, token) {
   }
 }
 
+/* ---------- Polish: EMA toggle + keyboard shortcuts ---------- */
+function toggleEma() {
+  state.showEma = !state.showEma;
+  store.set("ema", state.showEma);
+  applyEmaVisibility();
+}
+
+function initShortcuts() {
+  const intervals = ["1m", "5m", "15m", "1h", "4h", "1d"];
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (["input", "select", "textarea"].includes(tag) || e.target.isContentEditable) return;
+    const k = e.key;
+    if (k === "/") { e.preventDefault(); $("search").focus(); }
+    else if (k >= "1" && k <= "6") { document.querySelector(`#intervals button[data-i="${intervals[+k - 1]}"]`)?.click(); }
+    else if (k === "l" || k === "L") centerLive();
+    else if (k === "e" || k === "E") toggleEma();
+    else if (k === "a" || k === "A") $("alerts-btn").click();
+    else if (k === "?") $("help").hidden = !$("help").hidden;
+    else if (k === "Escape") $("help").hidden = true;
+    else if (k === "ArrowDown" || k === "ArrowUp") {
+      const i = state.watchlist.indexOf(state.selected);
+      const n = state.watchlist.length;
+      if (!n) return;
+      e.preventDefault();
+      selectSymbol(state.watchlist[(i + (k === "ArrowDown" ? 1 : -1) + n) % n]);
+      document.querySelector(`#watchlist li[data-sym="${state.selected}"]`)?.scrollIntoView({ block: "nearest" });
+    }
+  });
+  document.addEventListener("click", (e) => {
+    if (!$("help").hidden && !e.target.closest("#help, #help-btn")) $("help").hidden = true;
+  });
+}
+
 /* ---------- Boot ---------- */
 async function boot() {
   tickClock();
@@ -404,6 +488,18 @@ async function boot() {
     onShowTrades: (showing) => (showing ? chart.timeScale().fitContent() : centerLive()),
   });
   $("center-live").addEventListener("click", () => centerLive());
+  $("ema-toggle").addEventListener("click", toggleEma);
+  $("price-alert-btn").addEventListener("click", () => openPriceAlert(state.selected));
+  $("help-btn").addEventListener("click", () => ($("help").hidden = !$("help").hidden));
+  initAlerts({
+    getWatchlist: () => state.watchlist.slice(),
+    getInfo: (sym) => state.bySymbol.get(sym),
+    getSelected: () => state.selected,
+    getPrice: (sym) => state.stats.get(sym)?.last,
+    onPick: (sym) => { if (!state.watchlist.includes(sym)) addToWatchlist(sym); else selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    onBadges: (b) => { state.badges = b; renderWatchlist(); },
+  });
+  initShortcuts();
 
   document.querySelectorAll("#intervals button").forEach((b) => {
     b.classList.toggle("on", b.dataset.i === state.interval);

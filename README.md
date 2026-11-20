@@ -20,7 +20,14 @@ Live crypto market research in your browser: real-time prices, candle charts and
 - **Trade calculator:** plan any trade yourself (entry, stop, target) and get the position size, dollar outcomes and break-even win rate.
 - **Research panel → Report:** an AI-written "What's happening" summary of the latest headlines (Cloudflare Workers AI, cached 30 min), the coin's **news mood** for the last 24h, and a plain-English **report card** from CoinGecko: rank and size, distance from its all-time high, week/month/year trend, supply (capped or unlimited), trading activity, what the project is and when it launched.
 - **Headline mood:** every headline is tagged ▲ positive / ▼ negative / • neutral with a transparent keyword scorer (`functions/api/sentiment.js`). News mood is shown for context only; it doesn't change the measured confidence, because there's no historical news data to test it against.
-- Works on desktop, tablet and phone. Your watchlist and fee setting are remembered in your browser.
+- **Alerts (🔔 in the top bar):**
+  - *Setup alerts*: after every candle closes (5m/15m/1h/4h), checks your whole watchlist and alerts you when a setup with a proven (or, optionally, weak) positive track record becomes active. Watchlist rows get GO / CAUTION / NO TRADE badges.
+  - *Big move alerts*: when a watchlist coin moves more than X% within N minutes.
+  - *Price alerts*: when a coin goes above or below a price (one-shot).
+  - Delivered as an on-page toast, a sound, a flashing tab title and (optionally) desktop notifications. Alerts run while Entryvex is open in a tab; a background tab is fine.
+- **Chart polish:** EMA 20/50 lines (toggle), price-alert button, live candle centered.
+- **Keyboard shortcuts:** `/` search · `1`–`6` candle size · `↑`/`↓` previous/next coin · `L` center live · `E` EMA lines · `A` alerts · `?` help.
+- Works on desktop, tablet and phone. Your watchlist, settings and alerts are remembered in your browser.
 
 ## Roadmap
 
@@ -28,7 +35,7 @@ Live crypto market research in your browser: real-time prices, candle charts and
 2. ✅ Setup detection and scoring: a **measured** confidence %, based on how each setup has actually played out historically
 3. ✅ Trade cards and money prompt: entry, stop, target, position size, expected value after fees, go/no-go, daily loss guard
 4. ✅ News sentiment and plain-English coin summaries
-5. Dashboard polish and alerts
+5. ✅ Dashboard polish and alerts
 6. Track record of every signal, plus a daily loss-limit "session guard"
 
 ## How it's built

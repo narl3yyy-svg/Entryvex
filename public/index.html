@@ -22,8 +22,32 @@
     <div class="topbar-right">
       <span id="status" class="status" data-state="connecting"><i></i><span>Connecting…</span></span>
       <span id="clock" class="clock mono"></span>
+      <button id="alerts-btn" class="icon-btn" title="Alerts (A)" aria-label="Alerts">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 16a1 1 0 0 0 .9 1.4h13.6a1 1 0 0 0 .9-1.4L18 12.6V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21Z" fill="currentColor"/></svg>
+        <span id="alerts-count" class="count" hidden>0</span>
+      </button>
+      <button id="help-btn" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     </div>
   </header>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="alerts-overlay" class="overlay" hidden></div>
+  <aside id="alerts-drawer" class="drawer" aria-label="Alerts">
+    <div class="drawer-head"><h2>Alerts</h2><button id="alerts-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <div id="alerts-body" class="drawer-body"></div>
+  </aside>
+  <div id="help" class="help-pop" hidden>
+    <strong>Keyboard shortcuts</strong>
+    <dl>
+      <div><dt>/</dt><dd>Search coins</dd></div>
+      <div><dt>1–6</dt><dd>Candle size (1m … 1D)</dd></div>
+      <div><dt>↑ ↓</dt><dd>Previous / next coin in watchlist</dd></div>
+      <div><dt>L</dt><dd>Center the live candle</dd></div>
+      <div><dt>E</dt><dd>Show / hide EMA lines</dd></div>
+      <div><dt>A</dt><dd>Open alerts</dd></div>
+      <div><dt>?</dt><dd>This help</dd></div>
+    </dl>
+  </div>
 
   <main class="layout">
     <aside class="panel watch">
@@ -62,7 +86,9 @@
         </div>
         <div class="toolbar-right">
           <span id="candle-info" class="muted small mono"></span>
-          <button id="center-live" class="ghost-btn" title="Put the live candle back in the middle of the chart"><i class="live-dot"></i>Live</button>
+          <button id="ema-toggle" class="ghost-btn" title="Show/hide the 20 and 50 moving averages (E)"><i class="ema-swatch"></i>EMA 20/50</button>
+          <button id="price-alert-btn" class="ghost-btn" title="Set a price alert for this coin">🔔 Alert</button>
+          <button id="center-live" class="ghost-btn" title="Put the live candle back in the middle of the chart (L)"><i class="live-dot"></i>Live</button>
         </div>
       </div>
       <div id="chart" class="chart"></div>
