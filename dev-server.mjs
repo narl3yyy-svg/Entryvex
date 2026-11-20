@@ -12,6 +12,7 @@ const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
 const api = {
   "/api/news": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/news.js", import.meta.url))).href),
   "/api/summary": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/summary.js", import.meta.url))).href),
+  "/api/market": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/market.js", import.meta.url))).href),
   "/api/ask": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/ask.js", import.meta.url))).href),
 };
 

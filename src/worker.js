@@ -4,8 +4,9 @@
 import { onRequestGet as newsHandler } from "../functions/api/news.js";
 import { onRequestGet as summaryHandler } from "../functions/api/summary.js";
 import { onRequestPost as askHandler } from "../functions/api/ask.js";
+import { onRequestGet as marketHandler } from "../functions/api/market.js";
 
-const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler };
+const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler };
 const POST = { "/api/ask": askHandler };
 
 export default {
