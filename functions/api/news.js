@@ -54,6 +54,12 @@ export async function onRequestGet(context) {
       url: `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`,
       perCoin: true,
     });
+    // Backup per-coin source: Google sometimes blocks requests from cloud servers.
+    feeds.push({
+      source: "Bing News",
+      url: `https://www.bing.com/news/search?q=${encodeURIComponent(`"${COIN_NAMES[coin] || coin}" crypto`)}&format=rss`,
+      perCoin: true,
+    });
   }
 
   const results = await Promise.allSettled(feeds.map(fetchFeed));
@@ -101,12 +107,15 @@ async function fetchFeed(feed) {
   return parseFeed(xml).map((it) => {
     let source = feed.source;
     let title = it.title;
-    // Google News titles look like "Headline - Publisher".
-    if (feed.perCoin) {
+    // Bing gives the publisher in <News:Source>; Google News titles look like "Headline - Publisher".
+    if (it.publisher) {
+      source = it.publisher;
+    } else if (feed.perCoin) {
       const m = title.match(/^(.*) - ([^-]{2,60})$/);
       if (m) { title = m[1]; source = m[2]; }
     }
-    return { ...it, title, source, perCoin: !!feed.perCoin };
+    const { publisher, ...rest } = it;
+    return { ...rest, title, source, perCoin: !!feed.perCoin };
   });
 }
 
@@ -124,7 +133,8 @@ function parseFeed(xml) {
     const date = tag(b, "pubDate") || tag(b, "published") || tag(b, "updated") || tag(b, "dc:date");
     const summary = clean(tag(b, "description") || tag(b, "summary")).slice(0, 280);
     const published = date ? Date.parse(clean(date)) || null : null;
-    if (title && /^https?:\/\//.test(link)) out.push({ title, link, published, summary });
+    const publisher = clean(tag(b, "News:Source")) || null;
+    if (title && /^https?:\/\//.test(link)) out.push({ title, link, published, summary, publisher });
   }
   return out;
 }
