@@ -5,6 +5,8 @@
 // each headline mentions, and returns clean JSON. Results are cached at the
 // edge for a few minutes so the feeds aren't hammered.
 
+import { scoreHeadline } from "./sentiment.js";
+
 const GENERAL_FEEDS = [
   { source: "Cointelegraph", url: "https://cointelegraph.com/rss" },
   { source: "Decrypt", url: "https://decrypt.co/feed" },
@@ -83,7 +85,10 @@ export async function onRequestGet(context) {
     seen.add(key);
     return true;
   });
-  for (const it of items) it.coins = tagCoins(it.title + " " + (it.summary || ""));
+  for (const it of items) {
+    it.coins = tagCoins(it.title + " " + (it.summary || ""));
+    it.mood = scoreHeadline(it.title);
+  }
   if (coin) {
     items = items.filter((it) => it.perCoin || it.coins.includes(coin));
   }

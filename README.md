@@ -18,6 +18,8 @@ Live crypto market research in your browser: real-time prices, candle charts and
 - **Dollar trade card:** for an active setup, shows exactly how much to buy (rounded to Binance.US's quantity, price and minimum-order rules), what you make if the target hits and lose if the stop hits (after fees and spread), the measured average result in dollars, and step-by-step instructions for placing it on Binance.US (limit buy, then an OCO take-profit/stop sell) with copy buttons.
 - **Daily loss guard:** log each trade's result; when today's losses reach your limit, Entryvex hides trade cards and tells you to stop for the day.
 - **Trade calculator:** plan any trade yourself (entry, stop, target) and get the position size, dollar outcomes and break-even win rate.
+- **Research panel → Report:** an AI-written "What's happening" summary of the latest headlines (Cloudflare Workers AI, cached 30 min), the coin's **news mood** for the last 24h, and a plain-English **report card** from CoinGecko: rank and size, distance from its all-time high, week/month/year trend, supply (capped or unlimited), trading activity, what the project is and when it launched.
+- **Headline mood:** every headline is tagged ▲ positive / ▼ negative / • neutral with a transparent keyword scorer (`functions/api/sentiment.js`). News mood is shown for context only; it doesn't change the measured confidence, because there's no historical news data to test it against.
 - Works on desktop, tablet and phone. Your watchlist and fee setting are remembered in your browser.
 
 ## Roadmap
@@ -25,7 +27,7 @@ Live crypto market research in your browser: real-time prices, candle charts and
 1. ✅ Live data: prices, charts, news
 2. ✅ Setup detection and scoring: a **measured** confidence %, based on how each setup has actually played out historically
 3. ✅ Trade cards and money prompt: entry, stop, target, position size, expected value after fees, go/no-go, daily loss guard
-4. News sentiment and plain-English coin/company summaries
+4. ✅ News sentiment and plain-English coin summaries
 5. Dashboard polish and alerts
 6. Track record of every signal, plus a daily loss-limit "session guard"
 
@@ -34,7 +36,8 @@ Live crypto market research in your browser: real-time prices, candle charts and
 | Part | Where it runs | Notes |
 |---|---|---|
 | `public/` | The visitor's browser | Plain HTML/CSS/JS, no build step. Market data comes directly from the Binance.US public API and WebSocket (read-only, no keys). |
-| `src/worker.js` + `functions/api/news.js` | Cloudflare Worker | Fetches and merges RSS news feeds (browsers can't read them directly), cached for 3 minutes. |
+| `src/worker.js` + `functions/api/news.js` | Cloudflare Worker | Fetches and merges RSS news feeds (browsers can't read them directly), scores headline mood, cached for 3 minutes. |
+| `functions/api/summary.js` | Cloudflare Worker + Workers AI | Plain-English AI summary of a coin's latest headlines, cached for 30 minutes. |
 
 ## Hosting
 
@@ -66,3 +69,4 @@ node --test tests/
 
 - Binance.US public market data API (`api.binance.us`, `stream.binance.us`). Binance.US serves US users; visitors outside the US may be blocked by Binance.US.
 - Public RSS feeds from the news outlets listed above. Headlines link to the original articles.
+- CoinGecko public API (fetched by the visitor's browser) for the coin report card.

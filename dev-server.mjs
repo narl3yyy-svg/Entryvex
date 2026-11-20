@@ -9,13 +9,16 @@ const root = fileURLToPath(new URL("./public/", import.meta.url));
 const port = Number(process.env.PORT || 8788);
 const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".png": "image/png", ".ico": "image/x-icon" };
 
-const news = await import(pathToFileURL(fileURLToPath(new URL("./functions/api/news.js", import.meta.url))).href);
+const api = {
+  "/api/news": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/news.js", import.meta.url))).href),
+  "/api/summary": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/summary.js", import.meta.url))).href),
+};
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
   try {
-    if (url.pathname === "/api/news") {
-      const r = await news.onRequestGet({ request: new Request(url), waitUntil: () => {} });
+    if (api[url.pathname]) {
+      const r = await api[url.pathname].onRequestGet({ request: new Request(url), env: {}, waitUntil: () => {} });
       res.writeHead(r.status, Object.fromEntries(r.headers));
       res.end(Buffer.from(await r.arrayBuffer()));
       return;

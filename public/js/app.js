@@ -3,6 +3,7 @@ import { COINS, coinName, DEFAULT_WATCHLIST } from "./coins.js";
 import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
 import { initMoney } from "./money.js";
+import { getProfile, plainEnglish, moodOf, moodHtml } from "./research.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -19,7 +20,7 @@ const state = {
   selected: store.get("selected", "BTCUSDT"),
   interval: store.get("interval", "15m"),
   stats: new Map(),
-  newsTab: "coin",
+  newsTab: store.get("newsTab", "report"),
   status: { ticker: "connecting", kline: "connecting" },
 };
 
@@ -283,31 +284,107 @@ function selectSymbol(sym) {
 
 /* ---------- News ---------- */
 let newsToken = 0;
+const newsCache = new Map();
+async function fetchNews(coin) {
+  const key = coin || "*";
+  const hit = newsCache.get(key);
+  if (hit && Date.now() - hit.t < 120_000) return hit.v;
+  const res = await fetch(`/api/news${coin ? "?coin=" + encodeURIComponent(coin) : ""}`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const v = await res.json();
+  newsCache.set(key, { t: Date.now(), v });
+  return v;
+}
+
+const MOOD_ICON = { positive: "▲", negative: "▼", neutral: "•" };
+function newsItemHtml(it) {
+  const m = it.mood?.label || "neutral";
+  return `<li><a href="${fmt.esc(it.link)}" target="_blank" rel="noopener noreferrer">
+    <div class="news-title"><span class="mood-dot md-${m}" title="Headline mood: ${m}">${MOOD_ICON[m]}</span>${fmt.esc(it.title)}</div>
+    <div class="news-sub"><span>${fmt.esc(it.source)}</span><span>·</span><span>${fmt.ago(it.published)}</span>
+      ${(it.coins || []).slice(0, 4).map((c) => `<span class="tag">${fmt.esc(c)}</span>`).join("")}</div></a></li>`;
+}
+
+function currentBase() {
+  return state.bySymbol.get(state.selected)?.base ?? state.selected.replace(/(USDT|USDC|USD)$/, "");
+}
+
 async function loadNews() {
   const token = ++newsToken;
-  const base = state.bySymbol.get(state.selected)?.base ?? state.selected.replace(/(USDT|USDC|USD)$/, "");
-  $("news-tab-coin").textContent = base;
+  const base = currentBase();
+  $("news-tab-coin").textContent = `${base} news`;
+  const reportTab = state.newsTab === "report";
+  $("report").hidden = !reportTab;
+  $("news-meta").hidden = reportTab;
+  $("news-list").hidden = reportTab;
+  if (reportTab) return loadReport(base, token);
+
   const coin = state.newsTab === "coin" ? base : "";
   const list = $("news-list");
   $("news-meta").textContent = "Loading headlines…";
   try {
-    const res = await fetch(`/api/news${coin ? "?coin=" + encodeURIComponent(coin) : ""}`);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
+    const data = await fetchNews(coin);
     if (token !== newsToken) return;
-    $("news-meta").textContent =
+    const meta =
       `${data.items.length} headlines · updated ${new Date(data.updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
       (data.failedSources?.length ? ` · unavailable: ${data.failedSources.join(", ")}` : "");
+    $("news-meta").innerHTML = (coin ? moodHtml(moodOf(data.items)) : "") + `<div>${fmt.esc(meta)}</div>`;
     list.innerHTML = data.items.length
-      ? data.items.map((it) => `<li><a href="${fmt.esc(it.link)}" target="_blank" rel="noopener noreferrer">
-          <div class="news-title">${fmt.esc(it.title)}</div>
-          <div class="news-sub"><span>${fmt.esc(it.source)}</span><span>·</span><span>${fmt.ago(it.published)}</span>
-            ${(it.coins || []).slice(0, 4).map((c) => `<span class="tag">${fmt.esc(c)}</span>`).join("")}</div></a></li>`).join("")
+      ? data.items.map(newsItemHtml).join("")
       : `<li class="news-empty">No recent headlines for ${fmt.esc(coinName(base))}.</li>`;
   } catch (e) {
     if (token !== newsToken) return;
     $("news-meta").textContent = "";
     list.innerHTML = `<li class="news-empty">News is unavailable right now. (The news service runs on the hosted site. If you opened the file directly, run the local dev server instead.)</li>`;
+  }
+}
+
+/* ---------- Report tab ---------- */
+async function loadReport(base, token) {
+  const el = $("report");
+  const name = coinName(base);
+  el.innerHTML = `
+    <section class="r-sec" id="r-ai"><h3>What's happening</h3><div class="muted small">Reading the latest ${fmt.esc(name)} headlines…</div></section>
+    <section class="r-sec" id="r-mood"></section>
+    <section class="r-sec" id="r-card"><h3>${fmt.esc(name)} report card</h3><div class="muted small">Loading coin data…</div></section>`;
+
+  // News mood + AI summary
+  fetchNews(base).then((data) => {
+    if (token !== newsToken) return;
+    $("r-mood").innerHTML = moodHtml(moodOf(data.items)) +
+      `<button class="link-btn" data-goto="coin">See all ${data.items.length} ${fmt.esc(base)} headlines →</button>`;
+  }).catch(() => { if (token === newsToken) $("r-mood").innerHTML = `<div class="muted small">News unavailable.</div>`; });
+
+  fetch(`/api/summary?coin=${encodeURIComponent(base)}&name=${encodeURIComponent(name)}`)
+    .then((r) => r.json())
+    .then((s) => {
+      if (token !== newsToken) return;
+      const box = $("r-ai");
+      if (!s.available || !s.bullets) {
+        box.innerHTML = `<h3>What's happening</h3><div class="muted small">${fmt.esc(s.reason || "AI summary unavailable right now.")}</div>`;
+        return;
+      }
+      box.innerHTML = `<h3>What's happening <span class="ai-badge">AI</span></h3>
+        <ul class="ai-list">${s.bullets.map((b) => `<li>${fmt.esc(b)}</li>`).join("")}</ul>
+        <div class="muted tiny">Written by AI from ${s.count} recent headlines${s.generated ? ` at ${new Date(s.generated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}. It can be wrong. Check the sources. Not advice.</div>`;
+    })
+    .catch(() => { if (token === newsToken) $("r-ai").innerHTML = `<h3>What's happening</h3><div class="muted small">AI summary unavailable right now.</div>`; });
+
+  // Fundamentals
+  try {
+    const p = await getProfile(base);
+    if (token !== newsToken) return;
+    if (!p) { $("r-card").innerHTML = `<h3>${fmt.esc(name)} report card</h3><div class="muted small">No CoinGecko data found for ${fmt.esc(base)}.</div>`; return; }
+    const lines = plainEnglish(p);
+    const img = p.m.image ? `<img src="${fmt.esc(p.m.image)}" alt="" width="20" height="20" loading="lazy" />` : "";
+    $("r-card").innerHTML = `<h3>${img}${fmt.esc(p.m.name)} report card</h3>
+      <dl class="rc">${lines.map((l) => `<div><dt>${l.k}</dt><dd>${l.t}</dd></div>`).join("")}</dl>
+      <p class="muted tiny">Crypto coins don't publish quarterly earnings like companies do, so this shows size, supply and price history instead.
+      Data: <a href="https://www.coingecko.com/en/coins/${encodeURIComponent(p.m.id)}" target="_blank" rel="noopener noreferrer">CoinGecko</a>.</p>`;
+  } catch (e) {
+    if (token !== newsToken) return;
+    $("r-card").innerHTML = `<h3>${fmt.esc(name)} report card</h3><div class="muted small">${e.message === "rate-limited"
+      ? "CoinGecko is busy (free-tier limit). Try again in a minute." : "Couldn't load coin data right now."}</div>`;
   }
 }
 
@@ -337,12 +414,19 @@ async function boot() {
       loadChart();
     });
   });
+  const setNewsTab = (tab) => {
+    state.newsTab = tab;
+    store.set("newsTab", tab);
+    document.querySelectorAll("#news-tabs button").forEach((x) => x.classList.toggle("on", x.dataset.tab === tab));
+    loadNews();
+  };
   document.querySelectorAll("#news-tabs button").forEach((b) => {
-    b.addEventListener("click", () => {
-      state.newsTab = b.dataset.tab;
-      document.querySelectorAll("#news-tabs button").forEach((x) => x.classList.toggle("on", x === b));
-      loadNews();
-    });
+    b.classList.toggle("on", b.dataset.tab === state.newsTab);
+    b.addEventListener("click", () => setNewsTab(b.dataset.tab));
+  });
+  $("report").addEventListener("click", (e) => {
+    const g = e.target.closest("[data-goto]");
+    if (g) setNewsTab(g.dataset.goto);
   });
 
   const input = $("search");

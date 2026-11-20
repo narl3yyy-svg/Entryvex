@@ -303,3 +303,33 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
   .money-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .calc-inputs { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Research panel (step 4) */
+.report { flex: 1; overflow-y: auto; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+.report[hidden], .news-list[hidden], .news-meta[hidden] { display: none; }
+.r-sec h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.r-sec h3 img { border-radius: 50%; }
+.ai-badge { font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 1px 6px; border-radius: 5px; background: #2a2350; color: #b9a8ff; }
+.ai-list { margin: 0 0 8px; padding-left: 18px; line-height: 1.5; }
+.ai-list li { margin-bottom: 4px; }
+.tiny { font-size: 11.5px; line-height: 1.45; }
+.tiny a { color: inherit; }
+.mood { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); margin-bottom: 6px; }
+.mood-top { display: flex; flex-direction: column; gap: 2px; }
+.mood-pos .mood-top strong { color: var(--up); }
+.mood-neg .mood-top strong { color: var(--down); }
+.mood-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #232a35; }
+.mood-bar i { display: block; height: 100%; }
+.mood-bar .neg { background: var(--down); }
+.mood-bar .neu { background: #4a5468; }
+.mood-bar .pos { background: var(--up); }
+.mood-dot { display: inline-block; width: 14px; margin-right: 4px; font-size: 10px; }
+.md-positive { color: var(--up); }
+.md-negative { color: var(--down); }
+.md-neutral { color: #5d677a; }
+.rc { margin: 0; display: flex; flex-direction: column; gap: 9px; }
+.rc div { display: flex; flex-direction: column; gap: 2px; }
+.rc dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.rc dd { margin: 0; line-height: 1.45; }
+.rc strong { font-weight: 600; }
+.news-meta { display: flex; flex-direction: column; gap: 6px; }
