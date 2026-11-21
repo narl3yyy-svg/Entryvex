@@ -896,3 +896,5 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .br-add:hover { border-color: var(--accent); }
 .br-add.added { color: var(--up); border-color: rgba(34,197,94,.4); }
 .br-empty { cursor: default; display: block !important; }
+.brand-scan { margin-left: 12px; padding: 5px 12px; }
+@media (max-width: 640px) { .brand-scan { margin-left: 8px; padding: 5px 9px; } .brand-scan span { display: none; } }

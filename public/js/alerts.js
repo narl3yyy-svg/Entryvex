@@ -170,6 +170,7 @@ async function loadCandles(sym, interval) {
 let scanning = false;
 let lastScanText = "";
 let pushMsg = "";
+let pushBusy = false;
 export async function runScan() {
   if (scanning || !cfg.setup.on) return;
   scanning = true;
@@ -252,8 +253,11 @@ export function initAlerts(h) {
       saveCfg(); renderDrawer();
     }
     if (t.id === "al-push-on") {
-      t.disabled = true; pushMsg = "Turning on…"; renderDrawer();
-      try { const r = await enablePush(); pushMsg = r.msg; } catch (err) { pushMsg = "Couldn't turn on closed-app alerts in this browser."; }
+      if (pushBusy) return;
+      pushBusy = true; pushMsg = "Turning on…"; renderDrawer();
+      try { const r = await enablePush((step) => { pushMsg = step; renderDrawer(); }); pushMsg = r.msg; }
+      catch (err) { pushMsg = `Couldn't turn on closed-app alerts in this browser (${err?.message || err}).`; }
+      pushBusy = false;
       renderDrawer();
     }
     if (t.id === "al-push-off") { await disablePush(); pushMsg = "Off. This device won't get alerts while Entryvex is closed."; renderDrawer(); }

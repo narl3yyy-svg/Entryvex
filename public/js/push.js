@@ -31,18 +31,53 @@ export function initPush(h) {
 }
 
 /** Turn closed-app alerts on: ask permission, subscribe, and send settings. Returns a status message. */
-export async function enablePush() {
+/** Rejects with `msg` if `p` doesn't finish within `ms` (browsers can leave some of these steps waiting forever). */
+const within = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error(msg), { friendly: true })), ms))]);
+const isBrave = async () => { try { return !!(navigator.brave && await navigator.brave.isBrave()); } catch { return false; } };
+
+export async function enablePush(onStep = () => {}) {
   if (!pushSupported()) return { ok: false, msg: "This browser can't receive alerts while closed. On iPhone/iPad, first add Entryvex to your Home Screen (Share → Add to Home Screen) and open it from there." };
-  const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-  if (perm !== "granted") return { ok: false, msg: "Notifications are blocked for entryvex.trade. Allow them in your browser's site settings, then try again." };
-  const reg = await navigator.serviceWorker.register("/sw.js");
-  await navigator.serviceWorker.ready;
-  const { publicKey } = await (await fetch("/api/push/key")).json();
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
-  store.set("pushOn", true);
-  const ok = await sync(sub);
-  return ok ? { ok: true, msg: "On. Entryvex checks every 5 minutes and notifies this device even when the site is closed." } : { ok: false, msg: "Couldn't reach the alert server. Try again in a minute." };
+  try {
+    // 1. Permission. Chrome and Edge sometimes show this quietly as a small bell/crossed-bell icon in the address bar.
+    let perm = Notification.permission;
+    if (perm === "default") {
+      onStep("Your browser is asking for permission: click Allow. (No popup? Look for a 🔔 icon at the left or right end of the address bar.)");
+      perm = await within(Notification.requestPermission(), 45_000,
+        "No answer to the notification permission request. Click the 🔔 or ⓘ / lock icon in the address bar, set Notifications to Allow, then press the button again.");
+    }
+    if (perm !== "granted") return { ok: false, msg: "Notifications are blocked for entryvex.trade. Click the lock / ⓘ icon in the address bar → Site settings → Notifications → Allow, reload the page, then try again." };
+
+    // 2. The background helper that receives notifications.
+    onStep("Starting the background helper…");
+    const reg = await within(navigator.serviceWorker.register("/sw.js"), 15_000, "The background helper didn't start. Reload the page and try again.");
+    await within(navigator.serviceWorker.ready, 15_000, "The background helper didn't start. Reload the page and try again.");
+
+    // 3. A push address from the browser's push service.
+    onStep("Getting a notification address from your browser…");
+    const { publicKey } = await within(fetch("/api/push/key").then((r) => r.json()), 15_000, "Couldn't reach the alert server. Try again in a minute.");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const brave = await isBrave();
+      sub = await within(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }), 25_000,
+        brave ? "Brave blocks this by default. Open brave://settings/privacy, turn on “Use Google services for push messaging”, restart Brave, then try again."
+          : "Your browser's push service didn't answer. Check that notifications aren't turned off for your browser in Windows (Settings → System → Notifications), then try again, or use Chrome or Edge.");
+    }
+
+    // 4. Send the settings to Entryvex's alert server.
+    onStep("Saving your alert settings…");
+    store.set("pushOn", true);
+    const ok = await within(sync(sub), 15_000, "Couldn't reach the alert server. Try again in a minute.");
+    return ok ? { ok: true, msg: "On. Entryvex checks every 5 minutes and notifies this device even when the site is closed. Press “Send a test” to check." }
+      : { ok: false, msg: "Couldn't reach the alert server. Try again in a minute." };
+  } catch (e) {
+    if (e.friendly) return { ok: false, msg: e.message };
+    const brave = await isBrave();
+    if (e.name === "AbortError" || /push service/i.test(e.message || ""))
+      return { ok: false, msg: brave ? "Brave blocks this by default. Open brave://settings/privacy, turn on “Use Google services for push messaging”, restart Brave, then try again."
+        : "Your browser's push service refused the request. Try Chrome or Edge, or check that your browser is allowed to show notifications in Windows settings." };
+    if (e.name === "NotAllowedError") return { ok: false, msg: "Notifications are blocked for entryvex.trade. Allow them in the site settings (lock / ⓘ icon in the address bar), then try again." };
+    return { ok: false, msg: `Couldn't turn on closed-app alerts: ${e.message || e.name}.` };
+  }
 }
 
 export async function disablePush() {
