@@ -41,7 +41,6 @@ function changed() { renderDay(); renderCalc(); listeners.forEach((fn) => fn());
 export function initMoney() {
   bind("m-balance", "balance", 0, 0, 1e9);
   bind("m-risk", "riskPct", 1, 0.1, 10);
-  bind("m-daily", "dailyPct", 3, 0.5, 50);
 
   // Fee presets: plain-language choices that set the % fee the scanner and sizing use.
   const preset = $("fee-preset"), fee = $("fee"), customBox = document.querySelector(".fee-custom");
@@ -81,12 +80,14 @@ function bind(id, key, def, min, max) {
 export function guard() {
   const d = todayStats();
   const limit = settings.balance * settings.dailyPct / 100;
-  return { pnl: d.pnl, limit, trades: d.trades, open: d.open, losses: d.losses, locked: limit > 0 && d.pnl <= -limit };
+  // The daily stop setting was removed from the page, so it never locks trading now.
+  return { pnl: d.pnl, limit, trades: d.trades, open: d.open, losses: d.losses, locked: false };
 }
 
 function renderDay() {
-  const g = guard();
   const el = $("m-day");
+  if (!el) return;
+  const g = guard();
   const pnlCls = g.pnl > 0 ? "up" : g.pnl < 0 ? "down" : "";
   const used = g.limit > 0 ? Math.min(1, Math.max(0, -g.pnl / g.limit)) : 0;
   el.innerHTML = `

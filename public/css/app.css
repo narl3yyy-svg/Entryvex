@@ -826,3 +826,13 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .nai-top a { color: inherit; }
 .nai-record { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
 .nai-pool { margin-top: 4px; }
+
+/* "If you buy now": big colored results, simple amount box */
+.bn-amount { flex-direction: column; align-items: flex-end; gap: 3px; }
+.bn-amount .inp { width: 220px; }
+.bn-grid strong.bn-big { font: 700 21px var(--mono); line-height: 1.2; }
+.bn-grid strong.bn-big span { font-size: 12px; text-transform: none; letter-spacing: 0; }
+.bn-grid div.bn-range { display: flex; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; background: none; border: 0; padding: 0; border-radius: 0; }
+.bn-grid span.bn-to { font-size: 13px; text-transform: none; letter-spacing: 0; }
+.bn-grid small strong { font-size: 11.5px; font-weight: 600; }
+@media (max-width: 640px) { .bn-amount { align-items: stretch; width: 100%; } .bn-amount .inp { width: 100%; } .bn-grid strong.bn-big { font-size: 18px; } }
