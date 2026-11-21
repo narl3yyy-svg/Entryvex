@@ -13,6 +13,7 @@ import { settings } from "./money.js";
 import { isStock, stockInfo } from "./market.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
+import { fxRate, loadFx, money as fxMoney, majorOf } from "./fx.js";
 
 const $ = (id) => document.getElementById(id);
 let ctx = null;
@@ -22,8 +23,10 @@ export function getBuyNowSummary() { return lastSummary && lastSummary.symbol ==
 let amountMode = sessionStorage.getItem("evx.bnMode") || "suggested";   // "suggested" | "custom" | "10" | "25"
 let customAmount = +(sessionStorage.getItem("evx.bnAmount") || 0);
 
-const money = (v) => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: Math.abs(v) < 100 ? 2 : 0 })}`;
-const usd = (v) => `$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+// Amount formatters for the market's own currency (set per render; US dollars for USD markets).
+const usdMoney = (v) => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: Math.abs(v) < 100 ? 2 : 0 })}`;
+const usdPlain = (v) => `$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+let money = usdMoney, usd = usdPlain;
 
 export function initBuyNow() {
   const el = $("buynow");
@@ -54,12 +57,23 @@ function render(keepFocus = false) {
   const stock = isStock(c.symbol);
   const unit = stock ? "shares" : c.base;
   const currency = stock ? stockInfo(c.symbol).currency : "USD";
-  if (currency !== "USD") {
+  // Non-USD markets: convert your USD balance at the live exchange rate; amounts show in both currencies.
+  const rate = currency === "USD" ? 1 : fxRate(currency);
+  const major = majorOf(currency);
+  if (!rate) {
     $("buynow").innerHTML = `<div class="bn-card"><div class="d-when-title">If you buy ${fmt.esc(c.base)} now</div>
-      <p class="small muted">${fmt.esc(c.base)} is priced in ${fmt.esc(currency)}. Dollar sizing for non-US-dollar markets isn't available yet, so Entryvex doesn't mix currencies with your USD balance. The chart, signals, forecast, long-term view and news all work as normal.</p></div>`;
+      <p class="small muted">Loading the ${fmt.esc(major[0])}/USD exchange rate to convert your balance…</p></div>`;
+    loadFx(currency).then((x) => {
+      if (ctx !== c) return;
+      if (x) render();
+      else $("buynow").innerHTML = `<div class="bn-card"><p class="small muted">The ${fmt.esc(major[0])}/USD exchange rate is unavailable right now, so Entryvex can't size this in dollars.</p></div>`;
+    });
     return;
   }
-  const bal = settings.balance;
+  const foreign = currency !== "USD";
+  money = foreign ? (v) => fxMoney(v, currency, rate, { sign: true }) : usdMoney;
+  usd = foreign ? (v) => fxMoney(Math.abs(v), currency, rate) : usdPlain;
+  const bal = settings.balance * rate;   // in the market's own currency
   const price = c.price;
   const cost = r?.costPerSide ?? 0.0007;           // fee + half the bid/ask spread, per side
   const atr = r?.atr;
@@ -73,7 +87,7 @@ function render(keepFocus = false) {
   if (amountMode === "suggested") amount = suggested?.spend || 0;
   else if (amountMode === "10") amount = bal * 0.10;
   else if (amountMode === "25") amount = bal * 0.25;
-  else amount = customAmount;
+  else amount = customAmount * rate;   // typed in US dollars
   if (bal > 0) amount = Math.min(amount, bal);
 
   // Quantity the exchange will actually accept.
@@ -84,12 +98,12 @@ function render(keepFocus = false) {
   const pnlAt = (px) => qty * px * (1 - cost) - spend - feeIn;
 
   const amountInput = keepFocus && document.activeElement?.id === "bn-amount";
-  const inputVal = amountMode === "custom" ? customAmount || "" : Math.round(amount) || "";
+  const inputVal = amountMode === "custom" ? customAmount || "" : Math.round(amount / rate) || "";
 
   const header = `
     <div class="bn-head">
-      <div><div class="d-when-title">If you buy ${fmt.esc(c.base)} now at ${stock ? "$" : ""}${fmt.price(price)}</div>
-        <div class="muted small">${bal > 0 ? `Your balance: ${usd(bal)} · max loss per trade ${settings.riskPct}%` : "Enter your trading balance above to see dollar amounts for your account."}</div></div>
+      <div><div class="d-when-title">If you buy ${fmt.esc(c.base)} now at ${stock ? (foreign ? fmt.esc(currency) + " " : "$") : ""}${fmt.price(price)}</div>
+        <div class="muted small">${bal > 0 ? `Your balance: ${usdPlain(settings.balance)}${foreign ? ` ≈ ${fxMoney(bal, currency, 0)} at ${fmt.price(rate / major[1])} ${fmt.esc(major[0])} per $1` : ""} · max loss per trade ${settings.riskPct}%` : "Enter your trading balance above to see dollar amounts for your account."}</div></div>
       <div class="bn-amount">
         <span class="inp"><em>$</em><input id="bn-amount" type="number" min="0" step="any" inputmode="decimal" placeholder="amount" value="${inputVal}" /></span>
         <div class="seg small-seg">
@@ -106,8 +120,9 @@ function render(keepFocus = false) {
     return;
   }
 
-  lastSummary = { symbol: c.symbol, amountUsd: +spend.toFixed(2), quantity: +qty.toFixed(8), unit, pctOfBalance: bal > 0 ? +((spend / bal) * 100).toFixed(1) : null,
-    feesEachWayUsd: +feeIn.toFixed(2), breakevenPrice: +breakeven.toPrecision(8) };
+  lastSummary = { symbol: c.symbol, amountUsd: +(spend / rate).toFixed(2), quantity: +qty.toFixed(8), unit, pctOfBalance: bal > 0 ? +((spend / bal) * 100).toFixed(1) : null,
+    feesEachWayUsd: +(feeIn / rate).toFixed(2), breakevenPrice: +breakeven.toPrecision(8), priceCurrency: currency,
+    ...(foreign ? { currencyPerUsd: rate, note: `all *Usd figures converted from ${currency} at the live rate` } : {}) };
   const tiles = [];
   // Basics
   tiles.push(`<div><span>You'd get</span><strong class="mono">${+qty.toFixed(8)} ${fmt.esc(unit)}</strong><small class="muted">${usd(spend)}${bal > 0 ? ` · ${Math.round((spend / bal) * 100)}% of balance` : ""} · fees ≈ ${usd(feeIn)} each way</small></div>`);
@@ -118,14 +133,15 @@ function render(keepFocus = false) {
     const pProfit = probAbove(f, breakeven);
     const mins = (f.H * f.intervalSec) / 60;
     const h = mins < 60 ? `${Math.round(mins)} min` : mins < 1440 ? `${+(mins / 60).toFixed(1)} h` : `${+(mins / 1440).toFixed(1)} days`;
-    Object.assign(lastSummary, { shortTerm: { horizon: h, chanceOfProfitAfterCostsPct: Math.round(pProfit * 100), likelyResultUsd80pct: [Math.round(pnlAt(f.range80[0])), Math.round(pnlAt(f.range80[1]))], middleUsd: Math.round(pnlAt(f.mid)) } });
+    Object.assign(lastSummary, { shortTerm: { horizon: h, chanceOfProfitAfterCostsPct: Math.round(pProfit * 100), likelyResultUsd80pct: [Math.round(pnlAt(f.range80[0]) / rate), Math.round(pnlAt(f.range80[1]) / rate)], middleUsd: Math.round(pnlAt(f.mid) / rate) } });
     tiles.push(`<div class="${pProfit >= 0.5 ? "bn-good" : "bn-bad"}"><span>Chance of profit in ~${h}</span><strong class="mono">${Math.round(pProfit * 100)}%</strong><small class="muted">after costs · forecast ${reliability(f.accuracy80).label}</small></div>`);
     tiles.push(`<div><span>Likely result in ~${h} (80%)</span><strong class="mono"><span class="down">${money(pnlAt(f.range80[0]))}</span> to <span class="up">${money(pnlAt(f.range80[1]))}</span></strong><small class="muted">middle ${money(pnlAt(f.mid))}</small></div>`);
   }
   // Bad day
-  if (lt?.badDay != null) lastSummary.badDayUsd = Math.round(spend * lt.badDay);
-  if (lt?.hold) lastSummary.hold3Months = { endedHigherPct: Math.round(lt.hold.pUp * 100), typicalUsd: [Math.round(spend * lt.hold.p10), Math.round(spend * lt.hold.p90)], middleUsd: Math.round(spend * lt.hold.median) };
-  if (stop && target) lastSummary.withEntryvexStopTarget = { stop: +stop.toPrecision(8), target: +target.toPrecision(8), lossUsd: Math.round(pnlAt(Math.min(stop, price))), winUsd: Math.round(pnlAt(target)) };
+  const u = spend / rate;
+  if (lt?.badDay != null) lastSummary.badDayUsd = Math.round(u * lt.badDay);
+  if (lt?.hold) lastSummary.hold3Months = { endedHigherPct: Math.round(lt.hold.pUp * 100), typicalUsd: [Math.round(u * lt.hold.p10), Math.round(u * lt.hold.p90)], middleUsd: Math.round(u * lt.hold.median) };
+  if (stop && target) lastSummary.withEntryvexStopTarget = { stop: +stop.toPrecision(8), target: +target.toPrecision(8), lossUsd: Math.round(pnlAt(Math.min(stop, price)) / rate), winUsd: Math.round(pnlAt(target) / rate) };
   if (lt?.badDay != null) {
     tiles.push(`<div><span>A bad day (1 in 20)</span><strong class="mono down">${money(spend * lt.badDay)}</strong><small class="muted">price ${(lt.badDay * 100).toFixed(1)}% in a day; about ${Math.round(0.05 * (stock ? 252 : 365))} days a year were this bad or worse</small></div>`);
   }
@@ -142,6 +158,8 @@ function render(keepFocus = false) {
 
   // Warnings and verdict reminder
   const notes = [];
+  if (foreign) notes.push(`<div class="note">Priced in ${fmt.esc(major[0])}: your result in dollars also moves with the exchange rate (if the dollar gets 5% stronger, your position is worth about 5% less in dollars). Check that your broker can trade on this exchange, and its currency-conversion fee.</div>`);
+  if (/\.T$/.test(c.base)) notes.push(`<div class="note">Tokyo shares normally trade in lots of 100 (${usd(price * 100)} for one lot here). Some brokers offer single shares; check yours.</div>`);
   if (bal > 0 && spend / bal > 0.5) notes.push(`<div class="warn">That's ${Math.round((spend / bal) * 100)}% of your balance in one position. If it drops hard, it hits your whole account. Most traders keep single positions well below 25%.</div>`);
   else if (suggested?.ok && spend > suggested.spend * 1.5) notes.push(`<div class="note">This is more than Entryvex's suggested ${usd(suggested.spend)}: if price falls to the standard stop (${fmt.price(stop)}) you'd lose ${money(pnlAt(stop))}, more than your ${settings.riskPct}% limit.</div>`);
   const lvl = r?.overall?.level;

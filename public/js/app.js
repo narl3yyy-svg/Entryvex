@@ -13,7 +13,7 @@ import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
-import { initOpportunities, run as runOpportunities, setupMarkets, signalFor, verdictFor, isRunning as oppsRunning } from "./opportunities.js";
+import { initOpportunities, run as runOpportunities, setupMarkets, signalFor, verdictFor, isRunning as oppsRunning, lastChecked as oppsLastChecked } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
 import { initWorld, worldVisible } from "./world.js";
@@ -22,7 +22,8 @@ import { initBuyNow, updateBuyNow } from "./buynow.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 import { recentMove } from "./move.js";
-import { initPicks, picksVisible } from "./picks.js";
+import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
+import { onFx } from "./fx.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -291,6 +292,12 @@ function paintSignal(li, sym) {
 }
 function paintSignals() {
   document.querySelectorAll("#watchlist li[data-sym]").forEach((li) => paintSignal(li, li.dataset.sym));
+  const n = { buy: 0, wait: 0, unknown: 0 };
+  for (const sym of state.watchlist) { const v = rowVerdict(sym); if (v && n[v.level] != null) n[v.level]++; }
+  const at = oppsLastChecked();
+  $("wl-summary").innerHTML = oppsRunning() ? "Checking every market…"
+    : at ? `<strong class="b">${n.buy} buy</strong> · <strong class="w">${n.wait} wait</strong> · <strong class="u">${n.unknown} no data</strong> · checked ${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}${n.buy === 0 && n.wait > 0 ? `<br><span>No buy signals is normal. Most of the time, waiting is the right call.</span>` : ""}`
+    : "";
 }
 
 function paintRow(sym, prevLast) {
@@ -457,6 +464,12 @@ function pickSearch(i) {
 }
 
 /* ---------- Header ---------- */
+/** "⭐ Stock Rank #3 of 101" next to a stock's name (opens the Stock picks tab). */
+function rankPill(sym) {
+  const r = rankFor(sym);
+  if (!r) return "";
+  return ` <button class="rank-pill ${r.top ? "top" : ""}" data-open-picks title="Entryvex Stock Rank: monthly momentum, trend and steadiness ranking of ${r.of} large US stocks. ${r.top ? "In this month's top 10." : ""}">⭐ Rank ${r.rank} of ${r.of}</button>`;
+}
 function paintHeader() {
   const sym = state.selected;
   const info = state.bySymbol.get(sym);
@@ -465,7 +478,7 @@ function paintHeader() {
   const stock = isStock(sym);
   $("sym-name").textContent = nameFor(sym);
   $("sym-pair").innerHTML = stock
-    ? `${fmt.esc(base)} · ${fmt.esc(info?.exchange || "US market")}${s && s.marketOpen != null ? ` <span class="mkt ${s.marketOpen ? "open" : "closed"}">${s.marketOpen ? "Market open" : "Market closed"}</span>` : ""}`
+    ? `${fmt.esc(base)} · ${fmt.esc(info?.exchange || "US market")}${s && s.marketOpen != null ? ` <span class="mkt ${s.marketOpen ? "open" : "closed"}">${s.marketOpen ? "Market open" : "Market closed"}</span>` : ""}${rankPill(sym)}`
     : fmt.esc(info ? `${info.base}/${info.quote}` : sym);
   const last = s?.last ?? lastCandle?.close;
   $("sym-price").textContent = (stock ? curPrefix(info?.currency) : "") + fmt.price(last);
@@ -894,7 +907,15 @@ async function boot() {
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
+  $("sym-pair").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-open-picks]")) return;
+    document.querySelector('#center-tabs button[data-tab="picks"]')?.click();
+    $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  // Stock Rank in the background (cached 6 h) so stock pages and the AI can show each stock's rank.
+  setTimeout(() => runPicks().then(paintHeader), 20_000);
   onMoneyChange(() => { refreshDecision(decisionCtx()); updateBuyNow(decisionCtx()); });
+  onFx(() => { refreshDecision(decisionCtx()); updateBuyNow(decisionCtx()); });
   initBuyNow();
   onJournalChange(() => refreshDecision(decisionCtx()));
   $("decision").addEventListener("click", (e) => {

@@ -10,6 +10,7 @@ import { settings, guard } from "./money.js";
 import { openTrades, tradeAdvice } from "./journal.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
+import { fxRate, money as fxMoney } from "./fx.js";
 import { currentBuys, topWatch } from "./opportunities.js";
 import { describeOdds, reliability } from "./forecast.js";
 import { upcomingHighImpact, loadCalendar } from "./calendar.js";
@@ -185,7 +186,7 @@ function html(c, checks) {
         ? `<strong>${fmt.esc(best.name)}</strong> just appeared, and on this ${stock ? "stock" : "coin"} it has ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after costs.`
         : `<strong>${fmt.esc(best.name)}</strong> just appeared. It has been only slightly profitable here (${Math.round(s.winRate * 100)}% of ${s.n} times), so it's not a strong signal. Use a smaller amount or skip it.`;
       if (head >= 3) headline += ` <span class="down">Careful: ${head} of ${all.length} outside checks are against it right now.</span>`;
-      if (stock && c.marketOpen === false) headline += ` <span class="muted">The market is closed: you can only place this after 9:30am New York time, so re-check then.</span>`;
+      if (stock && c.marketOpen === false) headline += ` <span class="muted">The market is closed: you can only place this when it opens${stockInfo(c.symbol).currency === "USD" ? " (9:30am New York time)" : ""}, so re-check then.</span>`;
       meter = confidenceMeter(s.winRate, s.winLo, s.winHi, s.breakeven, s.n);
       steps = buySteps(c, r, unit);
     } else {
@@ -299,17 +300,20 @@ function confidenceMeter(p, lo, hi, be, n) {
 function buySteps(c, r, unit) {
   const p = r.plan;
   if (!p) return "";
-  const foreign = isStock(c.symbol) && stockInfo(c.symbol).currency !== "USD";
-  const bal = foreign ? 0 : settings.balance;   // never mix a USD balance with other currencies
+  // Non-USD markets: convert the USD balance at the live rate (no sizing until the rate is loaded).
+  const cur = isStock(c.symbol) ? stockInfo(c.symbol).currency : "USD";
+  const rate = cur === "USD" ? 1 : fxRate(cur);
+  const bal = rate ? settings.balance * rate : 0;
+  const amt = (v, sign) => (cur === "USD" ? `${sign || ""}$${Math.abs(v).toFixed(2)}` : `${sign || ""}${fxMoney(Math.abs(v), cur, rate)}`);
   const sz = bal > 0 ? sizePosition({ balance: bal, riskPct: settings.riskPct, entry: p.entry, stop: p.stop, target: p.target, costPerSide: r.costPerSide, rules: c.rules }) : null;
   const sellBy = new Date(Date.now() + RULES.maxBars * (SEC[c.interval] || 900) * 1000)
     .toLocaleString([], { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
   const amount = sz?.ok
-    ? `<strong>${+sz.qty.toFixed(8)} ${fmt.esc(unit)}</strong> (about $${sz.spend.toFixed(2)})`
+    ? `<strong>${+sz.qty.toFixed(8)} ${fmt.esc(unit)}</strong> (about ${amt(sz.spend)})`
     : sz ? "a small amount (your balance is too small for Entryvex's sizing; see the trade card)" : "the amount shown on the trade card (enter your balance below to calculate it)";
   return `<ol class="d-steps">
     <li><strong>Buy</strong> ${amount} at about <strong>${fmt.price(sz?.entry ?? p.entry)}</strong>. Use a limit order.</li>
-    <li><strong>Right away, set your sell orders:</strong> take-profit at <strong class="up">${fmt.price(sz?.target ?? p.target)}</strong>${sz?.ok ? ` (+$${sz.winUsd.toFixed(2)})` : ""} and stop-loss at <strong class="down">${fmt.price(sz?.stop ?? p.stop)}</strong>${sz?.ok ? ` (−$${sz.lossUsd.toFixed(2)})` : ""}, as one OCO order.</li>
+    <li><strong>Right away, set your sell orders:</strong> take-profit at <strong class="up">${fmt.price(sz?.target ?? p.target)}</strong>${sz?.ok ? ` (${amt(sz.winUsd, "+")})` : ""} and stop-loss at <strong class="down">${fmt.price(sz?.stop ?? p.stop)}</strong>${sz?.ok ? ` (${amt(sz.lossUsd, "−")})` : ""}, as one OCO order.</li>
     <li><strong>If neither is hit by ${sellBy}</strong>, sell at the market price. That's the time limit the track record is based on.</li>
     <li>Click <strong>I took this trade</strong> on the trade card below. Entryvex will then tell you when to sell.</li>
   </ol>`;

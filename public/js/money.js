@@ -4,6 +4,20 @@ import { sizePosition, roundTick } from "./sizing.js";
 import { todayStats, onJournalChange } from "./journal.js";
 import { isStock, stockInfo } from "./market.js";
 import * as fmt from "./format.js";
+import { fxRate, loadFx, money as fxMoney } from "./fx.js";
+
+/**
+ * The account in a market's own currency: the USD balance converted at the live exchange rate.
+ * M(v, sign) formats an amount in that currency (with ≈ US dollars for non-USD markets).
+ */
+function account(symbol) {
+  const cur = isStock(symbol) ? stockInfo(symbol).currency : "USD";
+  const rate = cur === "USD" ? 1 : fxRate(cur);
+  if (!rate) loadFx(cur).then((r) => { if (r) rerender(); });
+  const M = (v, sign = "") => (cur === "USD" ? `${sign}$${Math.abs(v).toFixed(2)}` : `${sign}${fxMoney(Math.abs(v), cur, rate)}`);
+  return { cur, rate, foreign: cur !== "USD", bal: rate ? settings.balance * rate : 0, M };
+}
+const rerender = () => renderCalc();
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -92,8 +106,8 @@ function renderDay() {
 export function renderTradeCard(c) {
   const g = guard();
   // Never size a non-US-dollar market with a USD balance: show the levels only.
-  const foreign = isStock(c.symbol) && stockInfo(c.symbol).currency !== "USD";
-  const bal = foreign ? 0 : settings.balance;
+  // Non-USD markets: size with the USD balance converted at the live exchange rate.
+  const { bal, M } = account(c.symbol);
   const pct = (v) => (v * 100).toFixed(2) + "%";
 
   if (g.locked) {
@@ -123,17 +137,17 @@ export function renderTradeCard(c) {
   const stock = isStock(c.symbol);
   let warn = "";
   if (sz.reason === "too-small") warn = stock
-    ? `<div class="warn">One share ($${fmt.price(sz.entry)}) costs more than this trade's size allows. Increase your balance or max loss %, or pick a cheaper stock.</div>`
+    ? `<div class="warn">One share (${M(sz.entry)}) costs more than this trade's size allows. Increase your balance or max loss %, or pick a cheaper stock.</div>`
     : `<div class="warn">This trade would be smaller than Binance.US's minimum order (${c.quote} ${fmt.price(sz.minSpend)}). Increase your balance or risk %.</div>`;
   else if (sz.reason === "costs-eat-target") warn = `<div class="warn">Fees and spread are bigger than the profit target. This trade can't make money. Skip it.</div>`;
-  else if (sz.capped) warn = `<div class="note">Capped at 25% of your balance so one position can't dominate your account (the stop is close, so risking the full ${settings.riskPct}% would need more). Actual risk is $${sz.lossUsd.toFixed(2)}.</div>`;
+  else if (sz.capped) warn = `<div class="note">Capped at 25% of your balance so one position can't dominate your account (the stop is close, so risking the full ${settings.riskPct}% would need more). Actual risk is ${M(sz.lossUsd)}.</div>`;
 
   const ocoStopLimit = roundTick(sz.stop * 0.998, c.rules.tickSize);
   const q = stock ? `${trimQty(sz.qty)} share${sz.qty === 1 ? "" : "s"} of ${fmt.esc(c.base)}` : `${trimQty(sz.qty)} ${fmt.esc(c.base)}`;
   const steps = stock ? `<details class="howto"><summary>How to place this at your broker (Schwab, Fidelity, Robinhood…)</summary>
       <ol>
         <li>Open your broker's app or website → <strong>Trade → Stocks &amp; ETFs</strong> → symbol <strong>${fmt.esc(c.base)}</strong>. US stock trades have $0 commission at most big brokers.</li>
-        <li><strong>Buy</strong> ${copyable(trimQty(sz.qty))} shares as a <strong>limit order</strong> at ${copyable(plain(sz.entry))}, time-in-force <strong>Day</strong>. Only during market hours (9:30am–4pm New York time).</li>
+        <li><strong>Buy</strong> ${copyable(trimQty(sz.qty))} shares as a <strong>limit order</strong> at ${copyable(plain(sz.entry))}, time-in-force <strong>Day</strong>. ${account(c.symbol).foreign ? "Only while that exchange is open (local market hours)." : "Only during market hours (9:30am–4pm New York time)."}</li>
         <li>Once it fills, protect it with a <strong>One-Cancels-Other (OCO)</strong> sell for the same ${trimQty(sz.qty)} shares: a <strong>limit sell</strong> at ${copyable(plain(sz.target))} (take-profit) and a <strong>stop sell</strong> at ${copyable(plain(sz.stop))} (stop-loss). Schwab lists this under conditional orders; other brokers call it OCO or a bracket order. If your broker doesn't offer it, at least place the stop sell.</li>
         <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
       </ol>
@@ -143,11 +157,11 @@ export function renderTradeCard(c) {
   return `<div class="card">
     <div class="card-title">Trade card · ${fmt.esc(c.setup.name)}</div>
     <div class="plan-grid">
-      <div class="hl"><span>Buy</span><strong class="mono">${q}</strong><small class="muted">≈ $${sz.spend.toFixed(2)} · ${(sz.pctOfBalance * 100).toFixed(0)}% of balance</small></div>
-      <div><span>If target hits</span><strong class="mono up">+$${sz.winUsd.toFixed(2)}</strong><small class="muted">after fees &amp; spread</small></div>
-      <div><span>If stop hits</span><strong class="mono down">−$${sz.lossUsd.toFixed(2)}</strong><small class="muted">${(sz.lossUsd / bal * 100).toFixed(2)}% of balance</small></div>
+      <div class="hl"><span>Buy</span><strong class="mono">${q}</strong><small class="muted">≈ ${M(sz.spend)} · ${(sz.pctOfBalance * 100).toFixed(0)}% of balance</small></div>
+      <div><span>If target hits</span><strong class="mono up">${M(sz.winUsd, "+")}</strong><small class="muted">after fees &amp; spread</small></div>
+      <div><span>If stop hits</span><strong class="mono down">${M(sz.lossUsd, "−")}</strong><small class="muted">${(sz.lossUsd / bal * 100).toFixed(2)}% of balance</small></div>
       ${levels}
-      <div><span>Average per trade (measured)</span><strong class="mono ${evUsd >= 0 ? "up" : "down"}">${evUsd >= 0 ? "+" : "−"}$${Math.abs(evUsd).toFixed(2)}</strong><small class="muted">from ${s.n} past trades</small></div>
+      <div><span>Average per trade (measured)</span><strong class="mono ${evUsd >= 0 ? "up" : "down"}">${M(evUsd, evUsd >= 0 ? "+" : "−")}</strong><small class="muted">from ${s.n} past trades</small></div>
       <div><span>Reward : risk</span><strong class="mono">${sz.rr.toFixed(2)} : 1</strong><small class="muted">needs ${Math.round(sz.breakevenWin * 100)}% wins to break even</small></div>
       <div><span>Usually resolves in</span><strong class="mono">${c.minutesToResolve ? humanMinutes(c.minutesToResolve) : "—"}</strong><small class="muted">exit at market after ${c.maxBarsText}</small></div>
     </div>
@@ -208,8 +222,9 @@ function renderCalc() {
   const out = $("c-out");
   if (!out || !ctx) return;
   $("c-pair").textContent = `${ctx.base}/${ctx.quote}`;
-  const bal = settings.balance;
-  if (!(bal > 0)) { out.innerHTML = `<p class="prompt">Enter your trading balance above to size a trade.</p>`; return; }
+  const { bal, M, rate } = account(ctx.symbol);
+  if (!(settings.balance > 0)) { out.innerHTML = `<p class="prompt">Enter your trading balance above to size a trade.</p>`; return; }
+  if (!rate) { out.innerHTML = `<p class="prompt">Loading the exchange rate to convert your balance…</p>`; return; }
   const sz = sizePosition({
     balance: bal, riskPct: settings.riskPct,
     entry: parseFloat($("c-entry").value), stop: parseFloat($("c-stop").value), target: parseFloat($("c-target").value),
@@ -219,16 +234,16 @@ function renderCalc() {
   if (msgs[sz.reason]) { out.innerHTML = `<p class="prompt">${msgs[sz.reason]}</p>`; return; }
   out.innerHTML = `
     <div class="plan-grid">
-      <div class="hl"><span>Buy</span><strong class="mono">${trimQty(sz.qty)} ${fmt.esc(ctx.base)}</strong><small class="muted">≈ $${sz.spend.toFixed(2)}</small></div>
-      <div><span>If target hits</span><strong class="mono ${sz.winUsd >= 0 ? "up" : "down"}">${sz.winUsd >= 0 ? "+" : "−"}$${Math.abs(sz.winUsd).toFixed(2)}</strong></div>
-      <div><span>If stop hits</span><strong class="mono down">−$${sz.lossUsd.toFixed(2)}</strong></div>
+      <div class="hl"><span>Buy</span><strong class="mono">${trimQty(sz.qty)} ${fmt.esc(ctx.base)}</strong><small class="muted">≈ ${M(sz.spend)}</small></div>
+      <div><span>If target hits</span><strong class="mono ${sz.winUsd >= 0 ? "up" : "down"}">${M(sz.winUsd, sz.winUsd >= 0 ? "+" : "−")}</strong></div>
+      <div><span>If stop hits</span><strong class="mono down">${M(sz.lossUsd, "−")}</strong></div>
       <div><span>Reward : risk</span><strong class="mono">${sz.rr.toFixed(2)} : 1</strong></div>
       <div><span>Break-even win rate</span><strong class="mono">${Math.round(sz.breakevenWin * 100)}%</strong></div>
       <div><span>Costs (round trip)</span><strong class="mono">${(ctx.costPerSide * 200).toFixed(3)}%</strong></div>
     </div>
     ${sz.reason === "too-small" ? `<div class="warn">Below Binance.US's minimum order (${fmt.esc(ctx.quote)} ${fmt.price(sz.minSpend)}).</div>` : ""}
     ${sz.reason === "costs-eat-target" ? `<div class="warn">Fees and spread are bigger than this target. It can't make money.</div>` : ""}
-    ${sz.capped ? `<div class="note">Capped at 25% of your balance (one-position limit); actual risk is $${sz.lossUsd.toFixed(2)}.</div>` : ""}
+    ${sz.capped ? `<div class="note">Capped at 25% of your balance (one-position limit); actual risk is ${M(sz.lossUsd)}.</div>` : ""}
     <p class="small muted">This calculator only does the math. Unlike the scanner, it has no measured track record behind it. You'd need to win at least ${Math.round(sz.breakevenWin * 100)}% of trades like this just to break even.</p>
     ${sz.ok ? `<div class="take-row">${takeButton({ symbol: ctx.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: "My own plan", source: "calculator" })}
       <span class="muted small">Adds it to My trades so Entryvex tracks the result.</span></div>` : ""}`;
