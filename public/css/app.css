@@ -867,3 +867,11 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 @media (min-width: 900px) { .chart { height: clamp(380px, 58vh, 620px); } }
 #setups tr.row-more { display: none; }
 #setups tfoot td { padding: 8px 10px; text-align: center; }
+
+/* Forecast: shaded zone + one-line caption on the chart */
+.fc-zone { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; }
+.fc-caption { position: absolute; left: 10px; top: 8px; right: 90px; z-index: 3; pointer-events: none; font-size: 12px; line-height: 1.45;
+  color: var(--muted); background: rgba(13,17,23,.72); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; width: fit-content; max-width: 560px; }
+.fc-caption strong { color: var(--text); }
+.fc-zone-swatch { display: inline-block; width: 18px; height: 9px; border-radius: 3px; vertical-align: 0; background: rgba(122,162,255,0.35); border: 1px solid rgba(122,162,255,0.6); }
+@media (max-width: 640px) { .fc-caption { font-size: 11px; right: 10px; } }

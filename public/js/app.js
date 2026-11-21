@@ -112,9 +112,73 @@ function tickDecision() {
 }
 function drawForecast() {
   const f = state.forecast;
-  if (!f || !state.showForecast || f.symbol !== state.selected) { fcLines.forEach((l) => l.setData([])); return; }
+  const cap = $("fc-caption");
+  if (!f || !state.showForecast || f.symbol !== state.selected) {
+    fcLines.forEach((l) => l.setData([]));
+    if (cap) cap.hidden = true;
+    drawForecastZone();
+    return;
+  }
   const start = { time: f.t0, value: f.live };
   fcLines.forEach((line, k) => line.setData([start, ...f.bands.map((b) => ({ time: b.time, value: b.q[4 - k] }))]));
+  if (cap) {
+    const last = f.bands.at(-1);
+    cap.hidden = false;
+    cap.innerHTML = `<strong>Forecast, next ~${horizonText(f)}:</strong> the price ended inside the <span class="fc-zone-swatch"></span> shaded zone
+      <strong>${Math.round(f.accuracy80 * 100)}%</strong> of the time in past tests. Most likely <strong>${fmt.price(last.q[2])}</strong>
+      · <span class="${f.pUp >= 0.5 ? "up" : "down"}">${Math.round(f.pUp * 100)}% chance higher</span>`;
+  }
+  drawForecastZone();
+}
+
+/*
+ * The forecast as a shaded zone instead of five dotted lines: the outer zone is where price ended up
+ * 8 in 10 times (80% range), the darker core is the more likely half (50% range), and one solid
+ * line is the most likely path. Drawn on a canvas over the chart, kept in step with zoom and scroll.
+ */
+let fcCanvas = null, fcRaf = 0, fcSig = "";
+function drawForecastZone() {
+  const box = $("chart");
+  if (!fcCanvas) {
+    fcCanvas = document.createElement("canvas");
+    fcCanvas.className = "fc-zone";
+    box.appendChild(fcCanvas);
+  }
+  const f = state.forecast;
+  const on = f && state.showForecast && f.symbol === state.selected;
+  const dpr = window.devicePixelRatio || 1;
+  const W = box.clientWidth, H = box.clientHeight;
+  const ts = chart.timeScale();
+  const pts = on ? [{ time: f.t0, q: [f.live, f.live, f.live, f.live, f.live] }, ...f.bands] : [];
+  const xy = pts.map((b) => ({ x: ts.timeToCoordinate(b.time), y: b.q.map((v) => candles.priceToCoordinate(v)) }))
+    .filter((p) => p.x != null && p.y.every((v) => v != null));
+  const sig = `${W}x${H}|${xy.map((p) => `${Math.round(p.x)},${Math.round(p.y[0])},${Math.round(p.y[4])}`).join(";")}`;
+  if (sig === fcSig) return;
+  fcSig = sig;
+  if (fcCanvas.width !== W * dpr || fcCanvas.height !== H * dpr) { fcCanvas.width = W * dpr; fcCanvas.height = H * dpr; fcCanvas.style.width = W + "px"; fcCanvas.style.height = H + "px"; }
+  const g = fcCanvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  if (xy.length < 2) return;
+  const band = (lo, hi, color) => {
+    g.beginPath();
+    xy.forEach((p, i) => (i ? g.lineTo(p.x, p.y[hi]) : g.moveTo(p.x, p.y[hi])));
+    for (let i = xy.length - 1; i >= 0; i--) g.lineTo(xy[i].x, xy[i].y[lo]);
+    g.closePath();
+    g.fillStyle = color;
+    g.fill();
+  };
+  band(0, 4, "rgba(122,162,255,0.10)");   // 80% zone
+  band(1, 3, "rgba(122,162,255,0.16)");   // 50% core
+}
+/** Keep the zone glued to the chart while zooming, scrolling or resizing (cheap: skips when nothing moved). */
+function forecastZoneLoop() {
+  cancelAnimationFrame(fcRaf);
+  const step = () => {
+    if (document.visibilityState === "visible" && state.showForecast) drawForecastZone();
+    fcRaf = requestAnimationFrame(step);
+  };
+  fcRaf = requestAnimationFrame(step);
 }
 function horizonText(f) {
   const mins = (f.H * f.intervalSec) / 60;
@@ -130,7 +194,7 @@ function renderForecastBox() {
   box.innerHTML = `
     <div class="fc-main">
       <div class="fc-title">Forecast · next ${f.H} candles (~${horizonText(f)})</div>
-      <div class="fc-range"><span class="muted">80% likely between</span>
+      <div class="fc-range"><span class="muted">8 in 10 times between</span>
         <strong class="mono down">${fmt.price(f.range80[0])}</strong><span class="muted small">(${chg(f.range80[0])})</span>
         <span class="muted">and</span>
         <strong class="mono up">${fmt.price(f.range80[1])}</strong><span class="muted small">(${chg(f.range80[1])})</span>
@@ -564,15 +628,21 @@ function initChart() {
     20: chart.addLineSeries({ ...lineOpts, color: "rgba(224,179,65,0.85)", title: "" }),
     50: chart.addLineSeries({ ...lineOpts, color: "rgba(122,162,255,0.85)", title: "" }),
   };
-  // Forecast range lines (80% outer, 50% inner, middle)
+  // Forecast: the shaded zone is drawn by drawForecastZone(); these series give it its edges,
+  // the solid "most likely" line and the plain-English labels on the price axis.
   const fc = { lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false };
   fcLines = [
-    chart.addLineSeries({ ...fc, color: "rgba(46,229,157,0.45)", lineStyle: 2, title: "80% high" }),
-    chart.addLineSeries({ ...fc, color: "rgba(46,229,157,0.8)", lineStyle: 2, title: "", lastValueVisible: false }),
-    chart.addLineSeries({ ...fc, color: "rgba(230,234,240,0.7)", lineStyle: 1, title: "middle" }),
-    chart.addLineSeries({ ...fc, color: "rgba(240,80,110,0.8)", lineStyle: 2, title: "", lastValueVisible: false }),
-    chart.addLineSeries({ ...fc, color: "rgba(240,80,110,0.45)", lineStyle: 2, title: "80% low" }),
+    chart.addLineSeries({ ...fc, color: "rgba(46,229,157,0.55)", lineStyle: 0, title: "Likely high" }),
+    chart.addLineSeries({ ...fc, color: "rgba(0,0,0,0)", lineVisible: false, title: "", lastValueVisible: false }),
+    chart.addLineSeries({ ...fc, color: "rgba(230,234,240,0.9)", lineWidth: 2, lineStyle: 0, title: "Most likely" }),
+    chart.addLineSeries({ ...fc, color: "rgba(0,0,0,0)", lineVisible: false, title: "", lastValueVisible: false }),
+    chart.addLineSeries({ ...fc, color: "rgba(240,80,110,0.55)", lineStyle: 0, title: "Likely low" }),
   ];
+  // Caption above the chart explaining the forecast in one line.
+  const cap = document.createElement("div");
+  cap.id = "fc-caption"; cap.className = "fc-caption"; cap.hidden = true;
+  el.appendChild(cap);
+  forecastZoneLoop();
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
   chart.subscribeCrosshairMove((p) => {
