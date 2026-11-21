@@ -1,6 +1,7 @@
 // Binance.US public market data, read straight from the browser.
 // Read-only: no API keys, no account access, no trading.
 
+import { loadCandles, saveCandles, mergeCandles } from "./candlecache.js";
 const REST = "https://api.binance.us/api/v3";
 const WS = "wss://stream.binance.us:9443/stream?streams=";
 
@@ -64,10 +65,38 @@ export async function getKlines(symbol, interval, limit = 500) {
  * The last candle returned may still be forming.
  */
 const historyCache = new Map();
+const IV_MS = { "1m": 60e3, "5m": 300e3, "15m": 900e3, "1h": 3600e3, "4h": 14400e3, "1d": 86400e3, "1w": 604800e3 };
 export async function getKlineHistory(symbol, interval, total = 3000) {
   const key = `${symbol}:${interval}:${total}`;
   const hit = historyCache.get(key);
   if (hit && Date.now() - hit.t < 300_000) return hit.v.slice();
+
+  // Saved from an earlier visit? Then only download the candles since the last saved one.
+  const dbKey = `bn:${symbol}:${interval}`;
+  const { candles: saved, all } = await loadCandles(dbKey);
+  const step = IV_MS[interval];
+  if ((saved.length >= total || (all && saved.length)) && step) {
+    const lastMs = saved.at(-1).time * 1000;
+    const missing = Math.ceil((Date.now() - lastMs) / step) + 1;
+    if (missing <= 3000) {
+      try {
+        let fresh = [], start = lastMs;
+        while (true) {
+          const raw = await getJSON(`/klines?symbol=${symbol}&interval=${interval}&limit=1000&startTime=${start}`);
+          if (!raw.length) break;
+          fresh = fresh.concat(raw.map(parseKlineArray));
+          if (raw.length < 1000) break;
+          start = raw.at(-1)[0] + 1;
+        }
+        const merged = mergeCandles(saved, fresh);
+        const out = merged.slice(-total);
+        historyCache.set(key, { t: Date.now(), v: out });
+        saveCandles(dbKey, merged, 3000, all);
+        return out.slice();
+      } catch { /* fall through to a full download */ }
+    }
+  }
+
   let out = [];
   let endTime = null;
   while (out.length < total) {
@@ -79,6 +108,7 @@ export async function getKlineHistory(symbol, interval, total = 3000) {
     if (raw.length < limit) break;
   }
   historyCache.set(key, { t: Date.now(), v: out });
+  if (total >= 500) saveCandles(dbKey, out, 3000, out.length < total);
   return out.slice();
 }
 

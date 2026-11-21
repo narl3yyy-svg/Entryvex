@@ -2,6 +2,7 @@
 // Stock symbols are written "S:AAPL"; everything else is a Binance.US pair like "BTCUSDT".
 // Other modules call these functions and never need to know which market a symbol is from.
 import * as bn from "./binance.js";
+import { loadCandles, saveCandles, mergeCandles } from "./candlecache.js";
 
 export const isStock = (sym) => typeof sym === "string" && sym.startsWith("S:");
 export const tickerOf = (sym) => (isStock(sym) ? sym.slice(2) : sym);
@@ -86,8 +87,24 @@ export async function getKlineHistory(sym, interval, total = 3000) {
   const key = `${sym}:${interval}`;
   const hit = histCache.get(key);
   if (hit && Date.now() - hit.t < 120_000) return hit.v.slice(-total);
+  // Saved from an earlier visit and still overlapping the short "recent" range? Then download only that.
+  const dbKey = `yh:${sym}:${interval}`;
+  const { candles: saved } = await loadCandles(dbKey);
+  const recentDays = { "1m": 1, "5m": 5, "15m": 5, "1h": 28, "4h": 85, "1d": 85, "1w": 360 }[interval];
+  if (saved.length && recentDays && Date.now() / 1000 - saved.at(-1).time < (recentDays - 1) * 86400) {
+    try {
+      const { candles: fresh } = await stockChart(sym, interval, "recent");
+      if (fresh.length && fresh[0].time <= saved.at(-1).time) {
+        const merged = mergeCandles(saved, fresh).slice(-6000);
+        histCache.set(key, { t: Date.now(), v: merged });
+        saveCandles(dbKey, merged, 6000);
+        return merged.slice(-total);
+      }
+    } catch { /* fall through to a full download */ }
+  }
   const { candles } = await stockChart(sym, interval, "range");
   histCache.set(key, { t: Date.now(), v: candles });  // cache everything; callers slice what they need
+  saveCandles(dbKey, candles, 6000);
   return candles.slice(-total);
 }
 
