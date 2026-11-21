@@ -47,6 +47,18 @@ export function topWatch(n = 3) {
   return out.sort((a, b) => b.s.stats.ev - a.s.stats.ev).slice(0, n);
 }
 
+/** Markets/setups with a track record, for the server's closed-app BUY checks. */
+export function setupMarkets(min = "go") {
+  const out = [];
+  for (const { sym, iv, r } of rows) {
+    if (r.liquidity && !r.liquidity.ok) continue;
+    const good = r.setups.filter((s) => s.verdict.level === "edge" || (min === "caution" && s.verdict.level === "weak"));
+    if (good.length) out.push({ symbol: sym, base: baseOf(sym), interval: iv, setupIds: good.map((s) => s.id),
+      labels: Object.fromEntries(good.map((s) => [s.id, s.verdict.level === "edge" ? "BUY" : "SMALL BUY"])) });
+  }
+  return out.slice(0, 25);
+}
+
 function isBuy(r) {
   if (r.liquidity && !r.liquidity.ok) return false;
   return r.overall.level === "go" || (r.overall.level === "caution" && r.best?.verdict.level === "weak");
@@ -112,7 +124,7 @@ function render() {
       and refreshes every 15 minutes while it's open. Click any row to open it.</p>
     <div class="opps-status">
       <span>${running ? `<span class="typing"><i></i><i></i><i></i></span> ${fmt.esc(progress)}` : lastRun
-        ? `Last checked ${new Date(lastRun).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${markets} markets × ${INTERVALS.length} candle sizes.`
+        ? `Last checked ${new Date(lastRun).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}: ${markets} markets × ${INTERVALS.length} candle sizes.`
         : "Starting the first check…"}</span>
       <button class="ghost-btn" id="opps-refresh" ${running ? "disabled" : ""}>Check now</button>
     </div>

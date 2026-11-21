@@ -159,7 +159,7 @@ function render() {
   root.innerHTML = `
     <div class="movers-head">
       <div class="seg" role="tablist"><button data-mode="stocks" class="${mode === "stocks" ? "on" : ""}">US stocks</button><button data-mode="crypto" class="${mode === "crypto" ? "on" : ""}">Crypto (Binance.US)</button></div>
-      <span class="muted small">${d ? `<span class="live-dot"></span> Live · updated ${new Date(d.updated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })} · refreshes every minute` : `<span class="typing"><i></i><i></i><i></i></span> Loading…`}</span>
+      <span class="muted small">${d ? `<span class="live-dot"></span> Live · updated ${new Date(d.updated).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit", second: "2-digit" })} · refreshes every minute` : `<span class="typing"><i></i><i></i><i></i></span> Loading…`}</span>
     </div>
     ${d ? `
       <h3>Most traded ${mode === "stocks" ? "today" : "in the last 24 hours"}</h3>

@@ -5,14 +5,15 @@ import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
 import { initMoney } from "./money.js";
 import { getProfile, plainEnglish, moodOf, moodHtml, getStockProfile } from "./research.js";
-import { initAlerts, onTicker, openPriceAlert, pushAlert } from "./alerts.js";
+import { initAlerts, onTicker, openPriceAlert, pushAlert, getAlertPrefs } from "./alerts.js";
+import { initPush, scheduleSync } from "./push.js";
 import { ema } from "./indicators.js";
 import { forecast, describeOdds, reliability } from "./forecast.js";
-import { initJournal, onTicker as journalTicker } from "./journal.js";
+import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js";
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
-import { initOpportunities, run as runOpportunities } from "./opportunities.js";
+import { initOpportunities, run as runOpportunities, setupMarkets } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
 import { onMoneyChange } from "./money.js";
@@ -176,7 +177,7 @@ function setStatus(which, s) {
 }
 function tickClock() {
   const d = new Date();
-  $("clock").textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " local";
+  $("clock").textContent = d.toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit", second: "2-digit" }) + " local";
 }
 
 /* ---------- Watchlist ---------- */
@@ -281,6 +282,7 @@ function addToWatchlist(sym) {
   if (!state.watchlist.includes(sym)) {
     state.watchlist.push(sym);
     store.set("watchlist", state.watchlist);
+    scheduleSync();
     refreshTickers();
   }
   selectSymbol(sym);
@@ -424,13 +426,13 @@ function localTick(time, type) {
     case 0: return String(d.getFullYear());                                        // year
     case 1: return d.toLocaleDateString([], { month: "short" });                  // month
     case 2: return d.toLocaleDateString([], { month: "short", day: "numeric" });  // day
-    case 4: return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    default: return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    case 4: return d.toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit", second: "2-digit" });
+    default: return d.toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
   }
 }
 function localCrosshairTime(time) {
   const d = toDate(time);
-  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
 }
 function initChart() {
   const el = $("chart");
@@ -593,7 +595,7 @@ async function loadNews() {
     const data = await fetchNews(coin);
     if (token !== newsToken) return;
     const meta =
-      `${data.items.length} headlines · updated ${new Date(data.updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
+      `${data.items.length} headlines · updated ${new Date(data.updated).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` +
       (data.failedSources?.length ? ` · unavailable: ${data.failedSources.join(", ")}` : "");
     $("news-meta").innerHTML = (coin ? moodHtml(moodOf(data.items)) : "") + `<div>${fmt.esc(meta)}</div>`;
     list.innerHTML = data.items.length
@@ -636,7 +638,7 @@ async function loadReport(base, token) {
       }
       box.innerHTML = `<h3>What's happening <span class="ai-badge">AI</span></h3>
         <ul class="ai-list">${s.bullets.map((b) => `<li>${fmt.esc(b)}</li>`).join("")}</ul>
-        <div class="muted tiny">Written by AI from ${s.count} recent headlines${s.generated ? ` at ${new Date(s.generated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}. It can be wrong. Check the sources. Not advice.</div>`;
+        <div class="muted tiny">Written by AI from ${s.count} recent headlines${s.generated ? ` at ${new Date(s.generated).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` : ""}. It can be wrong. Check the sources. Not advice.</div>`;
     })
     .catch(() => { if (token === newsToken) $("r-ai").innerHTML = `<h3>What's happening</h3><div class="muted small">AI summary unavailable right now.</div>`; });
 
@@ -831,8 +833,19 @@ async function boot() {
       if (sym === state.selected) loadChart(); else pick(sym);
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    onUpdate: () => refreshDecision(decisionCtx()),
+    onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); },
   });
+  initPush({
+    buildPrefs: () => {
+      const a = getAlertPrefs();
+      return {
+        priceAlerts: a.priceAlerts, move: a.move,
+        trades: openTrades().map((t) => ({ id: t.id, symbol: t.symbol, base: state.bySymbol.get(t.symbol)?.base, stop: t.stop, target: t.target, sellBy: t.sellBy })),
+        setups: a.setupOn ? setupMarkets(a.setupMin) : [],
+      };
+    },
+  });
+  onJournalChange(() => scheduleSync());
   initAI({ getSettings: () => ({ balance: +store.get("balance", 0), riskPct: +store.get("riskPct", 1), feePct: +store.get("feePct", 0.02) }) });
 
   document.querySelectorAll("#intervals button").forEach((b) => {
@@ -898,6 +911,21 @@ async function boot() {
     store.set("watchlist", state.watchlist);
   } catch (e) {
     console.warn("symbols failed", e);
+  }
+  // Opened from a notification: /?s=SYMBOL&i=INTERVAL
+  const qp = new URLSearchParams(location.search);
+  const linkSym = qp.get("s"), linkIv = qp.get("i");
+  if (linkSym && /^(S:[A-Z0-9.\-]{1,10}|[A-Z0-9]{3,20})$/.test(linkSym)) {
+    if (isStock(linkSym)) { registerStock(linkSym, {}); state.bySymbol.set(linkSym, stockInfo(linkSym)); }
+    if (state.bySymbol.has(linkSym)) {
+      if (!state.watchlist.includes(linkSym)) { state.watchlist.push(linkSym); store.set("watchlist", state.watchlist); }
+      state.selected = linkSym;
+    }
+    if (linkIv && ["1m", "5m", "15m", "1h", "4h", "1d"].includes(linkIv)) {
+      state.interval = linkIv; store.set("interval", linkIv);
+      document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x.dataset.i === linkIv));
+    }
+    history.replaceState(null, "", "/");
   }
   if (!state.bySymbol.has(state.selected) && state.watchlist.length) state.selected = state.watchlist[0];
 

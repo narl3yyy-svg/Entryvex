@@ -129,7 +129,7 @@ function render() {
     <h3>Recent signals ${signals.length ? `<button class="link-btn" id="sig-clear">Clear</button>` : ""}</h3>
     ${signals.length ? `<div class="table-wrap"><table class="setups"><thead><tr><th>When</th><th>Coin</th><th>Setup</th><th>Verdict</th><th class="num">Result</th></tr></thead><tbody>
       ${signals.slice().reverse().slice(0, 60).map((s) => `<tr>
-        <td class="muted">${new Date(s.signalTime * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} <span class="small">${s.interval}</span></td>
+        <td class="muted">${new Date(s.signalTime * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })} <span class="small">${s.interval}</span></td>
         <td><button class="link-btn" data-pick="${s.symbol}">${fmt.esc(baseOf(s.symbol))}</button></td>
         <td>${fmt.esc(s.setup)}</td>
         <td><span class="pill pill-${s.verdict}">${fmt.esc(s.verdictLabel)}</span></td>

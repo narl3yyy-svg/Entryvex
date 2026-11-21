@@ -1,7 +1,7 @@
 // Entryvex service worker: makes the app installable and opens fast.
 // App files: network first (always the newest version), cached copy only if offline.
 // Market data and /api/* are never cached here, so prices are always live.
-const CACHE = "entryvex-shell-v1";
+const CACHE = "entryvex-shell-v2";
 const SHELL = ["/", "/css/app.css", "/vendor/lightweight-charts-4.2.0.js", "/favicon.svg", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -12,6 +12,32 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
   );
+});
+
+// Alerts while Entryvex is closed: show the notification sent by the server.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "Entryvex", body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Entryvex", {
+    body: d.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: d.url || "entryvex",
+    data: { url: d.url || "/" },
+  }));
+});
+
+// Tapping a notification opens Entryvex on that coin/stock (reusing an open tab if there is one).
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "/", self.location.origin).href;
+  e.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of tabs) {
+      if (new URL(c.url).origin === self.location.origin) { await c.navigate(url).catch(() => {}); return c.focus(); }
+    }
+    return self.clients.openWindow(url);
+  })());
 });
 
 self.addEventListener("fetch", (e) => {

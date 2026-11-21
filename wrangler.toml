@@ -15,3 +15,12 @@ binding = "ASSETS"
 # Cloudflare Workers AI (free daily allowance) for plain-English news summaries.
 [ai]
 binding = "AI"
+
+# Storage for closed-app alerts (anonymous push addresses + alert settings).
+# Cloudflare creates this automatically on deploy.
+[[kv_namespaces]]
+binding = "PUSH"
+
+# Check closed-app alerts every 5 minutes.
+[triggers]
+crons = ["*/5 * * * *"]

@@ -6,6 +6,7 @@ import { analyze } from "./engine.js";
 import { getKlineHistory, getKlines, getBookTicker, isStock } from "./market.js";
 import { coinName } from "./coins.js";
 import { logFromAnalysis } from "./signals.js";
+import { pushSupported, pushEnabled, enablePush, disablePush, testPush, scheduleSync } from "./push.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -23,8 +24,17 @@ const cfg = Object.assign({
 }, store.get("alertCfg", {}));
 let priceAlerts = store.get("priceAlerts", []);  // {id, symbol, dir:"above"|"below", price, created, done}
 let history = store.get("alertHistory", []);     // {t, title, body, symbol}
-const saveCfg = () => store.set("alertCfg", cfg);
-const savePrice = () => store.set("priceAlerts", priceAlerts);
+const saveCfg = () => { store.set("alertCfg", cfg); scheduleSync(); };
+const savePrice = () => { store.set("priceAlerts", priceAlerts); scheduleSync(); };
+
+/** Settings the server needs for closed-app alerts. */
+export function getAlertPrefs() {
+  return {
+    priceAlerts: priceAlerts.filter((a) => !a.done).map((a) => ({ id: a.id, symbol: a.symbol, dir: a.dir, price: a.price, base: baseOf(a.symbol) })),
+    move: { on: cfg.move.on, pct: cfg.move.pct, symbols: hooks.getWatchlist() },
+    setupOn: cfg.setup.on, setupMin: cfg.setup.min,
+  };
+}
 
 let hooks = { getWatchlist: () => [], getInfo: () => null, onPick: () => {}, onBadges: () => {}, getSelected: () => null, getPrice: () => null };
 
@@ -159,6 +169,7 @@ async function loadCandles(sym, interval) {
 
 let scanning = false;
 let lastScanText = "";
+let pushMsg = "";
 export async function runScan() {
   if (scanning || !cfg.setup.on) return;
   scanning = true;
@@ -195,7 +206,7 @@ export async function runScan() {
   hooks.onBadges(badges);
   const go = Object.values(next).filter((b) => b.level === "go").length;
   const caution = Object.entries(next).filter(([, b]) => b.level === "caution" && b.label === "CAUTION").length;
-  const when = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const when = new Date().toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
   lastScanText = `Last checked ${when}: ${syms.length} markets on ${interval}. ` + (go || caution
     ? `${go} GO (proven edge)${caution ? `, ${caution} CAUTION (weak edge)${cfg.setup.min === "go" ? ": you're only alerted on GO, so these didn't alert you. Switch \"Alert on\" to include CAUTION if you want them" : ""}` : ""}.`
     : "Nothing worth trading right now.");
@@ -214,6 +225,9 @@ export function initAlerts(h) {
   const d = $("alerts-drawer");
   d.addEventListener("change", (e) => {
     const t = e.target;
+    // Price-alert form fields must NOT redraw the panel: redrawing while you click "Add"
+    // replaced the button under your mouse, so the click (and the typed price) was lost.
+    if (t.id && t.id.startsWith("al-p-")) return;
     if (t.id === "al-sound") cfg.sound = t.checked;
     if (t.id === "al-setup-on") cfg.setup.on = t.checked;
     if (t.id === "al-setup-int") cfg.setup.interval = t.value;
@@ -237,6 +251,13 @@ export function initAlerts(h) {
       }
       saveCfg(); renderDrawer();
     }
+    if (t.id === "al-push-on") {
+      t.disabled = true; pushMsg = "Turning on…"; renderDrawer();
+      try { const r = await enablePush(); pushMsg = r.msg; } catch (err) { pushMsg = "Couldn't turn on closed-app alerts in this browser."; }
+      renderDrawer();
+    }
+    if (t.id === "al-push-off") { await disablePush(); pushMsg = "Off. This device won't get alerts while Entryvex is closed."; renderDrawer(); }
+    if (t.id === "al-push-test") { pushMsg = (await testPush().catch(() => false)) ? "Test sent. It should appear within a few seconds." : "Couldn't send the test. Try turning it off and on again."; renderDrawer(); }
     if (t.id === "al-test") { notify({ kind: "info", symbol: null, title: "Test alert", body: "This is what an Entryvex alert looks like." }); }
     if (t.dataset.del) { priceAlerts = priceAlerts.filter((a) => a.id !== t.dataset.del); savePrice(); renderDrawer(); }
     if (t.id === "al-clear-hist") { history = []; store.set("alertHistory", history); renderDrawer(); }
@@ -302,6 +323,17 @@ function renderDrawer() {
         <button class="ghost-btn" id="al-desktop" ${!notifSupported || denied ? "disabled" : ""}>${cfg.desktop ? "✓ Desktop notifications on" : "Turn on desktop notifications"}</button>
         <button class="link-btn" id="al-test">Send a test</button></div>
       ${denied ? `<p class="small warn-text">Notifications are blocked for this site in your browser settings.</p>` : ""}
+    </section>
+
+    <section>
+      <h3>Alerts when Entryvex is closed</h3>
+      ${pushSupported()
+        ? `<p class="muted small">Get your price, big-move, setup and SELL alerts as phone/computer notifications even when Entryvex isn't open. Checked every 5 minutes.</p>
+           <div class="al-row">${pushEnabled()
+             ? `<span class="pill pill-edge">On for this device</span><button class="ghost-btn" id="al-push-test">Send a test</button><button class="link-btn" id="al-push-off">Turn off</button>`
+             : `<button class="btn" id="al-push-on">Turn on closed-app alerts</button>`}</div>
+           <p class="muted tiny" id="al-push-msg">${pushMsg || "Stored on the server: only an anonymous notification address and these alert settings. No name, email or account."}</p>`
+        : `<p class="muted small">This browser can't receive alerts while closed. On iPhone/iPad: add Entryvex to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.</p>`}
     </section>
 
     <section>

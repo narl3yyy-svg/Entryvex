@@ -103,7 +103,7 @@ export function tradeAdvice(t, price) {
   const parts = [];
   if (t.target) parts.push(`sell for a profit at <strong>${fmt.price(t.target)}</strong>`);
   if (t.stop) parts.push(`sell to limit the loss at <strong>${fmt.price(t.stop)}</strong>`);
-  if (t.sellBy) parts.push(`otherwise sell by <strong>${new Date(t.sellBy).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</strong>`);
+  if (t.sellBy) parts.push(`otherwise sell by <strong>${new Date(t.sellBy).toLocaleString([], { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}</strong>`);
   return { action: "HOLD", level: "hold", why: parts.length ? `Keep holding. Plan: ${parts.join("; ")}.` : "No sell plan set. Add a stop-loss and take-profit below." };
 }
 function closeQuiet(t, exit, reason) { t.status = "closed"; t.exit = exit; t.closedAt = Date.now(); t.reason = reason; t.pnl = pnl(t, exit); }
@@ -214,7 +214,7 @@ function render() {
     <h3>History ${closed.length ? `<button class="link-btn" id="j-clear">Clear history</button>` : ""}</h3>
     ${closed.length ? `<div class="table-wrap"><table class="setups j-table"><thead><tr><th>Closed</th><th>Coin</th><th>From</th><th class="num">Buy → Sell</th><th class="num">Result</th><th>How</th><th></th></tr></thead><tbody>
       ${closed.slice(0, 100).map((t) => `<tr>
-        <td class="muted">${new Date(t.closedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+        <td class="muted">${new Date(t.closedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}</td>
         <td><button class="link-btn" data-act="pick" data-sym="${t.symbol}">${fmt.esc(baseOf(t.symbol))}</button></td>
         <td class="muted small">${t.setup ? fmt.esc(t.setup) : "manual"}</td>
         <td class="num mono">${fmt.price(t.entry)} → ${fmt.price(t.exit)}</td>

@@ -257,7 +257,7 @@ function buySteps(c, r, unit) {
   const bal = settings.balance;
   const sz = bal > 0 ? sizePosition({ balance: bal, riskPct: settings.riskPct, entry: p.entry, stop: p.stop, target: p.target, costPerSide: r.costPerSide, rules: c.rules }) : null;
   const sellBy = new Date(Date.now() + RULES.maxBars * (SEC[c.interval] || 900) * 1000)
-    .toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    .toLocaleString([], { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
   const amount = sz?.ok
     ? `<strong>${+sz.qty.toFixed(8)} ${fmt.esc(unit)}</strong> (about $${sz.spend.toFixed(2)})`
     : sz ? "a small amount (your balance is too small for Entryvex's sizing; see the trade card)" : "the amount shown on the trade card (enter your balance below to calculate it)";

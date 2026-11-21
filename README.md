@@ -1,116 +1,110 @@
+<div align="center">
+
+<img src="public/icons/icon-192.png" alt="Entryvex" width="96" height="96" />
+
 # Entryvex™
 
-### ▶ Open the app: **[entryvex.trade](https://entryvex.trade)**
+**Live market research for crypto and US stocks: know when a trade is worth taking, and when it isn't.**
 
-Entryvex is a live trading research dashboard for **crypto and US stocks/ETFs**. It watches the market for you, tells you **when a trade is (and isn't) worth taking**, backs every number with **measured history instead of guesses**, sizes the trade to your money, and tracks your results. It works in any browser, on desktop or phone. Nothing to install.
+### [**▶ Open Entryvex at entryvex.trade**](https://entryvex.trade)
 
-> Entryvex never places trades and never connects to your exchange account. It shows you the data and a plan; **you** decide and place the order yourself (for example on Binance.US). It is a research tool, not financial advice. Trading can lose money.
+[![Live site](https://img.shields.io/badge/live-entryvex.trade-2ee59d?style=for-the-badge)](https://entryvex.trade)
+![Free](https://img.shields.io/badge/price-free-1f2937?style=for-the-badge)
+![No sign-up](https://img.shields.io/badge/no%20sign--up-no%20tracking-1f2937?style=for-the-badge)
 
----
-
-## Quick start
-
-1. Go to **[entryvex.trade](https://entryvex.trade)**.
-2. Pick a coin or stock from the **watchlist** on the left, or search for one (e.g. *SOL*, *Apple*, *SPY*).
-3. Under the chart, enter your **trading balance** and how much you're willing to lose per trade (1% is a good start).
-4. Look at the **Scanner** tab. It tells you GO, CAUTION, NO TRADE or WAIT.
-5. Turn on **setup alerts** with the 🔔 bell so Entryvex tells you when a good setup appears.
-6. If you take a trade, click **"I took this trade"** so Entryvex tracks it in **My trades**.
+</div>
 
 ---
 
-## What's on the screen
+## Why Entryvex
 
-### Crypto and stocks
-- **Crypto:** every Binance.US trading pair, with live prices streamed in real time, 24/7.
-- **US stocks & ETFs:** any stock or ETF on the NYSE/Nasdaq (Apple, NVIDIA, Tesla, SPY…). Prices update every few seconds during market hours (9:30am–4pm New York time); the header shows whether the market is open.
-- Everything below (scanner, forecast, trade cards, My trades, alerts, AI) works for both. Stock trade cards tell you how many **shares** to buy and how to place the order at your broker (Schwab, Fidelity, Robinhood…).
+Most trading tools tell you what *might* happen. Entryvex tells you **what actually happened the last time**: every signal is backed by a measured track record on that exact market, after fees, and Entryvex says **"don't trade"** when the numbers aren't on your side.
 
-### "Entryvex says": what to do right now
-Right under the chart, one plain answer for whatever you're looking at:
-- **BUY**: how much to buy, at what price, where to take profit, where to cut the loss, and the time to sell by if neither happens.
-- **SMALL BUY OR SKIP**: only a slight edge.
-- **DON'T BUY / WAIT**: why not, and what to do instead (alerts, other coins or stocks).
-- **HOLD / SELL NOW**: once you own it (tracked in My trades), Entryvex tells you when to sell.
-- **When would Entryvex say BUY?**: when it's a WAIT, the exact price conditions that would turn it into a buy (e.g. "BUY if a candle closes above $27.40 on strong volume"), only for setups with a real track record on that market, plus what the forecast predicts for the next hours or days.
-- **Outside checks**: the bigger trend, the overall market (Bitcoin or the S&P 500), the fear gauge (Crypto Fear & Greed or the VIX), news mood and the measured odds. Shown as helping ▲ / against ▼.
-
-### Long-term view (holding for months)
-Below the panel: is the long-term trend up or down (price vs. its 200-day average), returns over 1/3/6/12 months, how big the yearly swings are, and, measured from up to 10 years of daily data, **how often buying on any day and holding 3 months ended higher**, with the typical range of results. For stocks it adds the latest quarterly sales and profit from SEC filings.
-
-### Market movers (live)
-The **most traded** stocks and coins **today** and over the **last 30 days** (ranked by dollars traded), plus today's **top gainers and losers**. Refreshes every minute; click any of them to open it.
-
-### Opportunities: what to buy right now, across your whole watchlist
-- Checks **every coin and stock in your watchlist** on 15-minute, 1-hour and 4-hour candles, every 15 minutes (or press **Scan whole watchlist**).
-- Lists **buy signals right now** and **setups with a good track record** to watch.
-- Skips markets that **barely trade** at that candle size (lots of empty candles, or very little money changing hands): patterns there aren't real, and stop-losses can't protect you.
-
-### Chart + forecast
-- Live candles with volume and the 20/50 moving averages.
-- **Forecast:** dashed lines to the right of the live candle show where price has historically landed over the next 20 candles: an 80% range (outer lines), a 50% range, and the middle. Below the chart you'll see the range in dollars, **how accurate this forecast has been** (tested on past data it wasn't built from), and the measured chance the price is higher by then.
-
-### Scanner tab: "should I trade right now?"
-- Watches 4 common setups on the coin and candle size you're viewing.
-- For each one, it checks **every past time it happened** (last 3,000 candles) and what would have happened after fees: did it hit the profit target or the stop-loss first? That's the **measured confidence**, e.g. "ended in profit 21 of 38 times".
-- Verdicts: **GO** proven edge (profitable with ~95% statistical confidence) · **CAUTION** probable but unproven edge · **UNPROVEN** too few examples · **NO CLEAR EDGE** break-even, any profit looks like luck · **NO TRADE** it loses money · **WAIT** nothing is happening right now.
-- **Most of the time you'll see WAIT or NO TRADE.** That's normal: most patterns don't beat fees, and not trading is often the best move.
-- **Find an edge for this coin** tests 5m, 15m, 1h and 4h candles to show where this coin has actually had an edge.
-- **Scan watchlist** checks every coin at once.
-- When a setup with a good record is active you get a **trade card**: exactly how much to buy, the take-profit and stop-loss, what you'd make or lose in dollars after fees, and step-by-step instructions for placing it on Binance.US.
-
-### My trades tab
-- Click **"I took this trade"** on a trade card (or add a trade by hand).
-- Entryvex follows the live price and **records the result automatically** when your take-profit or stop-loss is hit. If you sell yourself, enter the sale price.
-- Shows your total result, win rate and history, and powers the **daily stop**: when today's losses hit your limit, Entryvex tells you to stop for the day.
-
-### Signal record tab: can you trust the confidence?
-- Every signal Entryvex gives while it's open is saved with its verdict, then checked afterwards against real prices.
-- Over time you can see whether **GO signals really win as often as the scanner said**, and what would have happened to the NO TRADE ones.
-
-### Ask the analyst (AI)
-- Ask questions in plain English: *"Is now a good time to buy ETH?"*, *"If I put $500 in, what's my risk?"*, *"What's the news saying?"*
-- The analyst sees the live price, forecast, scanner results, news and your settings, and explains what the data says. It can't see the future and it can be wrong.
-
-### Research panel (right side)
-- **Report:** an AI summary of the latest news, the news mood (positive vs negative headlines), and a plain-English report card.
-  - *Stocks:* the company's **latest quarterly sales and profit** (and growth vs. a year ago), profit margin, last-12-months results, company value and P/E, and where the price sits in its 52-week range, from official SEC filings.
-  - *Crypto:* the coin's size, distance from its all-time high, recent trend, supply and what the project is.
-- **News:** live headlines, each marked ▲ positive, ▼ negative or • neutral.
-
-### Alerts 🔔
-- **Setup alerts:** when a setup with a positive track record appears anywhere on your watchlist.
-- **Big move alerts:** when a coin moves more than X% in N minutes.
-- **Price alerts:** when a coin goes above or below a price.
-- Shown on screen with a sound, and optionally as desktop notifications. Alerts work while Entryvex is open in a browser tab (a background tab is fine).
-
-### Settings explained
-| Setting | What it means |
+| | |
 |---|---|
-| Trading balance | The money in your exchange account you're willing to trade with. |
-| Max loss per trade | The most one trade may lose if its stop-loss is hit, as a % of your balance. Entryvex sizes every trade so you never lose more than this. |
-| Stop for the day at | When today's losses reach this %, Entryvex tells you to stop. |
-| How you'll place orders | Picks the crypto trading fee. On Binance.US, a **limit order** (you set the price) costs 0%; a **market order** (buy instantly) costs 0.02%. Simple "Buy" buttons in apps usually charge much more. Stocks are always counted at $0 commission (standard at US brokers). |
+| 🎯 **One clear answer** | *Entryvex says*: **BUY**, **WAIT**, **DON'T BUY**, **HOLD** or **SELL NOW**, in plain English. |
+| 📏 **Measured, not guessed** | Confidence comes from replaying every past occurrence of a setup, with a statistical test so luck doesn't count as skill. |
+| 💵 **Sized to your money** | Exactly how much to buy, where to take profit, where to cut the loss, and when to sell by. |
+| 🔔 **Alerts, even when closed** | Price, big-move, buy-setup and SELL alerts on your phone or computer. |
+| 🔒 **Private** | No accounts, no tracking, no ads. Your settings and trades stay in your browser. |
 
-All settings, trades and alerts are stored **only in your own browser**.
+---
 
-### Watchlist
-- Green ▲ / red ▼ shows which way each price **last moved**.
-- Drag the **⋮⋮** grip to reorder your watchlist.
+## Get started in 60 seconds
 
-### Install it like an app
-On a phone, use your browser's **Add to Home Screen**. On a computer, click **⬇ Install app** in the top bar (Chrome/Edge). Entryvex then opens in its own window with its own icon.
+1. Open **[entryvex.trade](https://entryvex.trade)** on your phone or computer.
+2. Pick a coin or stock from the watchlist, or search for one (*Bitcoin*, *Apple*, *SPY*…).
+3. Read **Entryvex says** under the chart.
+4. Enter your trading balance and the most you'll risk per trade (1% is a good start).
+5. Tap **🔔** → **Turn on closed-app alerts**, so Entryvex can tell you when it's time to buy or sell.
 
-### Keyboard shortcuts
-`/` search · `1`–`6` candle size · `↑` `↓` previous/next coin · `L` center live candle · `F` forecast · `E` moving averages · `A` alerts · `?` help
+> **Tip:** Install it like an app: *Add to Home Screen* on your phone, or **⬇ Install app** in Chrome/Edge.
+
+---
+
+## Features
+
+<details open>
+<summary><b>📈 Markets & live data</b></summary>
+
+- **Crypto:** every Binance.US pair, streamed live 24/7.
+- **US stocks & ETFs:** any NYSE/Nasdaq symbol, refreshed every few seconds in market hours, with a market open/closed badge.
+- **Market movers:** most traded today and over the last 30 days, plus top gainers and losers, updated every minute.
+- Watchlist rows keep the color ▲▼ of their last move; drag ⋮⋮ to reorder.
+</details>
+
+<details open>
+<summary><b>🧠 Signals & decisions</b></summary>
+
+- **Entryvex says:** BUY / SMALL BUY OR SKIP / DON'T BUY / WAIT, with the full plan when it's a buy.
+- **When would it say BUY?** The exact price conditions that would trigger a buy, for setups with a real track record.
+- **Scanner:** 4 classic setups tested on the last 3,000 candles, after fees and the live bid/ask spread; verdicts backed by a t-test.
+- **Opportunities:** your whole watchlist checked on 15m, 1h and 4h every 15 minutes.
+- **Liquidity check:** markets that barely trade are flagged, never signalled.
+- **Outside checks:** bigger trend, overall market (Bitcoin / S&P 500), fear gauge (Crypto Fear & Greed / VIX), news mood.
+</details>
+
+<details open>
+<summary><b>🔮 Forecasts</b></summary>
+
+- **Short term:** 50% and 80% price ranges for the next 20 candles drawn on the chart, with tested accuracy (~80% of outcomes land in the 80% range).
+- **Long term (holding for months):** 200-day trend, 1/3/6/12-month returns, yearly swing, and how often buying and holding 3 months ended higher, measured over up to 10 years.
+</details>
+
+<details open>
+<summary><b>💼 Your trades</b></summary>
+
+- **Trade cards:** quantity rounded to the exchange's rules, take-profit, stop-loss, dollar win/loss after fees, and step-by-step order instructions (Binance.US or your stock broker).
+- **My trades:** click *I took this trade*; Entryvex tracks it live and tells you when to sell (target, stop or time limit).
+- **Daily stop:** when today's losses hit your limit, Entryvex tells you to stop.
+- **Signal record:** Entryvex's own live report card, which checks whether its signals win as often as promised.
+</details>
+
+<details open>
+<summary><b>📰 Research & AI</b></summary>
+
+- **Report card:** for stocks, the latest quarterly sales and profit from **SEC filings**, margin, market cap and P/E; for crypto, size, supply and distance from its all-time high.
+- **News:** live headlines tagged ▲ positive / ▼ negative, with an AI summary of what's happening.
+- **Ask the analyst:** an AI that answers questions using the live data on your screen.
+</details>
 
 ---
 
 ## Good to know
-- **Markets:** crypto pairs on Binance.US (spot; Binance.US only serves US users) and US-listed stocks & ETFs.
-- **Buy-first trades only:** Entryvex suggests buying first and selling later, never shorting.
-- **Stocks:** regular trading hours only. Stock prices refresh every ~10 seconds (not tick-by-tick), and a stop-loss can fill lower than planned if a stock opens with a gap.
-- **Data sources:** Binance.US market data; Yahoo Finance stock prices, market screeners and the VIX; SEC EDGAR company filings; CoinGecko coin data; the Crypto Fear & Greed index (alternative.me); public news feeds (Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News, Bing News).
-- **Honesty first:** every confidence number in Entryvex is measured from real past data and checked again live. When the numbers say "don't trade", Entryvex says so.
-- **Privacy:** no sign-up, no accounts, no tracking or ads. Your balance, trades, alerts and settings never leave your browser. Entryvex never asks for exchange logins or API keys.
-- **Security:** strict browser security headers (content security policy, no framing, HTTPS only) and all app code served from entryvex.trade itself.
+
+- **Entryvex never places trades** and never asks for exchange logins or API keys. You decide, and you place every order yourself.
+- **No prediction is certain.** Entryvex shows measured odds (typically 50–70% at best) and says so. Most of the time the honest answer is *wait*.
+- **Binance.US** serves US users only. Many smaller coins trade thinly there on short candles; Entryvex flags them.
+- **Stocks** trade 9:30–16:00 New York time. A stop-loss can fill lower than planned if a stock gaps down overnight.
+- **Closed-app alerts** store only an anonymous notification address and your alert settings. On iPhone/iPad, add Entryvex to your Home Screen first.
+- Times are shown in **24-hour format** in your device's time zone.
+
+**Data sources:** Binance.US · Yahoo Finance (stock prices, screeners, VIX) · SEC EDGAR filings · CoinGecko · alternative.me Fear & Greed · Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News and Bing News · Cloudflare Workers AI.
+
+---
+
+<div align="center">
+
+**[entryvex.trade](https://entryvex.trade)** · Research tool, not financial advice. Trading involves risk of loss.
+
+</div>
