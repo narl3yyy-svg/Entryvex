@@ -54,7 +54,7 @@ export async function newsAiCheck(sym, name) {
   return {
     label: "News read by AI",
     effect: proven ? dir : 0,
-    text: `${scoreWord(read.score)} (${read.score >= 0 ? "+" : ""}${read.score.toFixed(2)}) from ${read.relevant} relevant of ${read.count} headlines${read.why ? `: ${read.why}` : ""}. `
+    text: `${scoreWord(read.score)} (${read.score >= 0 ? "+" : ""}${read.score.toFixed(2)}) from ${read.relevant} relevant of ${read.count} headlines${read.why ? `: ${read.why.replace(/[.\s]+$/, "")}` : ""}. `
       + (proven ? `Its record here: right ${Math.round(rec.hit * 100)}% of ${rec.cases} days, so it counts.${learned(rec, read.score)}` : `Not counted yet: ${rec?.verdict?.label?.toLowerCase() || "no record yet"}.`),
   };
 }
@@ -74,7 +74,7 @@ export async function renderNewsAi(el, sym, name, isCurrent) {
     ${read.why ? `<p class="small">${fmt.esc(read.why)}</p>` : ""}
     ${read.top?.length ? `<ul class="nai-top">${read.top.map((h) => `<li><span class="${h.impact > 0 ? "up" : "down"}" title="${h.impact > 0 ? "Good" : "Bad"} for the price (strength ${Math.abs(h.impact)} of 2)">${(h.impact > 0 ? "▲" : "▼").repeat(Math.abs(h.impact))}</span> ${h.link ? `<a href="${fmt.esc(h.link)}" target="_blank" rel="noopener noreferrer">${fmt.esc(h.title)}</a>` : fmt.esc(h.title)} <span class="muted tiny">${fmt.esc(h.source || "")}</span></li>`).join("")}</ul>` : ""}
     <div class="nai-record">${recordHtml(rec)}${rec?.verdict?.helps ? `<span class="small">${learned(rec, read.score)}</span>` : ""}</div>
-    <button class="link-btn small" data-nai-pool>Check the AI's record across all ${TRACKED.length} markets it reads hourly</button>
+    <button class="link-btn small" data-nai-pool>Check the AI's record across all ${TRACKED.length} markets it reads every 2 hours</button>
     <div class="nai-pool small"></div>
     <p class="muted tiny">Read by AI from ${read.count} headlines (${read.relevant} relevant) at ${new Date(read.generated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. Every read is recorded with the price, and Entryvex measures whether the score predicted the next 24 hours. It only counts toward "Entryvex says" once that record proves it helps.</p>`;
   el.querySelector("[data-nai-pool]").addEventListener("click", async (e) => {
@@ -83,13 +83,13 @@ export async function renderNewsAi(el, sym, name, isCurrent) {
     box.textContent = "Measuring across all tracked markets…";
     const p = await getPooledRecord();
     box.innerHTML = p.cases ? `Across ${p.markets} markets: ${p.cases} independent days measured, right ${Math.round(p.hit * 100)}% of the time (t = ${p.t.toFixed(2)}). <strong>${fmt.esc(p.verdict.label)}.</strong>`
-      : `Not enough history yet. The AI reads each market about once an hour; after a day, each read can be checked.`;
+      : `Not enough history yet. The AI reads each market about every 2 hours; a day later, each read can be checked.`;
   });
 }
 
 function recordHtml(rec) {
   if (!rec) return `<span class="muted small">Track record unavailable.</span>`;
-  if (!rec.cases) return `<span class="small"><strong>Track record:</strong> ${rec.reads} reads recorded so far${rec.pending ? ` (${rec.pending} still within their 24 hours)` : ""}. None can be judged yet.</span>`;
+  if (!rec.cases) return `<span class="small"><strong>Track record:</strong> ${rec.reads} read${rec.reads === 1 ? "" : "s"} recorded so far${rec.pending ? ` (${rec.pending} still within their 24 hours)` : ""}. None can be judged yet.</span>`;
   const pa = rec.afterPositive, na = rec.afterNegative;
   return `<span class="small"><strong>Track record here:</strong> <span class="pill pill-${rec.verdict.level === "helps" ? "edge" : rec.verdict.level === "misleading" ? "negative" : "thin"}">${fmt.esc(rec.verdict.label)}</span>
     ${rec.cases} independent days judged, the AI's direction was right ${Math.round(rec.hit * 100)}% of the time${isFinite(rec.t) ? ` (t = ${rec.t.toFixed(2)})` : ""}.
