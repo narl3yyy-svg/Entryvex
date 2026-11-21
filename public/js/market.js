@@ -30,6 +30,7 @@ const STOCK_IV = {
   "1h": { interval: "60m", range: "730d", recent: "1mo" },
   "4h": { interval: "60m", range: "730d", recent: "3mo", group: 4 },
   "1d": { interval: "1d", range: "10y", recent: "3mo" },
+  "1w": { interval: "1wk", range: "max", recent: "1y" },
 };
 
 async function stockChart(sym, interval, which = "range") {
@@ -104,7 +105,7 @@ export async function getKlinesSince(sym, interval, startSec, limit) {
     return raw.map((k) => ({ time: k[0] / 1000, open: +k[1], high: +k[2], low: +k[3], close: +k[4], closeTime: k[6] / 1000 }));
   }
   const all = await getKlineHistory(sym, interval, 3000);
-  const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 }[interval] || 900;
+  const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 }[interval] || 900;
   return all.filter((k) => k.time >= startSec).slice(0, limit).map((k) => ({ ...k, closeTime: k.time + sec }));
 }
 

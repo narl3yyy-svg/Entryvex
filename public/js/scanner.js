@@ -8,14 +8,16 @@ import { logFromAnalysis } from "./signals.js";
 
 const $ = (id) => document.getElementById(id);
 const HISTORY = 3000;
-const MINUTES = { "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440 };
+const MINUTES = { "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080 };
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem("evx." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("evx." + k, JSON.stringify(v)); } catch {} },
 };
 
-export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval, onScanAll }) {
+export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval, onScanAll, restoreMarkers }) {
+  // When no past trades are shown, give the chart back its pattern markers instead of clearing them.
+  const clearMarkers = () => (restoreMarkers ? restoreMarkers() : chartSeries.setMarkers([]));
   let ctx = null;          // { symbol, interval, candles, spreadPct }
   let result = null;
   let token = 0;
@@ -215,7 +217,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     if (fromUser && onShowTrades && id !== shownSetup) onShowTrades(!!id);
     shownSetup = id;
     $("setups").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("shown", tr.dataset.id === id));
-    if (!id || !result) { chartSeries.setMarkers([]); return; }
+    if (!id || !result) { clearMarkers(); return; }
     const s = result.setups.find((x) => x.id === id);
     const first = chartSeries.data()[0]?.time ?? 0;
     const markers = [];
@@ -231,7 +233,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     for (const l of priceLines) { try { chartSeries.removePriceLine(l); } catch {} }
     priceLines = [];
   }
-  function clearChart() { clearPriceLines(); try { chartSeries.setMarkers([]); } catch {} }
+  function clearChart() { clearPriceLines(); try { clearMarkers(); } catch {} }
 
   /* ----- Scan the whole watchlist on the current timeframe ----- */
   let scanning = false;

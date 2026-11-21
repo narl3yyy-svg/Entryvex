@@ -836,3 +836,7 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .bn-grid span.bn-to { font-size: 13px; text-transform: none; letter-spacing: 0; }
 .bn-grid small strong { font-size: 11.5px; font-weight: 600; }
 @media (max-width: 640px) { .bn-amount { align-items: stretch; width: 100%; } .bn-amount .inp { width: 100%; } .bn-grid strong.bn-big { font-size: 18px; } }
+
+/* gap between candle sizes and the 1Y/5Y/ALL views */
+.seg .seg-gap { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--line); }
+.ct-pat { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--line); font-weight: 600; font-size: 12px; }

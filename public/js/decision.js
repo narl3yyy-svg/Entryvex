@@ -33,7 +33,7 @@ async function eventRisk() {
 
 const $ = (id) => document.getElementById(id);
 const HIGHER = { "1m": "15m", "5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d", "1d": "1d" };
-const SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+const SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 };
 const ctxCache = new Map();
 
 /* ---------------- Outside checks ---------------- */
@@ -203,7 +203,7 @@ function html(c, checks) {
           : `A setup is active, but it has only happened ${best?.stats.n ?? 0} times here, too few to know if it works. Skip it.`;
       const elsewhere = currentBuys().filter((b) => b.sym !== c.symbol);
       if (elsewhere.length) headline += ` <span class="d-elsewhere">Elsewhere right now: ${elsewhere.slice(0, 3).map((b) => `<button class="link-btn" data-goto-opps>${fmt.esc(b.label === "GO" ? "BUY" : "small buy")} on ${fmt.esc(b.base)} (${b.iv})</button>`).join(", ")}.</span>`;
-      steps = moveNote(c) + whenToBuy(c, r, best) + predicts(c) + `<ol class="d-steps">
+      steps = patternNote(c, r) + moveNote(c) + whenToBuy(c, r, best) + predicts(c) + `<ol class="d-steps">
         <li><strong>Do nothing for now.</strong> Not trading is a good decision when the odds aren't on your side.</li>
         <li>Entryvex re-checks every time a ${c.interval} candle closes. Turn on <button class="link-btn" data-open-alerts>setup alerts 🔔</button> to be told the moment a BUY appears on any of your coins or stocks.</li>
         <li>Want to look elsewhere? Try <button class="link-btn" data-find-edge>Find an edge for this ${stock ? "stock" : "coin"}</button> or <button class="link-btn" data-scan-all>Scan watchlist</button>.</li>
@@ -249,6 +249,32 @@ function whenToBuy(c, r, best) {
       <span class="muted small">Past record here: ended in profit ${Math.round(t.setup.stats.winRate * t.setup.stats.n)} of ${t.setup.stats.n} times, ${fmt.pct(t.setup.stats.ev * 100)} per trade after costs.</span></li>`).join("")}</ul>
     <p class="tiny muted">Entryvex re-checks after every ${c.interval} candle closes and switches to BUY (with the full plan) the moment one of these happens.</p>
   </div>`;
+}
+
+/** Candlestick patterns that just formed, each with its MEASURED record on this market. */
+function patternNote(c, r) {
+  const list = c.patterns || [];
+  if (!list.length) return "";
+  const rows = list.map((p) => {
+    const when = p.candlesAgo === 0 ? "on the last closed candle" : `${p.candlesAgo} candle${p.candlesAgo === 1 ? "" : "s"} ago`;
+    let record;
+    if (p.dir > 0) {
+      const s = r?.setups?.find((x) => x.id === "p_" + p.id)?.stats;
+      record = s && s.n
+        ? (s.n < 30 ? `Only ${s.n} past cases here, too few to trust.`
+          : `Bought after it here: ended in profit ${Math.round(s.winRate * s.n)} of ${s.n} times, <strong class="${s.ev > 0 ? "up" : "down"}">${fmt.pct(s.ev * 100)}</strong> per trade after costs.`)
+        : "No past cases here yet.";
+    } else {
+      const m = p.measured;
+      record = m && m.n
+        ? (m.n < 10 ? `Only ${m.n} past cases on this chart, too few to trust.`
+          : `After it here, price fell within ${m.h} candles ${Math.round(m.worked * 100)}% of the time (${m.n} cases; average ${fmt.pct(m.avgMove * 100)}).`)
+        : "No past cases on this chart yet.";
+    }
+    return `<li><span class="${p.dir > 0 ? "up" : "down"}">${p.dir > 0 ? "▲ Bullish" : "▼ Bearish"}</span> <strong>${fmt.esc(p.name)}</strong> ${when}. <span class="muted">${fmt.esc(p.plain)}</span> ${record}</li>`;
+  }).join("");
+  return `<div class="d-when"><div class="d-when-title">Candle patterns just formed</div><ul class="d-trig">${rows}</ul>
+    <p class="tiny muted">Patterns are judged by what they actually did on ${fmt.esc(c.base)} at this candle size, not by what guides say they should do. A bullish pattern becomes a BUY only if its record here is proven.</p></div>`;
 }
 
 /** "It just jumped, why not buy?": how big the last few candles' move is, and what followed similar moves here. */

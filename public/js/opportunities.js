@@ -9,7 +9,11 @@ import { logFromAnalysis } from "./signals.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
-const INTERVALS = ["15m", "1h", "4h"];
+// The watchlist is checked on the candle size shown on the chart (it follows the 1m…1D buttons,
+// the 1Y/5Y/ALL views and the Day/Swing/Long-term style switch).
+const IV_NAME = { "1m": "1-minute", "5m": "5-minute", "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily", "1w": "weekly" };
+let INTERVALS = ["15m"];
+let fullAgain = false;
 const REFRESH_MS = 15 * 60_000;
 
 let hooks = { getWatchlist: () => [], getInfo: () => null, nameFor: (s) => s, onPick: () => {}, onUpdate: () => {}, onProgress: () => {} };
@@ -82,10 +86,11 @@ export function signalFor(sym) {
  *   checking / null – being checked now / not checked yet
  */
 export function verdictFor(sym) {
+  if (running && pending.has(sym)) return { level: "checking", label: "…", why: "Entryvex is checking this market now." };
   const mine = rows.filter((x) => x.sym === sym);
   if (!mine.length) {
     if (running && (pending.has(sym))) return { level: "checking", label: "…", why: "Entryvex is checking this market now." };
-    if (checked.has(sym)) return { level: "unknown", label: "?", why: "Not enough price history to measure any setup (needs 250+ candles on 15m, 1h or 4h)." };
+    if (checked.has(sym)) return { level: "unknown", label: "?", why: "Not enough price history on this candle size to measure any setup (needs 250+ candles). Try a smaller candle size." };
     return null;
   }
   const buy = mine.find(({ r }) => isBuy(r));
@@ -110,7 +115,8 @@ function isBuy(r) {
 
 /** Check every market in the watchlist (or just `only`, e.g. a newly added symbol). */
 export async function run(only) {
-  if (running) { if (only) queued.push(...only); return; }
+  if (running) { if (only) queued.push(...only); else fullAgain = true; return; }
+  INTERVALS = [hooks.getInterval?.() || "15m"];
   running = true;
   clearTimeout(timer);
   const fee = (+store.get("feePct", 0.02) || 0) / 100;
@@ -153,6 +159,7 @@ export async function run(only) {
   hooks.onProgress({ running: false, done: total, total });
   hooks.onUpdate(currentBuys());
   timer = setTimeout(() => run(), only && lastRun ? Math.max(5_000, REFRESH_MS - (Date.now() - lastRun)) : REFRESH_MS);
+  if (fullAgain) { fullAgain = false; queued.length = 0; run(); return; }
   if (queued.length) { const q = [...new Set(queued)]; queued.length = 0; run(q); }
 }
 const queued = [];
@@ -176,7 +183,7 @@ function render() {
   if (count) { count.textContent = buys.length; count.hidden = !buys.length; }
 
   root.innerHTML = `
-    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on 15-minute, 1-hour and 4-hour candles with the same measured method as the scanner,
+    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on ${IV_NAME[INTERVALS[0]] || INTERVALS[0]} candles (the candle size on the chart) with the same measured method as the scanner,
       and refreshes every 15 minutes while it's open. Click any row to open it.</p>
     <div class="opps-status">
       <span>${running ? `<span class="typing"><i></i><i></i><i></i></span> ${fmt.esc(progress)}` : lastRun

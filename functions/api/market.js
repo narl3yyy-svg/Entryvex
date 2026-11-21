@@ -8,7 +8,7 @@ const SEC_UA = "Entryvex research dashboard https://entryvex.trade";
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const SYM = /^[A-Z0-9.^=\-]{1,12}$/;
 const INTERVALS = new Set(["1m", "5m", "15m", "60m", "1d", "1wk", "1mo"]);
-const RANGES = new Set(["1d", "2d", "5d", "7d", "1mo", "60d", "3mo", "1y", "730d", "2y", "5y", "10y", "20y"]);
+const RANGES = new Set(["1d", "2d", "5d", "7d", "1mo", "60d", "3mo", "1y", "730d", "2y", "5y", "10y", "20y", "max"]);
 
 function route(p) {
   const src = p.get("src");

@@ -138,11 +138,12 @@
       </div>
       <div class="toolbar">
         <div class="seg" id="intervals" role="tablist" aria-label="Candle size">
-          <button data-i="1m">1m</button><button data-i="5m">5m</button><button data-i="15m">15m</button><button data-i="1h">1h</button><button data-i="4h">4h</button><button data-i="1d">1D</button>
+          <button data-i="1m">1m</button><button data-i="5m">5m</button><button data-i="15m">15m</button><button data-i="1h">1h</button><button data-i="4h">4h</button><button data-i="1d">1D</button><span class="seg-gap"></span><button data-i="1y" title="The last year on daily candles">1Y</button><button data-i="5y" title="The last 5 years on weekly candles">5Y</button><button data-i="all" title="All available history on weekly candles">ALL</button>
         </div>
         <div class="toolbar-right">
-          <span id="candle-info" class="muted small mono"></span>
+
           <button id="forecast-toggle" class="ghost-btn" title="Show/hide the measured price range for the next candles (F)"><i class="fc-swatch"></i>Forecast</button>
+          <button id="patterns-toggle" class="ghost-btn" title="Show/hide candlestick patterns on the chart (P)">▲▼ Patterns</button>
           <button id="ema-toggle" class="ghost-btn" title="Show/hide the 20 and 50 moving averages (E)"><i class="ema-swatch"></i>EMA 20/50</button>
           <button id="price-alert-btn" class="ghost-btn" title="Set a price alert for this coin">🔔 Alert</button>
           <button id="center-live" class="ghost-btn" title="Put the live candle back in the middle of the chart (L)"><i class="live-dot"></i>Live</button>

@@ -46,7 +46,7 @@ export function addTrade(t) {
     openedAt: Date.now(), status: "open",
   };
   // Entryvex's plan has a time limit: if neither level is hit within 24 candles, sell at market.
-  const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 }[trade.interval];
+  const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 }[trade.interval];
   if (sec && trade.source !== "manual") trade.sellBy = trade.openedAt + 24 * sec * 1000;
   hooks.ensureWatched(trade.symbol);
   trades.push(trade);

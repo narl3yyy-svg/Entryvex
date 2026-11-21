@@ -7,7 +7,8 @@ import { initMoney } from "./money.js";
 import { getProfile, plainEnglish, moodOf, moodHtml, getStockProfile } from "./research.js";
 import { initAlerts, onTicker, openPriceAlert, pushAlert, getAlertPrefs } from "./alerts.js";
 import { initPush, scheduleSync } from "./push.js";
-import { ema } from "./indicators.js";
+import { ema, computeAll } from "./indicators.js";
+import { scanPatterns, measurePattern } from "./patterns.js";
 import { forecast, describeOdds, reliability } from "./forecast.js";
 import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js";
 import { initSignals } from "./signals.js";
@@ -41,6 +42,9 @@ const state = {
   watchlist: store.get("watchlist", DEFAULT_WATCHLIST),
   selected: store.get("selected", "BTCUSDT"),
   interval: store.get("interval", "15m"),
+  view: store.get("view", null),          // "1y" | "5y" | "all" | null
+  showPatterns: store.get("patterns", true),
+  patternsNow: null,
   stats: new Map(),
   newsTab: store.get("newsTab", "report"),
   badges: {},
@@ -54,7 +58,7 @@ const state = {
 let tickerStream = null;
 let klineStream = null;
 let chart, candles, volume, scanner, emaLines, fcLines = [];
-const INTERVAL_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+const INTERVAL_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 };
 const FC_H = 20;
 
 /* ---------- Forecast: measured price range for the next FC_H candles ---------- */
@@ -79,13 +83,15 @@ function decisionCtx() {
     price: s?.last ?? lastCandle?.close, marketOpen: s?.marketOpen,
     analysis: state.analysis && state.analysis.symbol === sym && state.analysis.interval === state.interval ? state.analysis.result : null,
     forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
+    patterns: state.patternsNow && state.patternsNow.symbol === sym ? state.patternsNow.list : [],
     rules: { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional },
     currency: info.currency,
     move: currentMove(sym),
+    patterns: state.patternsNow && state.patternsNow.symbol === sym ? state.patternsNow.list : [],
     intervalSec: IV_SEC[state.interval],
   };
 }
-const IV_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+const IV_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 };
 let moveCache = { key: "", t: 0, v: null };
 /** Recent-move check for "Entryvex says" (recomputed at most every 5 s). */
 function currentMove(sym) {
@@ -152,6 +158,7 @@ function pushAIContext() {
     isStock: isStock(sym), marketOpen: s?.marketOpen,
     price: s?.last ?? lastCandle?.close, change24h: s?.changePct, high24h: s?.high, low24h: s?.low, volume24h: s?.quoteVolume,
     forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
+    patterns: state.patternsNow && state.patternsNow.symbol === sym ? state.patternsNow.list : [],
     analysis: state.analysis && state.analysis.symbol === sym ? state.analysis : null,
   });
 }
@@ -525,7 +532,22 @@ function initChart() {
     timeScale: { borderColor: "#232a35", timeVisible: true, secondsVisible: false, shiftVisibleRangeOnNewBar: true, tickMarkFormatter: localTick },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     localization: { priceFormatter: (p) => fmt.price(p), timeFormatter: localCrosshairTime },
+    // The mouse wheel scrolls the page; hold Ctrl and use the wheel to zoom. Click and drag still pans.
+    handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+    handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
   });
+  el.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey) return;              // plain wheel: let the page scroll
+    e.preventDefault();                  // Ctrl+wheel: zoom the chart (not the browser page)
+    const ts = chart.timeScale(), r = ts.getVisibleLogicalRange();
+    if (!r) return;
+    const box = el.getBoundingClientRect();
+    const at = ts.coordinateToLogical(e.clientX - box.left) ?? (r.from + r.to) / 2;
+    const k = Math.exp(Math.max(-1, Math.min(1, e.deltaY / 300)));   // >1 zooms out, <1 zooms in
+    const from = at - (at - r.from) * k, to = at + (r.to - at) * k;
+    if (to - from < 10 || to - from > 5000) return;
+    ts.setVisibleLogicalRange({ from, to });
+  }, { passive: false });
   candles = chart.addCandlestickSeries({
     upColor: "#22c55e", downColor: "#f0506e", borderVisible: false,
     wickUpColor: "#22c55e", wickDownColor: "#f0506e",
@@ -548,21 +570,9 @@ function initChart() {
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
   chart.subscribeCrosshairMove((p) => {
+    // Hovered candle (and how much was traded in it) goes into the tooltip next to the cursor.
     const d = p?.seriesData?.get(candles);
-    const c = d || lastCandle;
-    if (!c) { $("candle-info").textContent = ""; return; }
-    // Amount traded during this candle: coins/shares, plus its approximate value in the quote currency.
-    const v = p?.seriesData?.get(volume)?.value ?? (d ? NaN : lastCandle?.volume);
-    let vol = "";
-    if (isFinite(v)) {
-      const sym = state.selected, info = state.bySymbol.get(sym), stock = isStock(sym);
-      const unit = stock ? (info?.kind === "Index" ? "" : " shares") : " " + (info?.base ?? "");
-      const pre = stock ? curPrefix(stockInfo(sym).currency) : (/^(USD|USDT|USDC)$/.test(info?.quote ?? "") ? "$" : "");
-      const value = v * ((c.high + c.low + c.close) / 3);
-      const amt = v >= 1000 ? fmt.compact(v) : +v.toPrecision(4) + "";
-      vol = v > 0 ? `  Vol ${amt}${unit} (≈${pre}${fmt.compact(value)}${pre ? "" : " " + (info?.quote ?? "")})` : "  Vol 0";
-    }
-    $("candle-info").textContent = `O ${fmt.price(c.open)}  H ${fmt.price(c.high)}  L ${fmt.price(c.low)}  C ${fmt.price(c.close)}${vol}`;
+    const v = p?.seriesData?.get(volume)?.value;
     candleTip(p, d, v);
   });
 }
@@ -589,7 +599,9 @@ function candleTip(p, c, v) {
   tip.innerHTML = `<div class="ct-time">${fmt.esc(localCrosshairTime(c.time))}</div>
     <div class="ct-grid"><span>Open</span><b>${fmt.price(c.open)}</b><span>High</span><b>${fmt.price(c.high)}</b>
       <span>Low</span><b>${fmt.price(c.low)}</b><span>Close</span><b class="${chg >= 0 ? "up" : "down"}">${fmt.price(c.close)} <small>${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}%</small></b></div>
-    ${volRow}`;
+    ${volRow}
+    ${(() => { const ps = state.showPatterns && patternHits?.sym === sym ? patternHits.byTime.get(c.time) : null;
+      return ps?.length ? `<div class="ct-pat">${ps.map((p) => `<div class="${p.dir > 0 ? "up" : "down"}">${p.dir > 0 ? "▲" : "▼"} ${fmt.esc(p.name)}</div>`).join("")}</div>` : ""; })()}`;
   tip.hidden = false;
   // Sit beside the cursor, flipping to the other side near the right/bottom edges.
   const w = tip.offsetWidth, h = tip.offsetHeight, W = box.clientWidth, Hh = box.clientHeight;
@@ -606,6 +618,55 @@ function centerLive(count) {
   const last = (count ?? candles.data().length) - 1;
   if (last < 0) return;
   chart.timeScale().setVisibleLogicalRange({ from: last - CENTER_BARS, to: last + CENTER_BARS });
+}
+
+/* Candlestick patterns: markers on the chart, and the ones that just formed (for "Entryvex says"). */
+function refreshPatterns(sym) {
+  const data = candles.data();
+  if (data.length < 60) { candles.setMarkers([]); state.patternsNow = null; return; }
+  const x = computeAll(data);
+  const last = data.length - 2;   // the newest candle is still forming
+  const hits = scanPatterns(data, x, Math.max(15, data.length - 400), last);
+  patternHits = { sym, hits, byTime: new Map() };
+  for (const h of hits) { const a = patternHits.byTime.get(h.time) || []; a.push(h.p); patternHits.byTime.set(h.time, a); }
+  drawPatternMarkers();
+  // Patterns completed on one of the last 3 closed candles, each with what price did after it here.
+  const list = hits.filter((h) => h.i >= last - 2).map((h) => {
+    const m = measurePattern(data, x, h.p.id, 10, last);
+    return { id: h.p.id, name: h.p.name, dir: h.p.dir, plain: h.p.plain, candlesAgo: last - h.i, measured: m };
+  });
+  state.patternsNow = { symbol: sym, list };
+  refreshDecision(decisionCtx());
+}
+let patternHits = null;
+/** Small arrows only (names would overlap); hover a candle to see which pattern it is. */
+function drawPatternMarkers() {
+  const ok = state.showPatterns && patternHits && patternHits.sym === state.selected;
+  candles.setMarkers(ok ? patternHits.hits.map((h) => ({
+    time: h.time, position: h.p.dir > 0 ? "belowBar" : "aboveBar", shape: h.p.dir > 0 ? "arrowUp" : "arrowDown",
+    color: h.p.dir > 0 ? "rgba(34,197,94,0.9)" : "rgba(240,80,110,0.9)", size: 1,
+  })) : []);
+}
+function togglePatterns() {
+  state.showPatterns = !state.showPatterns;
+  store.set("patterns", state.showPatterns);
+  $("patterns-toggle").classList.toggle("on", state.showPatterns);
+  refreshPatterns(state.selected);
+}
+
+/* 1Y / 5Y / ALL: a candle size plus how much history to show. */
+const VIEWS = { "1y": { interval: "1d", days: 365 }, "5y": { interval: "1w", days: 1826 }, all: { interval: "1w", days: null } };
+function showView(view, data) {
+  const ts = chart.timeScale();
+  if (!view.days || !data.length) { ts.fitContent(); return; }
+  const to = data.at(-1).time, from = to - view.days * 86400;
+  const i = data.findIndex((c) => c.time >= from);
+  ts.setVisibleLogicalRange({ from: Math.max(0, i) - 0.5, to: data.length + 2 });
+}
+/** The button that should look selected: a view (1Y/5Y/ALL) or a candle size. */
+function markIntervalButtons() {
+  const key = state.view || state.interval;
+  document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x.dataset.i === key));
 }
 
 function chartMessage(text) {
@@ -627,7 +688,8 @@ async function loadChart() {
   renderDecision(decisionCtx());
   chartMessage("Loading chart…");
   try {
-    const data = await getKlines(sym, interval, 500);
+    const view = VIEWS[state.view];
+    const data = await getKlines(sym, interval, view && !view.days ? (isStock(sym) ? 5000 : 1000) : 500);
     if (token !== klineLoadToken) return;
     const prec = fmt.precisionFor(data.at(-1)?.close ?? 1);
     candles.applyOptions({ priceFormat: { type: "price", precision: prec, minMove: 1 / 10 ** prec } });
@@ -635,7 +697,9 @@ async function loadChart() {
     volume.setData(data.map(volBar));
     setEmaData(data);
     lastCandle = data.at(-1) ?? null;
-    centerLive(data.length);
+    if (view) showView(view, data);
+    else centerLive(data.length);
+    refreshPatterns(sym);
     chartMessage("");
     paintHeader();
     scanner.analyzeSymbol(sym, interval);
@@ -651,10 +715,12 @@ async function loadChart() {
     onCandle: (c) => {
       if (token !== klineLoadToken) return;
       if (lastCandle && c.time < lastCandle.time) return;
+      const newCandle = lastCandle && c.time > lastCandle.time;
       candles.update(c);
       volume.update(volBar(c));
       updateEma(c);
       lastCandle = c;
+      if (newCandle) refreshPatterns(sym);   // the previous candle just closed: check it for patterns
       scanner.onCandle(c);
       if (!state.stats.has(sym)) paintHeader();
     },
@@ -829,6 +895,7 @@ function initShortcuts() {
     else if (k >= "1" && k <= "6") { document.querySelector(`#intervals button[data-i="${intervals[+k - 1]}"]`)?.click(); }
     else if (k === "l" || k === "L") centerLive();
     else if (k === "e" || k === "E") toggleEma();
+    else if (k === "p" || k === "P") togglePatterns();
     else if (k === "f" || k === "F") toggleForecast();
     else if (k === "a" || k === "A") $("alerts-btn").click();
     else if (k === "?") $("help").hidden = !$("help").hidden;
@@ -847,6 +914,12 @@ function initShortcuts() {
   });
 }
 
+/** Candle size or trading style changed: re-check the whole watchlist on the new candle size. */
+let ivTimer = 0;
+function onIntervalChanged() {
+  clearTimeout(ivTimer);
+  ivTimer = setTimeout(() => runOpportunities(), 600);
+}
 /** Top "Scan watchlist" button: refresh every price and re-check every market now, staying where you are. */
 function scanFromTop() {
   if (oppsRunning()) return;
@@ -943,6 +1016,7 @@ async function boot() {
     onAnalyzed: updateForecast,
     onPickInterval: (iv) => document.querySelector(`#intervals button[data-i="${iv}"]`)?.click(),
     onScanAll: scanWholeWatchlist,
+    restoreMarkers: () => drawPatternMarkers(),
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
@@ -966,6 +1040,8 @@ async function boot() {
     if (b.hasAttribute("data-scan-all")) scanWholeWatchlist();
   });
   $("ema-toggle").addEventListener("click", toggleEma);
+  $("patterns-toggle").addEventListener("click", togglePatterns);
+  $("patterns-toggle").classList.toggle("on", state.showPatterns);
   $("price-alert-btn").addEventListener("click", () => openPriceAlert(state.selected));
   $("help-btn").addEventListener("click", () => ($("help").hidden = !$("help").hidden));
   initAlerts({
@@ -1021,10 +1097,11 @@ async function boot() {
     getWatchlist: () => state.watchlist.slice(),
     getInfo: (sym) => state.bySymbol.get(sym),
     onPick: (sym, iv) => {
-      if (iv && iv !== state.interval) { state.interval = iv; store.set("interval", iv); document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x.dataset.i === iv)); }
+      if (iv && iv !== state.interval) { state.interval = iv; state.view = null; store.set("interval", iv); store.set("view", null); markIntervalButtons(); onIntervalChanged(); }
       if (sym === state.selected) loadChart(); else pick(sym);
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
+    getInterval: () => (state.interval === "1w" ? "1d" : state.interval),   // weekly has too little history to test setups: use daily
     onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); },
     onProgress: ({ running, done, total }) => {
       const b = $("scan-top");
@@ -1053,13 +1130,18 @@ async function boot() {
     onPick: (sym) => { if (sym) pick(sym); },
   });
 
+  if (!VIEWS[state.view]) state.view = null;
+  markIntervalButtons();
   document.querySelectorAll("#intervals button").forEach((b) => {
-    b.classList.toggle("on", b.dataset.i === state.interval);
     b.addEventListener("click", () => {
-      state.interval = b.dataset.i;
+      const v = VIEWS[b.dataset.i];
+      state.view = v ? b.dataset.i : null;
+      state.interval = v ? v.interval : b.dataset.i;
       store.set("interval", state.interval);
-      document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x === b));
+      store.set("view", state.view);
+      markIntervalButtons();
       loadChart();
+      onIntervalChanged();
     });
   });
   const setNewsTab = (tab) => {
@@ -1128,8 +1210,8 @@ async function boot() {
       state.selected = linkSym;
     }
     if (linkIv && ["1m", "5m", "15m", "1h", "4h", "1d"].includes(linkIv)) {
-      state.interval = linkIv; store.set("interval", linkIv);
-      document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x.dataset.i === linkIv));
+      state.interval = linkIv; state.view = null; store.set("interval", linkIv); store.set("view", null);
+      markIntervalButtons();
     }
     history.replaceState(null, "", "/");
   }

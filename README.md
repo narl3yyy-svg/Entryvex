@@ -51,7 +51,9 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 <details open>
 <summary><b>📈 Markets & live data</b></summary>
 
-- **Trading style switch:** Day trader (5-minute candles, fast signals first), Swing trader (4-hour), Long-term holder (daily, long-term view first).
+- **Trading style switch:** Day trader (5-minute candles, fast signals first), Swing trader (4-hour), Long-term holder (daily, long-term view first). The watchlist re-checks every market on the candle size you choose.
+- **Chart:** 1m to 1D candles plus 1Y / 5Y / ALL views; drag to move, Ctrl + mouse wheel to zoom; hover any candle for its prices, change and amount traded.
+- **Candlestick patterns:** hammer, engulfing, piercing line, morning/evening star, three white soldiers / black crows, harami, shooting star, hanging man, doji and more, marked on the chart. Each is measured on the market and candle size you're viewing; bullish ones are tested as buy setups and only become a BUY when their record here is proven.
 - **Crypto:** every Binance.US pair, streamed live 24/7.
 - **Stocks & ETFs worldwide:** US (NYSE/Nasdaq) plus London, Frankfurt, Paris, Amsterdam, Zurich, Tokyo, Hong Kong, Shanghai, Seoul, Mumbai, Sydney, Toronto, São Paulo, Mexico and more, priced in their own currency, with a market open/closed badge.
 - **World markets:** live S&P 500, Nasdaq, Dow, TSX, Bovespa, FTSE 100, DAX, CAC 40, Euro Stoxx 50, Nikkei, Hang Seng, Shanghai, Sensex, KOSPI, ASX 200, plus gold, oil, the dollar, EUR/USD, USD/JPY, the US 10-year yield and the VIX.
@@ -85,7 +87,6 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 - **One-position limit:** Entryvex never suggests putting more than 25% of your balance into a single trade.
 - **Trade cards:** quantity rounded to the exchange's rules, take-profit, stop-loss, dollar win/loss after fees, and step-by-step order instructions (Binance.US or your stock broker).
 - **My trades:** click *I took this trade*; Entryvex tracks it live and tells you when to sell (target, stop or time limit).
-- **Daily stop:** when today's losses hit your limit, Entryvex tells you to stop.
 - **Signal record:** Entryvex's own live report card, which checks whether its signals win as often as promised.
 </details>
 

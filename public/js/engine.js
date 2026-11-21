@@ -11,6 +11,7 @@
 // Long-only, because Binance.US spot accounts can't short.
 
 import { computeAll } from "./indicators.js";
+import { PATTERNS } from "./patterns.js";
 
 export const RULES = {
   stopAtr: 1.0,     // stop-loss distance in ATRs below entry
@@ -63,6 +64,13 @@ export const SETUPS = [
       c[i].close > x.ema20[i] && x.ema20[i] > x.ema50[i] && x.ema50[i] > x.ema200[i] &&
       x.rsi14[i] >= 55 && x.rsi14[i] <= 72 && x.rsi14[i - 1] < 55,
   },
+  // Bullish candlestick patterns (see patterns.js), each tested as its own buy setup.
+  // `strict`: with this many extra setups, one could look good by luck alone, so a pattern needs
+  // stronger evidence (t ≥ 2.5 instead of 2) before Entryvex calls it a proven edge.
+  ...PATTERNS.filter((p) => p.dir === 1).map((p) => ({
+    id: "p_" + p.id, name: p.name, plain: p.plain, pattern: true, strict: true,
+    test: (i, c, x) => p.test(c, i, x),
+  })),
 ];
 
 /**
@@ -77,7 +85,7 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
     const trades = backtest(candles, x, s, lastClosed, costPerSide);
     const stats = summarize(trades);
     const activeNow = lastClosed >= RULES.warmup && safeTest(s, lastClosed, candles, x);
-    return { ...s, trades, stats, activeNow, verdict: verdictFor(stats) };
+    return { ...s, trades, stats, activeNow, verdict: verdictFor(stats, s.strict) };
   });
 
   const a = x.atr14[lastClosed];
@@ -155,6 +163,13 @@ function buyTriggers(c, x, i, setups, price) {
         text: `RSI climbs back above 55 (now ${x.rsi14[i].toFixed(0)}) while the uptrend holds` }
     : { id: "momentum", setup: by.momentum, level: null, away: null, ready: false,
         text: "first needs a strong uptrend (price above its 20, 50 and 200-candle averages); there isn't one now" });
+  // Candlestick patterns: no single price level, just the shape forming after a decline.
+  const falling = i >= 6 && c[i].close < c[i - 5].close;
+  for (const s of setups.filter((q) => q.pattern)) {
+    out.push({ id: s.id, setup: s, level: null, away: null, ready: falling,
+      text: falling ? `a ${s.name.toLowerCase()} forms: ${s.plain.replace(/^After a decline, /, "").replace(/\.$/, "")}`
+        : `first needs a decline (a ${s.name.toLowerCase()} is a bottoming pattern); price isn't falling now` });
+  }
   return out;
 }
 
@@ -253,13 +268,14 @@ function summarize(trades) {
   };
 }
 
-function verdictFor(s) {
+function verdictFor(s, strict = false) {
+  const needT = strict ? 2.5 : 2;
   if (s.n < RULES.minTrades) return { level: "thin", label: "Too few", why: `Only ${s.n} past occurrences. Need ${RULES.minTrades}+ to measure.` };
   if (s.ev <= 0) return { level: "negative", label: "Loses money", why: "Average result after costs is negative." };
   if (s.tStat < 1)
     return { level: "flat", label: "No clear edge", why: `Slightly positive on average (${(s.ev * 100).toFixed(2)}%/trade), but so small compared with how much results vary that it's most likely luck.` };
   const consistent = s.evOld > 0 && s.evNew > 0;
-  if (s.winLo > s.breakeven && consistent && s.tStat >= 2)
+  if (s.winLo > s.breakeven && consistent && s.tStat >= needT)
     return { level: "edge", label: "Proven edge", why: "Profitable with about 95% statistical confidence, win rate above break-even even at the low end of its range, in both older and recent history." };
   return { level: "weak", label: "Weak edge", why: consistent
     ? "Profitable, and probably not just luck, but not proven: the win rate could still be at or below break-even."
