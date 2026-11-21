@@ -898,3 +898,7 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .br-empty { cursor: default; display: block !important; }
 .brand-scan { margin-left: 12px; padding: 5px 12px; }
 @media (max-width: 640px) { .brand-scan { margin-left: 8px; padding: 5px 9px; } .brand-scan span { display: none; } }
+.al-ntfy { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.al-ntfy h4 { margin: 0 0 4px; font-size: 13px; }
+.al-steps { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.al-topic { display: inline-block; padding: 2px 6px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); user-select: all; word-break: break-all; }

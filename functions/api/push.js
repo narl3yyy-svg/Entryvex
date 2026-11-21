@@ -14,6 +14,27 @@ const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^http:\/\/localhost(:\d
 const UA = "Mozilla/5.0 (compatible; Entryvex/1.0; +https://entryvex.trade)";
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const okId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{16,40}$/.test(id);
+// ntfy (ntfy.sh): a free phone app that receives notifications without the browser's push service.
+// The topic is a long random name made in the browser; anyone who knows it could read the alerts,
+// so it's never shown to anyone but the user, and alerts only contain symbols and prices.
+const okTopic = (t) => typeof t === "string" && /^entryvex-[A-Za-z0-9_-]{20,48}$/.test(t);
+async function sendNtfy(topic, msg) {
+  try {
+    const r = await fetch("https://ntfy.sh/", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ topic, title: String(msg.title || "Entryvex").slice(0, 120), message: String(msg.body || "").slice(0, 400),
+        click: "https://entryvex.trade" + (msg.url && msg.url.startsWith("/") ? msg.url : "/"), tags: ["chart_with_upwards_trend"] }),
+    });
+    return { ok: r.ok, status: r.status };
+  } catch { return { ok: false, status: 0 }; }
+}
+/** Send one alert to every channel this browser turned on. */
+async function deliver(rec, msg, keys) {
+  let gone = false, ok = false;
+  if (rec.sub) { const r = await sendPush(rec.sub, msg, keys).catch(() => ({ ok: false })); ok ||= r.ok; if (r.gone) gone = true; }
+  if (rec.ntfy) { const r = await sendNtfy(rec.ntfy, msg); ok ||= r.ok; }
+  return { ok, gone };
+}
 const isStock = (s) => typeof s === "string" && s.startsWith("S:");
 
 /* ---------------- HTTP endpoints ---------------- */
@@ -39,10 +60,15 @@ export async function onRequest(context) {
 
   if (path === "sync") {
     const sub = body.subscription;
-    if (!sub || typeof sub.endpoint !== "string" || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) return json({ error: "bad subscription" }, 400);
+    const validSub = sub && typeof sub.endpoint === "string" && /^https:\/\//.test(sub.endpoint) && sub.keys?.p256dh && sub.keys?.auth;
+    if (sub && !validSub) return json({ error: "bad subscription" }, 400);
+    const ntfy = body.ntfy == null ? null : okTopic(body.ntfy) ? body.ntfy : undefined;
+    if (ntfy === undefined) return json({ error: "bad ntfy topic" }, 400);
+    if (!validSub && !ntfy) return json({ error: "no channel" }, 400);
     const prev = (await env.PUSH.get(key, "json")) || {};
     const rec = {
-      sub: { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) } },
+      sub: validSub ? { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) } } : null,
+      ntfy,
       prefs: cleanPrefs(body.prefs || {}),
       fired: prev.fired || {},
       updated: Date.now(),
@@ -55,9 +81,9 @@ export async function onRequest(context) {
     const rec = await env.PUSH.get(key, "json");
     if (!rec) return json({ error: "not subscribed" }, 404);
     const keys = await vapidKeys(env.PUSH);
-    const r = await sendPush(rec.sub, { title: "Entryvex alerts are on ✓", body: "You'll get notifications like this even when Entryvex is closed.", url: "/" }, keys);
-    if (r.gone) await env.PUSH.delete(key);
-    return json({ ok: r.ok, status: r.status });
+    const r = await deliver(rec, { title: "Entryvex alerts are on ✓", body: "You'll get notifications like this even when Entryvex is closed.", url: "/" }, keys);
+    if (r.gone && !rec.ntfy) await env.PUSH.delete(key);
+    return json({ ok: r.ok });
   }
   return json({ error: "not found" }, 404);
 }
@@ -188,12 +214,12 @@ export async function runAlerts(env, now = Date.now()) {
     if (!msgs.length) continue;
     let gone = false;
     for (const msg of msgs.slice(0, 5)) {
-      const r = await sendPush(rec.sub, msg, keys).catch(() => ({ ok: false }));
-      if (r.gone) { gone = true; break; }
+      const r = await deliver(rec, msg, keys);
+      if (r.gone) { gone = true; if (!rec.ntfy) break; rec.sub = null; }
     }
     // Keep the "already sent" list small: forget entries older than 3 days.
     for (const k of Object.keys(fired)) if (now - fired[k] > 3 * 86400e3) delete fired[k];
-    if (gone) await env.PUSH.delete(name);
+    if (gone && !rec.ntfy) await env.PUSH.delete(name);
     else await env.PUSH.put(name, JSON.stringify({ ...rec, fired }), { expirationTtl: 60 * 60 * 24 * 45 });
   }
 }

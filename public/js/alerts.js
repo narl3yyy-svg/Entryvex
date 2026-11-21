@@ -6,7 +6,7 @@ import { analyze } from "./engine.js";
 import { getKlineHistory, getKlines, getBookTicker, isStock } from "./market.js";
 import { coinName } from "./coins.js";
 import { logFromAnalysis } from "./signals.js";
-import { pushSupported, pushEnabled, enablePush, disablePush, testPush, scheduleSync } from "./push.js";
+import { pushSupported, pushEnabled, enablePush, disablePush, testPush, scheduleSync, ntfyEnabled, ntfyTopic, enableNtfy, disableNtfy } from "./push.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -171,6 +171,7 @@ let scanning = false;
 let lastScanText = "";
 let pushMsg = "";
 let pushBusy = false;
+let ntfyMsg = "";
 export async function runScan() {
   if (scanning || !cfg.setup.on) return;
   scanning = true;
@@ -260,6 +261,10 @@ export function initAlerts(h) {
       pushBusy = false;
       renderDrawer();
     }
+    if (t.id === "al-ntfy-copy") { try { await navigator.clipboard.writeText(ntfyTopic()); t.textContent = "Copied ✓"; } catch { t.textContent = "Select and copy it"; } }
+    if (t.id === "al-ntfy-on") { ntfyMsg = "Connecting…"; renderDrawer(); const r = await enableNtfy(); ntfyMsg = r.msg; renderDrawer(); }
+    if (t.id === "al-ntfy-off") { await disableNtfy(); ntfyMsg = "Off. Your phone won't get Entryvex alerts any more. You can unsubscribe the topic in the ntfy app."; renderDrawer(); }
+    if (t.id === "al-ntfy-test") { ntfyMsg = (await testPush().catch(() => false)) ? "Test sent. It should pop up on your phone within a few seconds. Nothing? Check the topic in the app matches exactly." : "Couldn't send the test. Try Turn off, then Connect again."; renderDrawer(); }
     if (t.id === "al-push-off") { await disablePush(); pushMsg = "Off. This device won't get alerts while Entryvex is closed."; renderDrawer(); }
     if (t.id === "al-push-test") { pushMsg = (await testPush().catch(() => false)) ? "Test sent. It should appear within a few seconds." : "Couldn't send the test. Try turning it off and on again."; renderDrawer(); }
     if (t.id === "al-test") { notify({ kind: "info", symbol: null, title: "Test alert", body: "This is what an Entryvex alert looks like." }); }
@@ -338,6 +343,19 @@ function renderDrawer() {
              : `<button class="btn" id="al-push-on">Turn on closed-app alerts</button>`}</div>
            <p class="muted tiny" id="al-push-msg">${pushMsg || "Stored on the server: only an anonymous notification address and these alert settings. No name, email or account."}</p>`
         : `<p class="muted small">This browser can't receive alerts while closed. On iPhone/iPad: add Entryvex to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.</p>`}
+      <div class="al-ntfy">
+        <h4>📱 Or get them on your phone with the free ntfy app</h4>
+        <p class="muted small">Works even when the browser option above doesn't (it doesn't use your browser's push service). No account needed.</p>
+        ${ntfyEnabled()
+          ? `<div class="al-row"><span class="pill pill-edge">Phone alerts on</span><button class="ghost-btn" id="al-ntfy-test">Send a test</button><button class="link-btn" id="al-ntfy-off">Turn off</button></div>
+             <p class="muted tiny">Your private topic: <code class="mono">${fmt.esc(ntfyTopic())}</code></p>`
+          : `<ol class="small al-steps">
+              <li>Install <strong>ntfy</strong> from the <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener noreferrer">Google Play Store</a> or <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener noreferrer">App Store</a>.</li>
+              <li>In the app tap <strong>＋</strong> (Subscribe to topic) and enter exactly:<br><code class="mono al-topic">${fmt.esc(ntfyTopic())}</code> <button class="link-btn" id="al-ntfy-copy">Copy</button></li>
+              <li>Then press: <button class="btn" id="al-ntfy-on">Connect my phone</button></li>
+            </ol>`}
+        <p class="muted tiny" id="al-ntfy-msg">${ntfyMsg || "Keep the topic private: anyone who knows it could see your alerts (symbols and prices only). Alerts are sent through ntfy.sh."}</p>
+      </div>
     </section>
 
     <section>

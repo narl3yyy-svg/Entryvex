@@ -10,6 +10,30 @@ let syncTimer = null;
 
 export const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
 export const pushEnabled = () => !!store.get("pushOn", false);
+export const ntfyEnabled = () => !!store.get("ntfyOn", false);
+const anyOn = () => pushEnabled() || ntfyEnabled();
+
+/** This browser's private ntfy topic (long and random, so nobody can guess it). */
+export function ntfyTopic() {
+  let t = store.get("ntfyTopic", null);
+  if (!t) {
+    const b = crypto.getRandomValues(new Uint8Array(18));
+    t = "entryvex-" + btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    store.set("ntfyTopic", t);
+  }
+  return t;
+}
+export async function enableNtfy() {
+  store.set("ntfyOn", true);
+  const ok = await sync().catch(() => false);
+  if (!ok) { store.set("ntfyOn", false); return { ok: false, msg: "Couldn't reach the alert server. Try again in a minute." }; }
+  return { ok: true, msg: "Connected. Press “Send a test” and it should pop up on your phone within a few seconds." };
+}
+export async function disableNtfy() {
+  store.set("ntfyOn", false);
+  if (pushEnabled()) await sync().catch(() => {});
+  else await fetch("/api/push/remove", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: browserId() }) }).catch(() => {});
+}
 
 function browserId() {
   let id = store.get("pushId", null);
@@ -27,7 +51,7 @@ const keyBytes = (b64) => {
 
 export function initPush(h) {
   hooks = { ...hooks, ...h };
-  if (pushEnabled()) scheduleSync(2000);   // refresh the server copy on every visit
+  if (anyOn()) scheduleSync(2000);   // refresh the server copy on every visit
 }
 
 /** Turn closed-app alerts on: ask permission, subscribe, and send settings. Returns a status message. */
@@ -85,6 +109,11 @@ export async function enablePush(onStep = () => {}) {
 
 export async function disablePush() {
   store.set("pushOn", false);
+  if (ntfyEnabled()) {   // keep phone (ntfy) alerts running
+    try { const reg = await navigator.serviceWorker.getRegistration(); const sub = await reg?.pushManager.getSubscription(); await sub?.unsubscribe(); } catch {}
+    await sync().catch(() => {});
+    return;
+  }
   try {
     const reg = await navigator.serviceWorker.getRegistration();
     const sub = await reg?.pushManager.getSubscription();
@@ -100,20 +129,23 @@ export async function testPush() {
 
 /** Settings changed: send the new copy to the server shortly (debounced). */
 export function scheduleSync(delay = 3000) {
-  if (!pushEnabled()) return;
+  if (!anyOn()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => sync().catch(() => {}), delay);
 }
 
 async function sync(sub) {
-  if (!sub) {
-    const reg = await navigator.serviceWorker.getRegistration();
-    sub = await reg?.pushManager.getSubscription();
-    if (!sub) { store.set("pushOn", false); return false; }
+  if (!sub && pushEnabled()) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      sub = await reg?.pushManager.getSubscription();
+    } catch { sub = null; }
+    if (!sub) store.set("pushOn", false);
   }
+  if (!sub && !ntfyEnabled()) return false;
   const res = await fetch("/api/push/sync", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: browserId(), subscription: sub.toJSON(), prefs: hooks.buildPrefs() }),
+    body: JSON.stringify({ id: browserId(), subscription: sub ? sub.toJSON() : null, ntfy: ntfyEnabled() ? ntfyTopic() : null, prefs: hooks.buildPrefs() }),
   });
   return res.ok;
 }
