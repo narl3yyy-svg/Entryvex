@@ -25,6 +25,7 @@ import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx } from "./fx.js";
 import { renderEarnings } from "./earnings.js";
+import { renderNewsAi } from "./newsai.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -750,8 +751,12 @@ async function loadReport(base, token) {
   const newsKey = stock ? sym : base;
   el.innerHTML = `
     <section class="r-sec" id="r-ai"><h3>What's happening</h3><div class="muted small">Reading the latest ${fmt.esc(name)} headlines…</div></section>
+    <section class="r-sec" id="r-newsai"></section>
     <section class="r-sec" id="r-mood"></section>
     <section class="r-sec" id="r-card"><h3>${fmt.esc(name)} report card</h3><div class="muted small">Loading ${stock ? "company" : "coin"} data…</div></section>`;
+
+  // AI news read (scored headlines + its measured record)
+  renderNewsAi($("r-newsai"), sym, name, () => token === newsToken).catch(() => {});
 
   // News mood + AI summary
   fetchNews(newsKey).then((data) => {

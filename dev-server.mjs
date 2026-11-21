@@ -15,6 +15,7 @@ const api = {
   "/api/market": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/market.js", import.meta.url))).href),
   "/api/briefing": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/briefing.js", import.meta.url))).href),
   "/api/ask": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/ask.js", import.meta.url))).href),
+  "/api/newsai": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/newsai.js", import.meta.url))).href),
 };
 
 createServer(async (req, res) => {

@@ -89,7 +89,7 @@ async function getJSON(url) {
 const yahooTicker = (sym) => (isStock(sym) ? sym.slice(2) : `${sym.replace(/(USDT|USDC|USD)$/, "")}-USD`);
 
 /** Candles for a symbol: Binance.US for crypto (Yahoo as a fallback), Yahoo for stocks. */
-async function candles(sym, interval, limit) {
+export async function candles(sym, interval, limit) {
   if (!isStock(sym)) {
     try {
       const k = await getJSON(`https://api.binance.us/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`);

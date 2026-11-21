@@ -7,8 +7,9 @@ import { onRequestPost as askHandler } from "../functions/api/ask.js";
 import { onRequestPost as briefingHandler } from "../functions/api/briefing.js";
 import { onRequestGet as marketHandler } from "../functions/api/market.js";
 import { onRequest as pushHandler, runAlerts } from "../functions/api/push.js";
+import { onRequestGet as newsAiHandler, cronNews } from "../functions/api/newsai.js";
 
-const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler };
+const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler, "/api/newsai": newsAiHandler };
 const POST = { "/api/ask": askHandler, "/api/briefing": briefingHandler };
 
 export default {
@@ -23,8 +24,10 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  // Every 5 minutes: check everyone's closed-app alerts and send notifications.
+  // Every 5 minutes: check everyone's closed-app alerts and send notifications, and let the AI read
+  // the news for one tracked market (each one about once an hour) to build its measured record.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runAlerts(env, event.scheduledTime));
+    ctx.waitUntil(cronNews(env, event.scheduledTime));
   },
 };

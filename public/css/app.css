@@ -816,3 +816,13 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .ct-vol + .ct-vol { border-top: 0; margin-top: 0; padding-top: 0; }
 .ct-vol strong { font: 600 12px var(--mono); }
 @media (hover: none) { .chart-tip { min-width: 150px; font-size: 11px; } }
+
+/* AI news read */
+.nai-score { display: flex; align-items: center; gap: 10px; margin: 4px 0 6px; }
+.nai-label { font-weight: 600; font-size: 13px; text-transform: capitalize; min-width: 120px; }
+.nai-bar { position: relative; flex: 1; height: 6px; border-radius: 999px; background: linear-gradient(90deg, rgba(240,80,110,.7), #2a3140 50%, rgba(34,197,94,.7)); }
+.nai-bar i { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text); }
+.nai-top { margin: 6px 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.nai-top a { color: inherit; }
+.nai-record { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.nai-pool { margin-top: 4px; }
