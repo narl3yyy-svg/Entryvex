@@ -105,6 +105,9 @@ async function outsideChecks(c) {
   return v;
 }
 
+/** Outside checks already loaded for a market (for the AI analyst). */
+export function getChecks(sym, interval) { return ctxCache.get(`${sym}:${interval}`)?.v || null; }
+
 /* ---------------- Render ---------------- */
 let token = 0;
 export async function renderDecision(c) {

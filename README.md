@@ -74,6 +74,8 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 <details open>
 <summary><b>💼 Your trades</b></summary>
 
+- **If you buy now:** pick an amount and see the shares/coins you'd get, fees, break-even price, the measured chance of profit, the likely dollar range, a 1-in-20 bad day, and what holding 3 months has typically done, all in dollars for your account.
+- **One-position limit:** Entryvex never suggests putting more than 25% of your balance into a single trade.
 - **Trade cards:** quantity rounded to the exchange's rules, take-profit, stop-loss, dollar win/loss after fees, and step-by-step order instructions (Binance.US or your stock broker).
 - **My trades:** click *I took this trade*; Entryvex tracks it live and tells you when to sell (target, stop or time limit).
 - **Daily stop:** when today's losses hit your limit, Entryvex tells you to stop.
@@ -85,7 +87,8 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 
 - **Report card:** for stocks, the latest quarterly sales and profit from **SEC filings**, margin, market cap and P/E; for crypto, size, supply and distance from its all-time high.
 - **News:** live headlines tagged ▲ positive / ▼ negative, with an AI summary of what's happening.
-- **Ask the analyst:** an AI that answers questions using the live data on your screen.
+- **Watchlist briefing:** one tap and the AI reads the latest news for every coin and stock on your watchlist and summarizes what's going on.
+- **Ask the analyst:** an AI that answers using everything Entryvex knows: live price, forecasts, measured signals and buy triggers, outside checks, long-term stats, earnings, your buy-now numbers and signals across your whole watchlist.
 </details>
 
 ---

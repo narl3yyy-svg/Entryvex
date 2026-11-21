@@ -59,6 +59,18 @@ export function setupMarkets(min = "go") {
   return out.slice(0, 25);
 }
 
+/** One-line summary of Entryvex's signals for a symbol across 15m/1h/4h (for the AI). */
+export function signalFor(sym) {
+  const mine = rows.filter((x) => x.sym === sym);
+  if (!mine.length) return "not scanned yet";
+  const buy = mine.find(({ r }) => isBuy(r));
+  if (buy) return `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} (${buy.r.best.name})`;
+  const watch = mine.flatMap(({ iv, r }) => (r.liquidity && !r.liquidity.ok) ? [] : r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").map((s) => `${iv} ${s.name}`));
+  if (watch.length) return `no buy signal now; setups with a track record: ${watch.slice(0, 2).join(", ")}`;
+  if (mine.every(({ r }) => r.liquidity && !r.liquidity.ok)) return "barely trades on Binance.US (not tradeable here)";
+  return "no setup with a reliable track record";
+}
+
 function isBuy(r) {
   if (r.liquidity && !r.liquidity.ok) return false;
   return r.overall.level === "go" || (r.overall.level === "caution" && r.best?.verdict.level === "weak");

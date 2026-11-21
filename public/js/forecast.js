@@ -78,7 +78,22 @@ export function forecast(candles, intervalSec, H = 20) {
     pUp: up / all, nUp: all,
     pUpTrend: allC ? upC / allC : NaN, nTrend: allC, trendLabel: nowAbove ? "above its 50-candle average (uptrend)" : "below its 50-candle average (downtrend)",
     samples: n,
+    // For "what's the chance price ends above X?" questions (see probAbove below).
+    zSorted: Float64Array.from(zH).sort(), scale: volNow * Math.sqrt(H),
   };
+}
+
+/**
+ * Measured probability that price is ABOVE `level` at the end of the forecast horizon:
+ * the share of past H-candle moves (scaled to today's volatility) that would have ended above it.
+ */
+export function probAbove(f, level) {
+  if (!f || !f.zSorted?.length || !(level > 0) || !(f.scale > 0)) return NaN;
+  const zNeed = Math.log(level / f.live) / f.scale;
+  const a = f.zSorted;
+  let lo = 0, hi = a.length;           // first index with a[i] > zNeed
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] <= zNeed) lo = mid + 1; else hi = mid; }
+  return (a.length - lo) / a.length;
 }
 
 export function describeOdds(p) {

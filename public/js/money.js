@@ -124,7 +124,7 @@ export function renderTradeCard(c) {
     ? `<div class="warn">One share ($${fmt.price(sz.entry)}) costs more than this trade's size allows. Increase your balance or max loss %, or pick a cheaper stock.</div>`
     : `<div class="warn">This trade would be smaller than Binance.US's minimum order (${c.quote} ${fmt.price(sz.minSpend)}). Increase your balance or risk %.</div>`;
   else if (sz.reason === "costs-eat-target") warn = `<div class="warn">Fees and spread are bigger than the profit target. This trade can't make money. Skip it.</div>`;
-  else if (sz.capped) warn = `<div class="note">Capped at your full balance: the stop is so close that risking ${settings.riskPct}% would need more money than you have. Actual risk is $${sz.lossUsd.toFixed(2)}.</div>`;
+  else if (sz.capped) warn = `<div class="note">Capped at 25% of your balance so one position can't dominate your account (the stop is close, so risking the full ${settings.riskPct}% would need more). Actual risk is $${sz.lossUsd.toFixed(2)}.</div>`;
 
   const ocoStopLimit = roundTick(sz.stop * 0.998, c.rules.tickSize);
   const q = stock ? `${trimQty(sz.qty)} share${sz.qty === 1 ? "" : "s"} of ${fmt.esc(c.base)}` : `${trimQty(sz.qty)} ${fmt.esc(c.base)}`;
@@ -226,7 +226,7 @@ function renderCalc() {
     </div>
     ${sz.reason === "too-small" ? `<div class="warn">Below Binance.US's minimum order (${fmt.esc(ctx.quote)} ${fmt.price(sz.minSpend)}).</div>` : ""}
     ${sz.reason === "costs-eat-target" ? `<div class="warn">Fees and spread are bigger than this target. It can't make money.</div>` : ""}
-    ${sz.capped ? `<div class="note">Capped at your full balance; actual risk is $${sz.lossUsd.toFixed(2)}.</div>` : ""}
+    ${sz.capped ? `<div class="note">Capped at 25% of your balance (one-position limit); actual risk is $${sz.lossUsd.toFixed(2)}.</div>` : ""}
     <p class="small muted">This calculator only does the math. Unlike the scanner, it has no measured track record behind it. You'd need to win at least ${Math.round(sz.breakevenWin * 100)}% of trades like this just to break even.</p>
     ${sz.ok ? `<div class="take-row">${takeButton({ symbol: ctx.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: "My own plan", source: "calculator" })}
       <span class="muted small">Adds it to My trades so Entryvex tracks the result.</span></div>` : ""}`;

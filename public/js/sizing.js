@@ -1,6 +1,9 @@
 // Position sizing: how much to buy so that hitting the stop-loss costs a fixed,
 // chosen amount of the account. Pure functions, no DOM.
 
+/** Largest share of the balance Entryvex will suggest for a single position. */
+export const MAX_POSITION_PCT = 25;
+
 /** Round DOWN to a multiple of step (exchange quantity rules). */
 export function floorStep(value, step) {
   if (!step || step <= 0) return value;
@@ -47,9 +50,12 @@ export function sizePosition(o) {
   const gainPerDollar = (t - e) / e - 2 * costPerSide;
   const riskBudget = balance * (riskPct / 100);
 
+  // Never put more than maxPositionPct of the balance into one position (default 25%), even if the
+  // stop is so close that risking riskPct would "allow" more. Concentration is a risk of its own.
+  const maxSpend = balance * (o.maxPositionPct ?? MAX_POSITION_PCT) / 100;
   let spend = riskBudget / lossPerDollar;
-  const capped = spend > balance;
-  if (capped) spend = balance;
+  const capped = spend > maxSpend;
+  if (capped) spend = maxSpend;
 
   let qty = floorStep(spend / e, rules.stepSize);
   spend = qty * e;
@@ -58,6 +64,7 @@ export function sizePosition(o) {
   out.qty = qty;
   out.spend = spend;
   out.capped = capped;
+  out.maxSpend = maxSpend;
   out.riskBudget = riskBudget;
   out.lossUsd = spend * lossPerDollar;
   out.winUsd = spend * gainPerDollar;

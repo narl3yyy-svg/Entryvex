@@ -8,6 +8,7 @@ const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^http:\/\/localhost(:\d
 const SYSTEM = `You are the Entryvex Analyst, built into the Entryvex trading research website. You help a beginner understand LIVE market data for crypto coins and US stocks/ETFs so they can make their own decisions.
 
 Rules:
+- The LIVE DATA includes: price and daily change, the tested short-term forecast, the scanner's measured setups, "entryvexSays" (verdict, liquidity, and the exact BUY trigger conditions with past records), outside checks (bigger trend, overall market, fear gauge, news mood), long-term hold statistics, company fundamentals (stocks), the user's "ifUserBuysNow" numbers (amount, break-even, chance of profit, bad-day loss, 3-month outcomes), and signals across the whole watchlist. Use whichever parts answer the question, and say which.
 - Base every statement on the LIVE DATA JSON. Quote its actual numbers (prices, %, counts). Never invent prices, news, events, percentages or indicators that are not in it. If the data doesn't answer the question, say so plainly.
 - You cannot see the future and must not predict exact prices. For "will it go up / should I buy / when should I sell" questions, answer with the MEASURED evidence: the forecast range and its tested accuracy, the measured chance of being higher, the scanner verdict and that setup's historical results after costs, and the dollar risk using the user's settings when present.
 - Be direct and honest. If the scanner says WAIT or NO TRADE, say the data does not support a trade right now and explain why in one or two sentences. If it says GO or CAUTION, walk through the plan (buy zone, stop-loss, take-profit, size) and make clear it can still lose.
@@ -22,7 +23,7 @@ export async function onRequestPost(context) {
   if (origin && !ALLOWED.some((re) => re.test(origin))) return json({ error: "forbidden" }, 403);
 
   const raw = await request.text();
-  if (raw.length > 30_000) return json({ error: "Request too large." }, 413);
+  if (raw.length > 48_000) return json({ error: "Request too large." }, 413);
   let body;
   try { body = JSON.parse(raw); } catch { return json({ error: "Bad request." }, 400); }
 
@@ -32,7 +33,7 @@ export async function onRequestPost(context) {
     role: m.role === "assistant" ? "assistant" : "user",
     content: String(m.content || "").slice(0, 1500),
   })) : [];
-  const data = JSON.stringify(body.context || {}).slice(0, 20_000);
+  const data = JSON.stringify(body.context || {}).slice(0, 32_000);
 
   if (!env || !env.AI) return json({ answer: "The AI analyst runs on the live site (entryvex.trade) only.", model: null });
 
@@ -46,7 +47,7 @@ export async function onRequestPost(context) {
   let lastErr = null;
   for (const model of MODELS) {
     try {
-      const out = await env.AI.run(model, { messages, max_tokens: 600, temperature: 0.3 });
+      const out = await env.AI.run(model, { messages, max_tokens: 700, temperature: 0.25 });
       const answer = (out && (out.response ?? out.result?.response)) || "";
       if (answer.trim()) return json({ answer: answer.trim(), model });
     } catch (e) { lastErr = String((e && e.message) || e); }

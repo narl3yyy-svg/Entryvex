@@ -100,3 +100,13 @@ test("long-term stats: hold odds are a valid probability and ranges are ordered"
   assert.ok(lt.vol > 10 && lt.vol < 40, `annualized vol ${lt.vol} should be near 1.5% * sqrt(252) ≈ 24%`);
   assert.equal(longTermStats(daily.slice(0, 100), true), null);
 });
+
+test("probAbove: 50% near the middle, falls as the level rises, matches the 80% range edges", async () => {
+  const { probAbove } = await import("../public/js/forecast.js");
+  const f = forecast(randomWalk(3000, 11), 900, 20);
+  const pMid = probAbove(f, f.mid);
+  assert.ok(Math.abs(pMid - 0.5) < 0.03, `middle should be ~50%, got ${pMid}`);
+  assert.ok(probAbove(f, f.live * 0.95) > probAbove(f, f.live) && probAbove(f, f.live) > probAbove(f, f.live * 1.05));
+  assert.ok(Math.abs(probAbove(f, f.range80[1]) - 0.10) < 0.02, "~10% of outcomes end above the top of the 80% range");
+  assert.ok(Math.abs(probAbove(f, f.range80[0]) - 0.90) < 0.02, "~90% end above the bottom of the 80% range");
+});

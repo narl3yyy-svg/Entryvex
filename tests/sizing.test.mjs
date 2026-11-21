@@ -13,16 +13,22 @@ test("rounding follows exchange steps", () => {
 });
 
 test("risking 1% of $1000 with a 1% stop loses at most $10 including costs", () => {
-  const r = sizePosition({ balance: 1000, riskPct: 1, entry: 60000, stop: 59400, target: 60900, costPerSide: 0.0002, rules: BTC });
+  // Pure risk math (position limit lifted): spend ≈ $10 / (1% + 2×0.02%) ≈ $961.
+  const r = sizePosition({ balance: 1000, riskPct: 1, entry: 60000, stop: 59400, target: 60900, costPerSide: 0.0002, rules: BTC, maxPositionPct: 100 });
   assert.ok(r.ok);
   assert.ok(r.lossUsd <= 10.0001 && r.lossUsd > 9.9);
   assert.ok(r.spend < 1000);
   assert.ok(r.winUsd > 0 && r.rr > 1);
+  // With the default 25% one-position limit the same trade is capped, so it risks less than $10.
+  const capped = sizePosition({ balance: 1000, riskPct: 1, entry: 60000, stop: 59400, target: 60900, costPerSide: 0.0002, rules: BTC });
+  assert.ok(capped.capped && capped.spend <= 250 && capped.lossUsd < 10);
 });
 
 test("a very tight stop is capped at the account balance", () => {
   const r = sizePosition({ balance: 1000, riskPct: 1, entry: 60000, stop: 59900, target: 60200, costPerSide: 0.0002, rules: BTC });
-  assert.ok(r.capped && r.spend <= 1000 && r.lossUsd < 10);
+  assert.ok(r.capped && r.spend <= 250 && r.lossUsd < 10, "capped at the 25% one-position limit");
+  const full = sizePosition({ balance: 1000, riskPct: 1, entry: 60000, stop: 59900, target: 60200, costPerSide: 0.0002, rules: BTC, maxPositionPct: 100 });
+  assert.ok(full.spend > 900 && full.spend <= 1000);
 });
 
 test("orders under the exchange minimum are rejected", () => {

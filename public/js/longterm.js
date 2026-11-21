@@ -55,13 +55,21 @@ export function longTermStats(daily, stock) {
   const vol = Math.sqrt(lr.reduce((a, b) => a + (b - m) ** 2, 0) / (lr.length - 1)) * Math.sqrt(perYear) * 100;
 
   const yearHigh = Math.max(...close.slice(-perYear));
+  // A "bad day": the 5th-percentile daily move over the last year (1 day in 20 was this bad or worse).
+  const dailyMoves = [];
+  for (let i = Math.max(1, n - perYear); i < n; i++) dailyMoves.push(close[i] / close[i - 1] - 1);
+  const badDay = quantile([...dailyMoves].sort((a, b) => a - b), 0.05);
   return {
     last, above200: nowAbove, s200: s200[n - 1], s50: s50[n - 1], golden: s50[n - 1] > s200[n - 1],
     r1m: ret(30), r3m: ret(91), r6m: ret(182), r1y: ret(365),
-    fromHigh: (last / yearHigh - 1) * 100, vol, H, years: (time[n - 1] - time[200]) / (365 * 86400),
+    fromHigh: (last / yearHigh - 1) * 100, vol, H, badDay, years: (time[n - 1] - time[200]) / (365 * 86400),
     hold: summarize(all), holdSame: summarize(same),
   };
 }
+
+/** Long-term stats already loaded for a symbol (or null). */
+export function cachedLongTerm(sym) { return cache.get(sym)?.lt ?? null; }
+export function cachedFundamentals(sym) { return cache.get(sym)?.fundamentals ?? null; }
 
 export async function renderLongTerm(c) {
   const el = $("longterm");
@@ -86,6 +94,7 @@ export async function renderLongTerm(c) {
     }
     if (c.symbol !== sym) return;
     el.innerHTML = html(c, hit.lt, hit.fundamentals, stock);
+    c.onLoaded?.();
   } catch (e) {
     el.innerHTML = `<div class="lt-card"><div class="d-when-title">Long-term view</div><div class="muted small">Couldn't load long-term data right now.</div></div>`;
   }

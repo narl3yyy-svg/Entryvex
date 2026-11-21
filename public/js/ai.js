@@ -2,6 +2,10 @@
 // on screen to /api/ask, and shows the answer.
 import * as fmt from "./format.js";
 import { openTrades } from "./journal.js";
+import { getChecks } from "./decision.js";
+import { cachedLongTerm, cachedFundamentals } from "./longterm.js";
+import { getBuyNowSummary } from "./buynow.js";
+import { currentBuys, topWatch, signalFor } from "./opportunities.js";
 
 const $ = (id) => document.getElementById(id);
 let live = {};
@@ -27,6 +31,13 @@ export function setAIContext(ctx) {
 
 export function initAI(h) {
   hooks = { ...hooks, ...h };
+  $("ai-briefing").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.id === "brief-run") runBriefing(true);
+    if (b.dataset.sym) hooks.onPick?.(b.dataset.sym);
+  });
+  renderBriefing(loadBriefing());
   $("ai-form").addEventListener("submit", (e) => { e.preventDefault(); ask($("ai-input").value); });
   $("ai-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask($("ai-input").value); }
@@ -41,6 +52,57 @@ function renderSuggest() {
   const coin = live.base || "this coin";
   $("ai-suggest").innerHTML = SUGGEST.map((q) => q.replace("{coin}", coin))
     .map((q) => `<button class="chip" data-q="${fmt.esc(q)}">${fmt.esc(q)}</button>`).join("");
+}
+
+/* ---------------- Watchlist briefing ---------------- */
+function loadBriefing() {
+  try { return JSON.parse(localStorage.getItem("evx.briefing") || "null"); } catch { return null; }
+}
+let briefingBusy = false;
+async function runBriefing() {
+  if (briefingBusy) return;
+  briefingBusy = true;
+  renderBriefing(loadBriefing(), "Reading the latest news for every coin and stock on your watchlist…");
+  try {
+    const list = hooks.getWatchlistInfo?.() || [];
+    const since = Date.now() - 48 * 3600e3;
+    const items = [];
+    const queue = [...list];
+    const worker = async () => {
+      while (queue.length) {
+        const w = queue.shift();
+        let headlines = [];
+        try {
+          const qs = w.kind === "stock" ? `stock=${encodeURIComponent(w.ticker)}&name=${encodeURIComponent(w.name)}` : `coin=${encodeURIComponent(w.ticker)}`;
+          const d = await (await fetch(`/api/news?${qs}`)).json();
+          headlines = d.items.filter((i) => !i.published || i.published >= since).slice(0, 4).map((i) => ({ title: i.title, mood: i.mood?.label }));
+        } catch {}
+        items.push({ ...w, headlines });
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    items.sort((a, b) => list.findIndex((x) => x.sym === a.sym) - list.findIndex((x) => x.sym === b.sym));
+    const res = await fetch("/api/briefing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || "unavailable");
+    const saved = { ...d, symbols: Object.fromEntries(items.map((x) => [x.ticker.toUpperCase(), x.sym])), at: Date.now() };
+    try { localStorage.setItem("evx.briefing", JSON.stringify(saved)); } catch {}
+    renderBriefing(saved);
+  } catch (e) {
+    renderBriefing(loadBriefing(), `Couldn't create the briefing: ${e.message}. Try again in a minute.`);
+  }
+  briefingBusy = false;
+}
+function renderBriefing(b, status = "") {
+  const el = $("ai-briefing");
+  const fresh = b && Date.now() - b.at < 30 * 60e3;
+  el.innerHTML = `<div class="brief-head"><strong>Watchlist briefing</strong>
+      <button class="btn" id="brief-run" ${briefingBusy ? "disabled" : ""}>${b ? "Refresh briefing" : "Brief me on my watchlist"}</button></div>
+    ${status ? `<p class="small muted">${briefingBusy ? '<span class="typing"><i></i><i></i><i></i></span> ' : ""}${fmt.esc(status)}</p>` : ""}
+    ${b?.lines?.length ? `<ul class="brief-list">${b.lines.map((l) => `<li><button class="link-btn brief-sym" data-sym="${fmt.esc(b.symbols?.[l.ticker] || "")}">${fmt.esc(l.ticker)}</button> ${fmt.esc(l.text)}</li>`).join("")}</ul>
+      ${b.watch ? `<p class="small brief-watch"><strong>Watch:</strong> ${fmt.esc(b.watch)}</p>` : ""}
+      <p class="tiny muted">Written by AI from each symbol's latest headlines, price change and Entryvex's signals${b.at ? ` at ${new Date(b.at).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` : ""}${fresh ? "" : " (over 30 minutes old: refresh for the latest)"}. It can be wrong; tap a ticker to check.</p>`
+      : (!status ? `<p class="small muted">One tap: Entryvex reads the latest news for every coin and stock on your watchlist and summarizes what's going on.</p>` : "")}`;
 }
 
 function round(v, d = 6) { return v == null || !isFinite(v) ? null : +(+v).toPrecision(d); }
@@ -79,6 +141,27 @@ async function snapshot() {
       costPerSidePct: round(a.costPerSide * 100, 3),
     } : "not loaded",
     news,
+    entryvexSays: a ? {
+      verdict: a.liquidity && !a.liquidity.ok ? "DON'T BUY (market barely trades)" : a.overall.label,
+      liquidity: a.liquidity && !a.liquidity.ok ? a.liquidity.reason : "trades normally",
+      buyTriggersWithTrackRecord: (a.triggers || []).filter((t) => t.setup && ["edge", "weak"].includes(t.setup.verdict.level)).map((t) => ({
+        setup: t.setup.name, verdict: t.setup.verdict.label, possibleNow: t.ready,
+        condition: t.text.replace("{L}", t.level != null ? String(round(t.level)) : ""), distanceFromPricePct: t.away != null ? round(t.away, 3) : null,
+        pastRecord: `${Math.round(t.setup.stats.winRate * 100)}% of ${t.setup.stats.n} ended in profit, ${round(t.setup.stats.ev * 100, 3)}%/trade after costs` })),
+    } : "not loaded",
+    outsideChecks: (getChecks(live.symbol, live.interval) || []).map((x) => ({ check: x.label, says: x.text, effect: x.effect > 0 ? "helping" : x.effect < 0 ? "against" : "neutral" })),
+    longTermHold: (() => { const lt = cachedLongTerm(live.symbol); return lt ? {
+      trend: lt.above200 ? (lt.golden ? "uptrend (above 200-day, 50-day above 200-day)" : "mixed (above 200-day)") : (lt.golden ? "mixed (below 200-day)" : "downtrend (below 200-day)"),
+      returnsPct: { "1m": round(lt.r1m, 3), "3m": round(lt.r3m, 3), "6m": round(lt.r6m, 3), "1y": round(lt.r1y, 3) }, fromOneYearHighPct: round(lt.fromHigh, 3), yearlySwingPct: round(lt.vol, 3),
+      held3Months: lt.hold ? `${Math.round(lt.hold.pUp * 100)}% ended higher; typical ${Math.round(lt.hold.p10 * 100)}% to +${Math.round(lt.hold.p90 * 100)}% (${lt.hold.n} past cases, ~${Math.round(lt.years)} years)` : null,
+    } : "not loaded"; })(),
+    companyFundamentals: (cachedFundamentals(live.symbol) || []).map((l) => `${l.k}: ${String(l.t).replace(/<[^>]+>/g, "")}`),
+    ifUserBuysNow: getBuyNowSummary() || "balance not set or not loaded",
+    acrossWatchlist: {
+      buySignalsNow: currentBuys().map((b) => `${b.base} ${b.iv}: ${b.label === "GO" ? "BUY" : "SMALL BUY"} (${b.setup})`),
+      setupsToWatch: topWatch(6).map((w) => `${w.base} ${w.iv}: ${w.s.name} (${w.s.verdict.label}, ${Math.round(w.s.stats.winRate * 100)}% of ${w.s.stats.n})`),
+      perSymbol: (hooks.getWatchlistInfo?.() || []).slice(0, 20).map((w) => `${w.ticker}: ${w.changePct != null ? (w.changePct >= 0 ? "+" : "") + w.changePct.toFixed(2) + "% today, " : ""}${signalFor(w.sym)}`),
+    },
     user: { tradingBalanceUsd: s.balance || "not set", maxLossPerTradePct: s.riskPct, feePerBuyOrSellPct: s.feePct,
       openTradesInThisCoin: openTrades().filter((t) => t.symbol === live.symbol).map((t) => ({ boughtAt: t.entry, amount: t.qty, stop: t.stop, target: t.target })) },
   };

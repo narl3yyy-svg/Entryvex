@@ -4,11 +4,12 @@
 import { onRequestGet as newsHandler } from "../functions/api/news.js";
 import { onRequestGet as summaryHandler } from "../functions/api/summary.js";
 import { onRequestPost as askHandler } from "../functions/api/ask.js";
+import { onRequestPost as briefingHandler } from "../functions/api/briefing.js";
 import { onRequestGet as marketHandler } from "../functions/api/market.js";
 import { onRequest as pushHandler, runAlerts } from "../functions/api/push.js";
 
 const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler };
-const POST = { "/api/ask": askHandler };
+const POST = { "/api/ask": askHandler, "/api/briefing": briefingHandler };
 
 export default {
   async fetch(request, env, ctx) {

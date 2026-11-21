@@ -13,9 +13,10 @@ import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
-import { initOpportunities, run as runOpportunities, setupMarkets } from "./opportunities.js";
+import { initOpportunities, run as runOpportunities, setupMarkets, signalFor } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
+import { initBuyNow, updateBuyNow } from "./buynow.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 
@@ -58,7 +59,8 @@ function updateForecast(ctx, result) {
   renderForecastBox();
   pushAIContext();
   renderDecision(decisionCtx());
-  if (ltSymbol !== ctx.symbol) { ltSymbol = ctx.symbol; renderLongTerm(decisionCtx()); }
+  updateBuyNow(decisionCtx());
+  if (ltSymbol !== ctx.symbol) { ltSymbol = ctx.symbol; renderLongTerm({ ...decisionCtx(), onLoaded: () => updateBuyNow(decisionCtx()) }); }
 }
 let ltSymbol = null;
 
@@ -79,6 +81,7 @@ function tickDecision() {
   if (now - decisionTimer < 1500) return;
   decisionTimer = now;
   refreshDecision(decisionCtx());
+  updateBuyNow(decisionCtx());
 }
 function drawForecast() {
   const f = state.forecast;
@@ -773,7 +776,8 @@ async function boot() {
     onScanAll: scanWholeWatchlist,
   });
   $("center-live").addEventListener("click", () => centerLive());
-  onMoneyChange(() => refreshDecision(decisionCtx()));
+  onMoneyChange(() => { refreshDecision(decisionCtx()); updateBuyNow(decisionCtx()); });
+  initBuyNow();
   onJournalChange(() => refreshDecision(decisionCtx()));
   $("decision").addEventListener("click", (e) => {
     const b = e.target.closest("button");
@@ -846,7 +850,14 @@ async function boot() {
     },
   });
   onJournalChange(() => scheduleSync());
-  initAI({ getSettings: () => ({ balance: +store.get("balance", 0), riskPct: +store.get("riskPct", 1), feePct: +store.get("feePct", 0.02) }) });
+  initAI({
+    getSettings: () => ({ balance: +store.get("balance", 0), riskPct: +store.get("riskPct", 1), feePct: +store.get("feePct", 0.02) }),
+    getWatchlistInfo: () => state.watchlist.map((sym) => {
+      const info = state.bySymbol.get(sym) || {};
+      return { sym, ticker: info.base || sym, name: nameFor(sym), kind: isStock(sym) ? "stock" : "crypto", changePct: state.stats.get(sym)?.changePct ?? null, signal: signalFor(sym) };
+    }),
+    onPick: (sym) => { if (sym) pick(sym); },
+  });
 
   document.querySelectorAll("#intervals button").forEach((b) => {
     b.classList.toggle("on", b.dataset.i === state.interval);
