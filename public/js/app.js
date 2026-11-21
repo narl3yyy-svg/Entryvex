@@ -562,7 +562,40 @@ function initChart() {
       vol = v > 0 ? `  Vol ${amt}${unit} (≈${pre}${fmt.compact(value)}${pre ? "" : " " + (info?.quote ?? "")})` : "  Vol 0";
     }
     $("candle-info").textContent = `O ${fmt.price(c.open)}  H ${fmt.price(c.high)}  L ${fmt.price(c.low)}  C ${fmt.price(c.close)}${vol}`;
+    candleTip(p, d, v);
   });
+}
+
+/* Tooltip next to the cursor: the hovered candle's time, prices, change and how much was traded. */
+function candleTip(p, c, v) {
+  const box = $("chart");
+  let tip = box.querySelector(".chart-tip");
+  if (!p?.point || !c || p.point.x < 0 || p.point.y < 0) { if (tip) tip.hidden = true; return; }
+  if (!tip) { tip = document.createElement("div"); tip.className = "chart-tip"; box.appendChild(tip); }
+  const sym = state.selected, info = state.bySymbol.get(sym), stock = isStock(sym);
+  const cur = stock ? stockInfo(sym).currency : null;
+  const pre = stock ? curPrefix(cur) : (/^(USD|USDT|USDC)$/.test(info?.quote ?? "") ? "$" : "");
+  const chg = c.open ? (c.close / c.open - 1) * 100 : 0;
+  const isIndex = stock && info?.kind === "Index";
+  let volRow = "";
+  if (!isIndex && isFinite(v)) {
+    const unit = stock ? (v === 1 ? "share" : "shares") : (info?.base ?? "");
+    const amt = v >= 1e6 ? fmt.compact(v) : v >= 1000 ? Math.round(v).toLocaleString("en-US") : (+v.toPrecision(4)).toLocaleString("en-US", { maximumFractionDigits: 8 });
+    const value = v * ((c.high + c.low + c.close) / 3);
+    volRow = `<div class="ct-vol"><span>Traded</span><strong>${fmt.esc(amt)} ${fmt.esc(unit)}</strong></div>
+      <div class="ct-vol"><span>Worth about</span><strong>${fmt.esc(pre || "")}${fmt.compact(value)}${pre ? "" : " " + fmt.esc(info?.quote ?? "")}</strong></div>`;
+  }
+  tip.innerHTML = `<div class="ct-time">${fmt.esc(localCrosshairTime(c.time))}</div>
+    <div class="ct-grid"><span>Open</span><b>${fmt.price(c.open)}</b><span>High</span><b>${fmt.price(c.high)}</b>
+      <span>Low</span><b>${fmt.price(c.low)}</b><span>Close</span><b class="${chg >= 0 ? "up" : "down"}">${fmt.price(c.close)} <small>${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}%</small></b></div>
+    ${volRow}`;
+  tip.hidden = false;
+  // Sit beside the cursor, flipping to the other side near the right/bottom edges.
+  const w = tip.offsetWidth, h = tip.offsetHeight, W = box.clientWidth, Hh = box.clientHeight;
+  let x = p.point.x + 16, y = p.point.y + 16;
+  if (x + w > W - 70) x = p.point.x - w - 16;
+  if (y + h > Hh - 30) y = p.point.y - h - 16;
+  tip.style.transform = `translate(${Math.max(4, x)}px, ${Math.max(4, y)}px)`;
 }
 
 // Keep the live candle in the middle of the chart, with empty space to its right.
