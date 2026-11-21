@@ -18,6 +18,11 @@ const store = {
 export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval, onScanAll, restoreMarkers }) {
   // When no past trades are shown, give the chart back its pattern markers instead of clearing them.
   const clearMarkers = () => (restoreMarkers ? restoreMarkers() : chartSeries.setMarkers([]));
+  let showAllSetups = false;
+  // Active setups first, then the best records (proven → weak → unproven → losing), then by profit per trade.
+  const RANK = { edge: 4, weak: 3, flat: 2, thin: 1, negative: 0 };
+  const sortedSetups = (r) => [...r.setups].sort((a, b) =>
+    (b.activeNow - a.activeNow) || (RANK[b.verdict.level] - RANK[a.verdict.level]) || ((b.stats.ev || -9) - (a.stats.ev || -9)));
   let ctx = null;          // { symbol, interval, candles, spreadPct }
   let result = null;
   let token = 0;
@@ -176,7 +181,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     const edgeCount = r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").length;
     const liq = r.liquidity && !r.liquidity.ok ? `<span class="down"><strong>⚠ Thin market.</strong> ${fmt.esc(r.liquidity.reason)}</span>` : "";
     $("scan-context").innerHTML = liq + `<span>Watching for 4 setups on <strong>${interval}</strong> candles; checks again every time a candle closes. ${lastTxt}</span>
-      <span>${edgeCount ? `<strong>${edgeCount}</strong> of 4 setups have a positive record here; you'll get a trade card when one is active.` : `None of the 4 setups has made money here after costs. Try <button class="link-btn" data-find-edge>Find an edge</button> or another coin.`}</span>`;
+      <span>${edgeCount ? `<strong>${edgeCount}</strong> of ${r.setups.length} setups have a positive record here; you'll get a trade card when one is active.` : `None of the ${r.setups.length} setups has made money here after costs. Try <button class="link-btn" data-find-edge>Find an edge</button> or another coin.`}</span>`;
     $("scan-context").querySelector("[data-find-edge]")?.addEventListener("click", findEdges);
 
     // Setups table
@@ -185,10 +190,11 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
         <th>Setup</th><th>Now</th><th class="num">Times seen</th><th class="num">Ended in profit</th>
         <th class="num">Avg win / loss</th><th class="num">Avg per trade</th><th>Verdict</th>
       </tr></thead>
-      <tbody>${r.setups.map((s) => {
+      <tbody>${sortedSetups(r).map((s, k) => {
         const t = s.stats;
-        return `<tr data-id="${s.id}" class="${shownSetup === s.id ? "shown" : ""}" title="Click to show its past trades on the chart">
-          <td><div class="setup-name">${fmt.esc(s.name)}</div><div class="setup-desc">${fmt.esc(s.plain)}</div></td>
+        const hide = !showAllSetups && k >= 6 && !s.activeNow && shownSetup !== s.id;
+        return `<tr data-id="${s.id}" class="${shownSetup === s.id ? "shown" : ""}${hide ? " row-more" : ""}" title="${fmt.esc(s.plain)} Click to show its past trades on the chart.">
+          <td><div class="setup-name">${fmt.esc(s.name)}${s.pattern ? ` <span class="kind-tag">pattern</span>` : ""}</div></td>
           <td>${s.activeNow ? `<span class="pill pill-on">Active</span>` : `<span class="muted">—</span>`}</td>
           <td class="num mono">${t.n}</td>
           <td class="num mono">${t.n ? `${pctRound(t.winRate)}<div class="sub">${pctRound(t.winLo)}–${pctRound(t.winHi)}</div>` : "—"}</td>
@@ -196,9 +202,15 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
           <td class="num mono ${t.ev > 0 ? "up" : t.ev < 0 ? "down" : ""}">${t.n ? fmt.pct(t.ev * 100) : "—"}</td>
           <td><span class="pill pill-${s.verdict.level}" title="${fmt.esc(s.verdict.why)}">${s.verdict.label}</span></td>
         </tr>`;
-      }).join("")}</tbody>`;
+      }).join("")}</tbody>
+      ${r.setups.length > 6 ? `<tfoot><tr><td colspan="7"><button class="link-btn small" id="setups-more">${showAllSetups ? "Show fewer" : `Show all ${r.setups.length} setups`}</button></td></tr></tfoot>` : ""}`;
     $("setups").querySelectorAll("tbody tr").forEach((tr) =>
       tr.addEventListener("click", () => showTrades(shownSetup === tr.dataset.id ? null : tr.dataset.id)));
+    $("setups-more")?.addEventListener("click", () => {
+      showAllSetups = !showAllSetups;
+      $("setups").querySelectorAll("tbody tr.row-more, tbody tr.row-more-open").forEach((tr) => { tr.classList.toggle("row-more", !showAllSetups); tr.classList.toggle("row-more-open", showAllSetups); });
+      $("setups-more").textContent = showAllSetups ? "Show fewer" : `Show all ${r.setups.length} setups`;
+    });
 
     // Method note
     const from = r.sample.from ? new Date(r.sample.from * 1000) : null;

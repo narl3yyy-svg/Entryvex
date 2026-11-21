@@ -849,3 +849,21 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
   .toolbar { flex-wrap: wrap; min-width: 0; }
 }
 .d-regime { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ---------- Clean-up pass ---------- */
+/* Money settings: one tidy row now that the daily stop is gone */
+.money { grid-template-columns: 1fr; }
+.money-fields { grid-template-columns: minmax(150px, 1.2fr) minmax(110px, .8fr) minmax(200px, 1.6fr); max-width: 680px; }
+@media (max-width: 640px) { .money-fields { grid-template-columns: 1fr 1fr; } .money-fields label:last-child { grid-column: 1 / -1; } }
+/* Style switch: the hint lives in the tooltip */
+.style-hint { display: none; }
+/* Watchlist summary doubles as the color key */
+.wl-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 2px 2px 8px; }
+.wl-summary .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.wl-summary .when { margin-left: auto; }
+.d-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.d-actions > span { flex: 1 1 220px; }
+/* Chart grows with the window on big screens */
+@media (min-width: 900px) { .chart { height: clamp(380px, 58vh, 620px); } }
+#setups tr.row-more { display: none; }
+#setups tfoot td { padding: 8px 10px; text-align: center; }

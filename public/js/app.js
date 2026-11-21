@@ -304,9 +304,15 @@ function paintSignals() {
   const n = { buy: 0, wait: 0, unknown: 0 };
   for (const sym of state.watchlist) { const v = rowVerdict(sym); if (v && n[v.level] != null) n[v.level]++; }
   const at = oppsLastChecked();
-  $("wl-summary").innerHTML = oppsRunning() ? "Checking every market…"
-    : at ? `<strong class="b">${n.buy} buy</strong> · <strong class="w">${n.wait} wait</strong> · <strong class="u">${n.unknown} no data</strong> · checked ${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}${n.buy === 0 && n.wait > 0 ? `<br><span>No buy signals is normal. Most of the time, waiting is the right call.</span>` : ""}`
-    : "";
+  // One line that is also the color key: green = buy now, red = don't buy yet, yellow = not enough data.
+  const el = $("wl-summary");
+  el.title = "Row colors: green = buy signal now · red = don't buy yet · yellow = not enough data to judge. Checked on the candle size shown on the chart. No buy signals is normal: most of the time, waiting is the right call.";
+  el.innerHTML = oppsRunning() ? `<span>Checking every market…</span>`
+    : at ? `<span><i class="dot" style="background:var(--up)"></i><strong class="b">${n.buy}</strong> buy</span>
+        <span><i class="dot" style="background:var(--down)"></i><strong class="w">${n.wait}</strong> wait</span>
+        <span><i class="dot" style="background:#e8b931"></i><strong class="u">${n.unknown}</strong> no data</span>
+        <span class="when">${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</span>`
+    : `<span><i class="dot" style="background:var(--up)"></i>buy</span><span><i class="dot" style="background:var(--down)"></i>wait</span><span><i class="dot" style="background:#e8b931"></i>no data</span>`;
 }
 
 function paintRow(sym, prevLast) {
