@@ -2,7 +2,7 @@
 // and a manual trade calculator. Everything is stored only in this browser.
 import { sizePosition, roundTick } from "./sizing.js";
 import { todayStats, onJournalChange } from "./journal.js";
-import { isStock } from "./market.js";
+import { isStock, stockInfo } from "./market.js";
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -91,7 +91,9 @@ function renderDay() {
  */
 export function renderTradeCard(c) {
   const g = guard();
-  const bal = settings.balance;
+  // Never size a non-US-dollar market with a USD balance: show the levels only.
+  const foreign = isStock(c.symbol) && stockInfo(c.symbol).currency !== "USD";
+  const bal = foreign ? 0 : settings.balance;
   const pct = (v) => (v * 100).toFixed(2) + "%";
 
   if (g.locked) {

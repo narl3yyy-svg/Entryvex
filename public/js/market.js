@@ -16,7 +16,8 @@ export function registerStock(sym, meta) {
 }
 export function stockInfo(sym) {
   const t = tickerOf(sym), m = stockMeta[sym] || {};
-  return { symbol: sym, base: t, name: m.name || t, exchange: m.exchange, kind: m.kind || "Stock", ...STOCK_RULES };
+  const currency = m.currency || "USD";
+  return { symbol: sym, base: t, name: m.name || t, exchange: m.exchange, kind: m.kind || "Stock", ...STOCK_RULES, quote: currency, currency };
 }
 
 /* ---------------- Yahoo chart parsing ---------------- */
@@ -46,7 +47,7 @@ async function stockChart(sym, interval, which = "range") {
   });
   if (m.group) candles = groupCandles(candles, m.group);
   const meta = r.meta || {};
-  if (meta.longName || meta.shortName) registerStock(sym, { name: meta.longName || meta.shortName, exchange: meta.fullExchangeName || meta.exchangeName });
+  if (meta.longName || meta.shortName || meta.currency) registerStock(sym, { name: meta.longName || meta.shortName || stockMeta[sym]?.name, exchange: meta.fullExchangeName || meta.exchangeName, currency: meta.currency });
   return { candles, meta };
 }
 
@@ -207,6 +208,9 @@ export function createKlineFeed(sym, interval, { onCandle, onStatus }) {
 
 /* ---------------- Stock search ---------------- */
 const US_EXCHANGES = new Set(["NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "NAS", "NYS", "PNK"]);
+// Major international exchanges (Yahoo codes): Europe, Asia-Pacific, the Americas.
+const INTL_EXCHANGES = new Set(["LSE", "GER", "FRA", "PAR", "AMS", "BRU", "MIL", "MCE", "EBS", "STO", "CPH", "HEL", "OSL", "VIE", "LIS",
+  "JPX", "HKG", "SHH", "SHZ", "KSC", "KOE", "TAI", "TWO", "NSI", "BSE", "ASX", "NZE", "SES", "TOR", "VAN", "SAO", "MEX"]);
 export async function searchStocks(q) {
   q = q.trim();
   if (!q) return [];
@@ -214,7 +218,10 @@ export async function searchStocks(q) {
   if (!res.ok) return [];
   const j = await res.json();
   return (j.quotes || [])
-    .filter((x) => (x.quoteType === "EQUITY" || x.quoteType === "ETF") && x.symbol && !x.symbol.includes(".") && US_EXCHANGES.has(x.exchange))
-    .slice(0, 6)
-    .map((x) => ({ symbol: "S:" + x.symbol, ticker: x.symbol, name: x.longname || x.shortname || x.symbol, exchange: x.exchDisp || x.exchange, kind: x.quoteType === "ETF" ? "ETF" : "Stock" }));
+    .filter((x) => (x.quoteType === "EQUITY" || x.quoteType === "ETF" || x.quoteType === "INDEX") && x.symbol && x.symbol.length <= 12
+      && (US_EXCHANGES.has(x.exchange) || INTL_EXCHANGES.has(x.exchange) || x.quoteType === "INDEX"))
+    .sort((a, b) => (US_EXCHANGES.has(b.exchange) ? 1 : 0) - (US_EXCHANGES.has(a.exchange) ? 1 : 0))
+    .slice(0, 8)
+    .map((x) => ({ symbol: "S:" + x.symbol, ticker: x.symbol, name: x.longname || x.shortname || x.symbol, exchange: x.exchDisp || x.exchange,
+      kind: x.quoteType === "ETF" ? "ETF" : x.quoteType === "INDEX" ? "Index" : "Stock", intl: !US_EXCHANGES.has(x.exchange) }));
 }

@@ -107,6 +107,15 @@
     </aside>
 
     <section class="panel chart-panel">
+      <div class="style-bar" role="radiogroup" aria-label="Trading style">
+        <span class="style-label">I'm a</span>
+        <div class="seg style-seg" id="style-seg">
+          <button data-style="day" title="Minutes to hours: 5-minute candles, fast signals, forecast and buy-now numbers first">⚡ Day trader</button>
+          <button data-style="swing" title="Days to weeks: 4-hour candles, everything visible">📅 Swing trader</button>
+          <button data-style="hold" title="Months to years: daily candles, long-term view first">🏦 Long-term holder</button>
+        </div>
+        <span id="style-hint" class="muted small style-hint"></span>
+      </div>
       <div class="chart-head">
         <div class="symbol-block">
           <div class="symbol-line">
@@ -243,15 +252,19 @@
     </section>
 
     <aside class="panel news">
-      <div class="panel-head">
+      <div class="panel-head research-head">
         <h2>Research</h2>
-        <div class="seg small-seg" id="news-tabs">
-          <button data-tab="report">Report</button>
-          <button data-tab="coin" id="news-tab-coin">News</button>
-          <button data-tab="all">All crypto</button>
+        <div class="seg small-seg research-tabs" id="news-tabs">
+          <button data-tab="report" title="AI summary, news mood and report card">Report</button>
+          <button data-tab="coin" id="news-tab-coin" title="Headlines for the coin or stock you're viewing">News</button>
+          <button data-tab="world" title="Live world indices, gold, oil, dollar, yields, VIX">World</button>
+          <button data-tab="calendar" title="This week's market-moving economic events">Calendar</button>
+          <button data-tab="all" title="Global business and crypto headlines">Headlines</button>
         </div>
       </div>
       <div id="report" class="report" hidden></div>
+      <div id="world" class="report" hidden></div>
+      <div id="calendar" class="report" hidden></div>
       <div id="news-meta" class="muted small news-meta"></div>
       <ul id="news-list" class="news-list"></ul>
     </aside>

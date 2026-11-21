@@ -16,6 +16,8 @@ import { renderDecision, refreshDecision } from "./decision.js";
 import { initOpportunities, run as runOpportunities, setupMarkets, signalFor } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
+import { initWorld, worldVisible } from "./world.js";
+import { renderCalendar, loadCalendar } from "./calendar.js";
 import { initBuyNow, updateBuyNow } from "./buynow.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
@@ -73,6 +75,7 @@ function decisionCtx() {
     analysis: state.analysis && state.analysis.symbol === sym && state.analysis.interval === state.interval ? state.analysis.result : null,
     forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
     rules: { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional },
+    currency: info.currency,
   };
 }
 let decisionTimer = 0;
@@ -322,6 +325,9 @@ async function refreshTickers() {
   });
 }
 
+/** "$" for US dollars, otherwise the currency code (e.g. "JPY 3,450"). */
+function curPrefix(cur) { return !cur || cur === "USD" ? "$" : `${cur} `; }
+
 /** Display name for any symbol: coin name for crypto, company name for stocks. */
 function nameFor(sym) {
   if (isStock(sym)) return stockInfo(sym).name;
@@ -405,7 +411,7 @@ function paintHeader() {
     ? `${fmt.esc(base)} · ${fmt.esc(info?.exchange || "US market")}${s && s.marketOpen != null ? ` <span class="mkt ${s.marketOpen ? "open" : "closed"}">${s.marketOpen ? "Market open" : "Market closed"}</span>` : ""}`
     : fmt.esc(info ? `${info.base}/${info.quote}` : sym);
   const last = s?.last ?? lastCandle?.close;
-  $("sym-price").textContent = (stock ? "$" : "") + fmt.price(last);
+  $("sym-price").textContent = (stock ? curPrefix(info?.currency) : "") + fmt.price(last);
   const chg = $("sym-change");
   chg.textContent = s ? fmt.pct(s.changePct) + (stock ? " today" : " 24h") : "—";
   chg.className = "chip mono " + (s ? (s.changePct >= 0 ? "up" : "down") : "");
@@ -414,7 +420,7 @@ function paintHeader() {
   document.querySelectorAll(".stats dt")[2].textContent = stock ? "Day volume" : "24h volume";
   $("sym-high").textContent = fmt.price(s?.high);
   $("sym-low").textContent = fmt.price(s?.low);
-  $("sym-vol").textContent = s ? "$" + fmt.compact(s.quoteVolume) : "—";
+  $("sym-vol").textContent = s ? (stock ? curPrefix(info?.currency) : "$") + fmt.compact(s.quoteVolume) : "—";
   if (last) document.title = `${fmt.price(last)} ${base} · Entryvex`;
   pushAIContext();
   tickDecision();
@@ -552,13 +558,14 @@ function selectSymbol(sym) {
 
 /* ---------- News ---------- */
 let newsToken = 0;
+let headlinesMode = store.get("headlines", "world");
 const newsCache = new Map();
 /** News for a crypto coin ("BTC"), a stock symbol ("S:AAPL"), or all crypto (""). */
 async function fetchNews(coin) {
   const key = coin || "*";
   const hit = newsCache.get(key);
   if (hit && Date.now() - hit.t < 120_000) return hit.v;
-  const qs = !coin ? "" : isStock(coin)
+  const qs = !coin ? "" : coin === "@world" ? "?world=1" : isStock(coin)
     ? `?stock=${encodeURIComponent(coin.slice(2))}&name=${encodeURIComponent(stockInfo(coin).name)}`
     : `?coin=${encodeURIComponent(coin)}`;
   const res = await fetch(`/api/news${qs}`);
@@ -573,7 +580,7 @@ function newsItemHtml(it) {
   const m = it.mood?.label || "neutral";
   return `<li><a href="${fmt.esc(it.link)}" target="_blank" rel="noopener noreferrer">
     <div class="news-title"><span class="mood-dot md-${m}" title="Headline mood: ${m}">${MOOD_ICON[m]}</span>${fmt.esc(it.title)}</div>
-    <div class="news-sub"><span>${fmt.esc(it.source)}</span><span>·</span><span>${fmt.ago(it.published)}</span>
+    <div class="news-sub">${it.region ? `<span class="tag region">${fmt.esc(it.region)}</span>` : ""}<span>${fmt.esc(it.source)}</span><span>·</span><span>${fmt.ago(it.published)}</span>
       ${(it.coins || []).slice(0, 4).map((c) => `<span class="tag">${fmt.esc(c)}</span>`).join("")}</div></a></li>`;
 }
 
@@ -584,14 +591,21 @@ function currentBase() {
 async function loadNews() {
   const token = ++newsToken;
   const base = currentBase();
-  $("news-tab-coin").textContent = `${base} news`;
-  const reportTab = state.newsTab === "report";
-  $("report").hidden = !reportTab;
-  $("news-meta").hidden = reportTab;
-  $("news-list").hidden = reportTab;
-  if (reportTab) return loadReport(base, token);
+  $("news-tab-coin").textContent = "News"; $("news-tab-coin").title = `Headlines for ${base}`;
+  const tab = state.newsTab;
+  const listTab = tab === "coin" || tab === "all";
+  $("report").hidden = tab !== "report";
+  $("world").hidden = tab !== "world";
+  $("calendar").hidden = tab !== "calendar";
+  $("news-meta").hidden = !listTab;
+  $("news-list").hidden = !listTab;
+  worldVisible(tab === "world");
+  if (tab === "report") return loadReport(base, token);
+  if (tab === "world") return;
+  if (tab === "calendar") return renderCalendar();
 
-  const coin = state.newsTab === "coin" ? (isStock(state.selected) ? state.selected : base) : "";
+  // "Headlines": global business news (Americas, Europe, Asia) or crypto news.
+  const coin = tab === "coin" ? (isStock(state.selected) ? state.selected : base) : headlinesMode === "world" ? "@world" : "";
   const list = $("news-list");
   $("news-meta").textContent = "Loading headlines…";
   try {
@@ -600,7 +614,8 @@ async function loadNews() {
     const meta =
       `${data.items.length} headlines · updated ${new Date(data.updated).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` +
       (data.failedSources?.length ? ` · unavailable: ${data.failedSources.join(", ")}` : "");
-    $("news-meta").innerHTML = (coin ? moodHtml(moodOf(data.items)) : "") + `<div>${fmt.esc(meta)}</div>`;
+    const toggle = tab === "all" ? `<div class="seg small-seg headlines-toggle"><button data-hl="world" class="${headlinesMode === "world" ? "on" : ""}">World business</button><button data-hl="crypto" class="${headlinesMode === "crypto" ? "on" : ""}">Crypto</button></div>` : "";
+    $("news-meta").innerHTML = toggle + (coin && coin !== "@world" ? moodHtml(moodOf(data.items)) : "") + `<div>${fmt.esc(meta)}</div>`;
     list.innerHTML = data.items.length
       ? data.items.map(newsItemHtml).join("")
       : `<li class="news-empty">No recent headlines for ${fmt.esc(nameFor(state.selected))}.</li>`;
@@ -719,6 +734,33 @@ function scanWholeWatchlist() {
   runOpportunities();
 }
 
+/* ---------- Trading style: Day trader / Swing trader / Long-term holder ---------- */
+const STYLES = {
+  day: { interval: "5m", hint: "Fast signals on 5-minute candles. Check the calendar before big news." },
+  swing: { interval: "4h", hint: "Trades lasting days to weeks on 4-hour candles." },
+  hold: { interval: "1d", hint: "Months to years on daily candles: long-term view first." },
+};
+function applyStyle(style, changeInterval) {
+  if (!STYLES[style]) style = "swing";
+  store.set("style", style);
+  document.body.classList.remove("style-day", "style-swing", "style-hold");
+  document.body.classList.add("style-" + style);
+  document.querySelectorAll("#style-seg button").forEach((b) => b.classList.toggle("on", b.dataset.style === style));
+  $("style-hint").textContent = STYLES[style].hint;
+  if (changeInterval && state.interval !== STYLES[style].interval) {
+    document.querySelector(`#intervals button[data-i="${STYLES[style].interval}"]`)?.click();
+  }
+  ltSymbol = null;   // re-render the long-term card (open/closed depends on the style)
+  renderLongTerm({ ...decisionCtx(), onLoaded: () => updateBuyNow(decisionCtx()) });
+}
+function initStyle() {
+  applyStyle(store.get("style", "swing"), false);
+  $("style-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-style]");
+    if (b) applyStyle(b.dataset.style, true);
+  });
+}
+
 /* ---------- First-visit welcome guide ---------- */
 function initWelcome() {
   const box = $("welcome");
@@ -799,7 +841,15 @@ async function boot() {
     onBadges: (b) => { state.badges = b; renderWatchlist(); },
   });
   initShortcuts();
+  initWorld({ onOpen: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
+  loadCalendar().catch(() => {});
+  $("news-meta").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-hl]");
+    if (!b) return;
+    headlinesMode = b.dataset.hl; store.set("headlines", headlinesMode); loadNews();
+  });
   initInstall();
+  initStyle();
   initWelcome();
   initWatchlistDrag();
   $("forecast-toggle").addEventListener("click", toggleForecast);
@@ -926,7 +976,7 @@ async function boot() {
   // Opened from a notification: /?s=SYMBOL&i=INTERVAL
   const qp = new URLSearchParams(location.search);
   const linkSym = qp.get("s"), linkIv = qp.get("i");
-  if (linkSym && /^(S:[A-Z0-9.\-]{1,10}|[A-Z0-9]{3,20})$/.test(linkSym)) {
+  if (linkSym && /^(S:[A-Z0-9.^=\-]{1,12}|[A-Z0-9]{3,20})$/.test(linkSym)) {
     if (isStock(linkSym)) { registerStock(linkSym, {}); state.bySymbol.set(linkSym, stockInfo(linkSym)); }
     if (state.bySymbol.has(linkSym)) {
       if (!state.watchlist.includes(linkSym)) { state.watchlist.push(linkSym); store.set("watchlist", state.watchlist); }

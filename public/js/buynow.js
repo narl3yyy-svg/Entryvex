@@ -10,7 +10,7 @@ import { probAbove, reliability } from "./forecast.js";
 import { cachedLongTerm } from "./longterm.js";
 import { sizePosition, floorStep } from "./sizing.js";
 import { settings } from "./money.js";
-import { isStock } from "./market.js";
+import { isStock, stockInfo } from "./market.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
 
@@ -53,6 +53,12 @@ function render(keepFocus = false) {
   const c = ctx, r = c.analysis, f = c.forecast, lt = cachedLongTerm(c.symbol);
   const stock = isStock(c.symbol);
   const unit = stock ? "shares" : c.base;
+  const currency = stock ? stockInfo(c.symbol).currency : "USD";
+  if (currency !== "USD") {
+    $("buynow").innerHTML = `<div class="bn-card"><div class="d-when-title">If you buy ${fmt.esc(c.base)} now</div>
+      <p class="small muted">${fmt.esc(c.base)} is priced in ${fmt.esc(currency)}. Dollar sizing for non-US-dollar markets isn't available yet, so Entryvex doesn't mix currencies with your USD balance. The chart, signals, forecast, long-term view and news all work as normal.</p></div>`;
+    return;
+  }
   const bal = settings.balance;
   const price = c.price;
   const cost = r?.costPerSide ?? 0.0007;           // fee + half the bid/ask spread, per side

@@ -34,6 +34,18 @@ const COIN_NAMES = {
   BNB: "BNB",
 };
 
+// Global business & markets news (?world=1): Americas, Europe, Asia, Middle East.
+const WORLD_FEEDS = [
+  { source: "CNBC", region: "Americas", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
+  { source: "Investing.com", region: "Global", url: "https://www.investing.com/rss/news_25.rss" },
+  { source: "Financial Times", region: "Europe", url: "https://www.ft.com/markets?format=rss" },
+  { source: "BBC Business", region: "Europe", url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
+  { source: "The Guardian", region: "Europe", url: "https://www.theguardian.com/uk/business/rss" },
+  { source: "Nikkei Asia", region: "Asia", url: "https://asia.nikkei.com/rss/feed/nar" },
+  { source: "South China Morning Post", region: "Asia", url: "https://www.scmp.com/rss/92/feed" },
+  { source: "Economic Times", region: "Asia", url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms" },
+];
+
 const CACHE_SECONDS = 180;
 const MAX_ITEMS = 60;
 
@@ -44,7 +56,8 @@ export async function onRequestGet(context) {
   const stockName = (url.searchParams.get("name") || stock).replace(/[^\w .,&'-]/g, "").slice(0, 60)
     .replace(/,?\s+(Inc\.?|Corporation|Corp\.?|Company|Co\.?|Ltd\.?|plc|Holdings|Class [A-C])$/i, "").trim();
 
-  const cacheKey = new Request(`${url.origin}/api/news?coin=${coin}&stock=${stock}`);
+  const world = url.searchParams.get("world") === "1";
+  const cacheKey = new Request(`${url.origin}/api/news?coin=${coin}&stock=${stock}&world=${world ? 1 : 0}`);
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
@@ -52,7 +65,9 @@ export async function onRequestGet(context) {
   }
 
   let feeds = [...GENERAL_FEEDS];
-  if (stock) {
+  if (world) {
+    feeds = WORLD_FEEDS.map((f) => ({ ...f, perCoin: true }));
+  } else if (stock) {
     // Stock news: Yahoo Finance's per-ticker feed, plus Google/Bing searches for the company.
     feeds = [
       { source: "Yahoo Finance", url: `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(stock)}&region=US&lang=en-US`, perCoin: true },
@@ -96,7 +111,7 @@ export async function onRequestGet(context) {
     return true;
   });
   for (const it of items) {
-    it.coins = stock ? [stock] : tagCoins(it.title + " " + (it.summary || ""));
+    it.coins = stock ? [stock] : world ? [] : tagCoins(it.title + " " + (it.summary || ""));
     it.mood = scoreHeadline(it.title);
   }
   if (stock) {
@@ -109,6 +124,11 @@ export async function onRequestGet(context) {
     items = items.filter((it) => it.perCoin || it.coins.includes(coin));
   }
   items.sort((a, b) => (b.published || 0) - (a.published || 0));
+  if (world) {
+    // Keep every region represented: at most 8 headlines per source.
+    const per = {};
+    items = items.filter((it) => (per[it.source] = (per[it.source] || 0) + 1) <= 8);
+  }
   items = items.slice(0, MAX_ITEMS).map(({ perCoin, ...rest }) => rest);
 
   const body = JSON.stringify({ coin: coin || null, stock: stock || null, updated: Date.now(), failedSources: failedNames, items });
@@ -136,12 +156,12 @@ async function fetchFeed(feed) {
     // Bing gives the publisher in <News:Source>; Google News titles look like "Headline - Publisher".
     if (it.publisher) {
       source = it.publisher;
-    } else if (feed.perCoin) {
+    } else if (feed.source === "Google News") {
       const m = title.match(/^(.*) - ([^-]{2,60})$/);
       if (m) { title = m[1]; source = m[2]; }
     }
     const { publisher, ...rest } = it;
-    return { ...rest, title, source, perCoin: !!feed.perCoin };
+    return { ...rest, title, source, perCoin: !!feed.perCoin, ...(feed.region ? { region: feed.region } : {}) };
   });
 }
 

@@ -109,8 +109,12 @@ function html(c, lt, fundamentals, stock) {
     : { label: "Mixed / turning", cls: "", text: `Price is ${lt.above200 ? "above" : "below"} its 200-day average, but the 50-day average is ${lt.golden ? "above" : "below"} the 200-day: the trend may be changing.` };
   const h = lt.hold, hs = lt.holdSame;
   const pctR = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(0)}%`;
-  return `<div class="lt-card">
-    <div class="lt-head"><div class="d-when-title">Long-term view (holding for months)</div><span class="pill ${trend.cls === "up" ? "pill-edge" : trend.cls === "down" ? "pill-negative" : "pill-thin"}">${trend.label}</span></div>
+  // Day traders see a one-line summary (expandable); swing traders and long-term holders see it all.
+  const open = !document.body.classList.contains("style-day");
+  return `<details class="lt-card" ${open ? "open" : ""}>
+    <summary class="lt-head"><div class="d-when-title">Long-term view (holding for months)</div>
+      <span class="lt-sum small">${h ? `held 3 months: <strong>${Math.round(h.pUp * 100)}% ended higher</strong> · 1 year ${isFinite(lt.r1y) ? (lt.r1y >= 0 ? "+" : "") + lt.r1y.toFixed(0) + "%" : "—"}` : ""}</span>
+      <span class="pill ${trend.cls === "up" ? "pill-edge" : trend.cls === "down" ? "pill-negative" : "pill-thin"}">${trend.label}</span></summary>
     <p class="small">${trend.text}</p>
     ${h ? `<div class="lt-hold">
       <div><span>Bought on any day and held ${months}</span><strong>${Math.round(h.pUp * 100)}% ended higher</strong>
@@ -126,5 +130,5 @@ function html(c, lt, fundamentals, stock) {
     </div>
     ${fundamentals?.length ? `<dl class="rc lt-fund">${fundamentals.map((l) => `<div><dt>${l.k}</dt><dd>${l.t}</dd></div>`).join("")}</dl>` : ""}
     <p class="tiny muted">These are measured from this ${stock ? "stock's" : "coin's"} own history, not a prediction. Past results don't guarantee the future; a ±${lt.vol.toFixed(0)}% yearly swing means large drops along the way are normal.</p>
-  </div>`;
+  </details>`;
 }

@@ -148,7 +148,9 @@ export async function getStockProfile(ticker, q = {}) {
 
   const sec = await secCik(ticker).catch(() => null);
   if (!sec) {
-    lines.push({ k: "Earnings", t: "No company filings found. This is probably an ETF or fund, which holds a basket of stocks and doesn't report its own earnings." });
+    lines.push({ k: "Earnings", t: /^[\^]|=/.test(ticker) ? "This is a market index or price (not a company), so there are no earnings to show."
+      : /\./.test(ticker) ? "Quarterly filings for companies listed outside the US aren't available yet (Entryvex reads US SEC filings)."
+      : "No company filings found. This is probably an ETF or fund, which holds a basket of stocks and doesn't report its own earnings." });
     return { lines, source: "Data: Yahoo Finance prices." };
   }
 

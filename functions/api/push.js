@@ -62,7 +62,7 @@ export async function onRequest(context) {
   return json({ error: "not found" }, 404);
 }
 
-const SYM = /^(S:[A-Z0-9.\-]{1,10}|[A-Z0-9]{3,20})$/;
+const SYM = /^(S:[A-Z0-9.^=\-]{1,12}|[A-Z0-9]{3,20})$/;
 const IVS = new Set(["15m", "1h", "4h"]);
 function cleanPrefs(p) {
   const num = (v) => (Number.isFinite(+v) ? +v : null);

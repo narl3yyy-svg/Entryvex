@@ -31,6 +31,10 @@ function route(p) {
     const qs = `scrIds=${id}&count=25`;
     return { urls: [`https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`, `https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`], ttl: 60, ua: UA };
   }
+  if (src === "calendar") {
+    // This week's economic calendar (central banks, inflation, jobs, GDP…) for major economies.
+    return { urls: ["https://nfs.faireconomy.media/ff_calendar_thisweek.json"], ttl: 900, ua: UA };
+  }
   if (src === "sec-tickers") return { urls: ["https://www.sec.gov/files/company_tickers.json"], ttl: 86400, ua: SEC_UA };
   if (src === "sec-concept") {
     const cik = p.get("cik") || "", tax = p.get("tax") || "", concept = p.get("concept") || "";

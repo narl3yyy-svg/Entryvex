@@ -3,7 +3,7 @@
 //   - Otherwise        -> BUY / SMALL BUY OR SKIP / DON'T BUY / WAIT, from the scanner's MEASURED verdict.
 // Five outside checks (bigger trend, overall market, fear gauge, news mood, forecast odds) are shown
 // as tailwinds/headwinds. They're context only: they are not part of the measured win rate.
-import { getKlineHistory, get24h, isStock } from "./market.js";
+import { getKlineHistory, get24h, isStock, stockInfo } from "./market.js";
 import { ema } from "./indicators.js";
 import { sizePosition } from "./sizing.js";
 import { settings, guard } from "./money.js";
@@ -12,6 +12,21 @@ import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
 import { currentBuys, topWatch } from "./opportunities.js";
 import { describeOdds, reliability } from "./forecast.js";
+import { upcomingHighImpact, loadCalendar } from "./calendar.js";
+
+/** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
+async function eventRisk() {
+  await loadCalendar().catch(() => {});
+  const soon = upcomingHighImpact(3);
+  if (!soon.length) return { label: "Economic calendar", effect: 0, text: "No high-impact economic events in the next 3 hours." };
+  const e = soon[0];
+  const mins = Math.round((e.t - Date.now()) / 60e3);
+  const when = mins <= 0 ? "happening now" : mins < 60 ? `in ${mins} min` : `in ${Math.floor(mins / 60)} h ${mins % 60} min`;
+  return {
+    label: "Economic calendar", effect: -1,
+    text: `${e.country} ${e.title} ${when}${soon.length > 1 ? ` (+${soon.length - 1} more high-impact)` : ""}. Expect sudden swings; many traders wait until 30 minutes after.`,
+  };
+}
 
 const $ = (id) => document.getElementById(id);
 const HIGHER = { "1m": "15m", "5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d", "1d": "1d" };
@@ -99,7 +114,7 @@ async function outsideChecks(c) {
   const hit = ctxCache.get(key);
   if (hit && Date.now() - hit.t < 120_000) return hit.v;
   const stock = isStock(c.symbol);
-  const results = await Promise.allSettled([bigTrend(c.symbol, c.interval), marketBackdrop(stock), fearGauge(stock), newsMood(c.symbol, c.base, c.name)]);
+  const results = await Promise.allSettled([bigTrend(c.symbol, c.interval), marketBackdrop(stock), fearGauge(stock), newsMood(c.symbol, c.base, c.name), eventRisk()]);
   const v = results.map((r) => (r.status === "fulfilled" ? r.value : null)).filter(Boolean);
   ctxCache.set(key, { t: Date.now(), v });
   return v;
@@ -257,7 +272,8 @@ function confidenceMeter(p, lo, hi, be, n) {
 function buySteps(c, r, unit) {
   const p = r.plan;
   if (!p) return "";
-  const bal = settings.balance;
+  const foreign = isStock(c.symbol) && stockInfo(c.symbol).currency !== "USD";
+  const bal = foreign ? 0 : settings.balance;   // never mix a USD balance with other currencies
   const sz = bal > 0 ? sizePosition({ balance: bal, riskPct: settings.riskPct, entry: p.entry, stop: p.stop, target: p.target, costPerSide: r.costPerSide, rules: c.rules }) : null;
   const sellBy = new Date(Date.now() + RULES.maxBars * (SEC[c.interval] || 900) * 1000)
     .toLocaleString([], { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" });

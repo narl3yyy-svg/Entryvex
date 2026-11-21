@@ -684,3 +684,72 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 .brief-watch { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(224,179,65,.08); border: 1px solid rgba(224,179,65,.25); }
 .ai-briefing p { margin: 0; }
 .brief-chg { font-size: 12px; margin-right: 6px; }
+
+/* Trading style bar */
+.style-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 18px 0; }
+.style-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.style-seg button { padding: 6px 12px; }
+.style-hint { flex: 1; min-width: 180px; }
+
+/* Order of the cards in the center column depends on the trading style */
+.chart-panel > .style-bar { order: 1; }
+.chart-panel > .chart-head { order: 2; }
+.chart-panel > .toolbar { order: 3; }
+.chart-panel > #chart { order: 4; }
+.chart-panel > #decision { order: 5; }
+.chart-panel > #forecast-box { order: 6; }
+.chart-panel > #longterm { order: 7; }
+.chart-panel > #scanner { order: 8; }
+.style-hold .chart-panel > #longterm { order: 5; }
+.style-hold .chart-panel > #decision { order: 6; }
+.style-hold .chart-panel > #forecast-box { order: 7; }
+
+/* Long-term card as a collapsible section */
+details.lt-card > summary { list-style: none; cursor: pointer; flex-wrap: wrap; }
+details.lt-card > summary::-webkit-details-marker { display: none; }
+details.lt-card > summary::before { content: "▸"; color: var(--muted); margin-right: 6px; transition: transform .15s; display: inline-block; }
+details.lt-card[open] > summary::before { transform: rotate(90deg); }
+.lt-head { display: flex; align-items: center; gap: 10px; }
+.lt-sum { color: var(--muted); flex: 1; }
+.lt-sum strong { color: var(--text); }
+details.lt-card:not([open]) { padding-bottom: 12px; }
+
+/* Research tabs: five compact tabs */
+.research-head { flex-wrap: wrap; row-gap: 8px; }
+.research-tabs button { padding: 3px 7px; font-size: 11.5px; }
+
+/* World markets */
+.world-head { padding-top: 2px; }
+.world-group { display: flex; flex-direction: column; gap: 2px; }
+.world-gname { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 4px; font-weight: 600; }
+.world-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 64px auto; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; border: 0; background: none; text-align: left; cursor: pointer; width: 100%; }
+.world-row:hover { background: var(--panel-2); }
+.w-flag { font-size: 15px; }
+.w-name { display: flex; flex-direction: column; font-size: 13px; font-weight: 500; min-width: 0; }
+.w-name small { font-size: 10.5px; font-weight: 500; }
+.w-open { color: var(--up); }
+.w-closed { color: var(--muted); }
+.w-num { display: flex; flex-direction: column; align-items: flex-end; font-size: 13px; }
+.spark { display: block; }
+
+/* Economic calendar */
+.cal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cal-day { display: flex; flex-direction: column; gap: 2px; }
+.cal-row { display: grid; grid-template-columns: 44px 20px minmax(0, 1fr) auto; grid-template-areas: "time flag title pill" ". . cd cd"; gap: 2px 8px; align-items: center; padding: 7px 8px; border-radius: 8px; font-size: 13px; }
+.cal-time { grid-area: time; color: var(--muted); }
+.cal-flag { grid-area: flag; }
+.cal-title { grid-area: title; display: flex; flex-direction: column; line-height: 1.35; }
+.cal-title small { font-size: 11px; }
+.cal-row .pill { grid-area: pill; }
+.cal-cd { grid-area: cd; font-size: 11px; }
+.cal-soon { background: rgba(240,80,110,.1); border: 1px solid rgba(240,80,110,.35); }
+.cal-past { opacity: .5; }
+
+/* Headlines */
+.tag.region { background: rgba(122,162,255,.16); color: #a9c1ff; }
+.headlines-toggle { align-self: flex-start; margin-bottom: 4px; }
+
+@media (max-width: 760px) {
+  .style-bar { padding: 12px 14px 0; }
+  .style-seg button { padding: 6px 8px; font-size: 12px; }
+}

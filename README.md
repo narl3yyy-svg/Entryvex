@@ -4,7 +4,8 @@
 
 # Entryvex™
 
-**Live market research for crypto and US stocks: know when a trade is worth taking, and when it isn't.**
+**Live market research for crypto and stocks worldwide: know when a trade is worth taking, and when it isn't.**
+*Built for day traders, swing traders, market analysts and long-term holders.*
 
 ### [**▶ Open Entryvex at entryvex.trade**](https://entryvex.trade)
 
@@ -25,6 +26,7 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 | 🎯 **One clear answer** | *Entryvex says*: **BUY**, **WAIT**, **DON'T BUY**, **HOLD** or **SELL NOW**, in plain English. |
 | 📏 **Measured, not guessed** | Confidence comes from replaying every past occurrence of a setup, with a statistical test so luck doesn't count as skill. |
 | 💵 **Sized to your money** | Exactly how much to buy, where to take profit, where to cut the loss, and when to sell by. |
+| 🌍 **Global** | World indices, gold, oil, currencies, yields and the economic calendar; stocks from the US, Europe, Asia and the Americas. |
 | 🔔 **Alerts, even when closed** | Price, big-move, buy-setup and SELL alerts on your phone or computer. |
 | 🔒 **Private** | No accounts, no tracking, no ads. Your settings and trades stay in your browser. |
 
@@ -33,10 +35,11 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 ## Get started in 60 seconds
 
 1. Open **[entryvex.trade](https://entryvex.trade)** on your phone or computer.
-2. Pick a coin or stock from the watchlist, or search for one (*Bitcoin*, *Apple*, *SPY*…).
-3. Read **Entryvex says** under the chart.
-4. Enter your trading balance and the most you'll risk per trade (1% is a good start).
-5. Tap **🔔** → **Turn on closed-app alerts**, so Entryvex can tell you when it's time to buy or sell.
+2. Choose your style at the top: **⚡ Day trader**, **📅 Swing trader** or **🏦 Long-term holder**.
+3. Pick a coin or stock from the watchlist, or search for one (*Bitcoin*, *Apple*, *SPY*, *Toyota*, *SAP*…).
+4. Read **Entryvex says** under the chart.
+5. Enter your trading balance and the most you'll risk per trade (1% is a good start).
+6. Tap **🔔** → **Turn on closed-app alerts**, so Entryvex can tell you when it's time to buy or sell.
 
 > **Tip:** Install it like an app: *Add to Home Screen* on your phone, or **⬇ Install app** in Chrome/Edge.
 
@@ -47,8 +50,11 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 <details open>
 <summary><b>📈 Markets & live data</b></summary>
 
+- **Trading style switch:** Day trader (5-minute candles, fast signals first), Swing trader (4-hour), Long-term holder (daily, long-term view first).
 - **Crypto:** every Binance.US pair, streamed live 24/7.
-- **US stocks & ETFs:** any NYSE/Nasdaq symbol, refreshed every few seconds in market hours, with a market open/closed badge.
+- **Stocks & ETFs worldwide:** US (NYSE/Nasdaq) plus London, Frankfurt, Paris, Amsterdam, Zurich, Tokyo, Hong Kong, Shanghai, Seoul, Mumbai, Sydney, Toronto, São Paulo, Mexico and more, priced in their own currency, with a market open/closed badge.
+- **World markets:** live S&P 500, Nasdaq, Dow, TSX, Bovespa, FTSE 100, DAX, CAC 40, Euro Stoxx 50, Nikkei, Hang Seng, Shanghai, Sensex, KOSPI, ASX 200, plus gold, oil, the dollar, EUR/USD, USD/JPY, the US 10-year yield and the VIX.
+- **Economic calendar:** this week's high-impact events worldwide (central banks, inflation, jobs, GDP) in your local time, with countdowns; upcoming events also appear in *Entryvex says*.
 - **Market movers:** most traded today and over the last 30 days, plus top gainers and losers, updated every minute.
 - Watchlist rows keep the color ▲▼ of their last move; drag ⋮⋮ to reorder.
 </details>
@@ -86,7 +92,8 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 <summary><b>📰 Research & AI</b></summary>
 
 - **Report card:** for stocks, the latest quarterly sales and profit from **SEC filings**, margin, market cap and P/E; for crypto, size, supply and distance from its all-time high.
-- **News:** live headlines tagged ▲ positive / ▼ negative, with an AI summary of what's happening.
+- **News:** live headlines for the coin or stock you're viewing, tagged ▲ positive / ▼ negative, with an AI summary of what's happening.
+- **Global headlines:** business and markets news from the Americas, Europe and Asia (CNBC, Financial Times, BBC, The Guardian, Nikkei Asia, South China Morning Post, Economic Times, Investing.com), plus crypto news.
 - **Watchlist briefing:** one tap and the AI reads the latest news for every coin and stock on your watchlist and summarizes what's going on.
 - **Ask the analyst:** an AI that answers using everything Entryvex knows: live price, forecasts, measured signals and buy triggers, outside checks, long-term stats, earnings, your buy-now numbers and signals across your whole watchlist.
 </details>
@@ -98,11 +105,12 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 - **Entryvex never places trades** and never asks for exchange logins or API keys. You decide, and you place every order yourself.
 - **No prediction is certain.** Entryvex shows measured odds (typically 50–70% at best) and says so. Most of the time the honest answer is *wait*.
 - **Binance.US** serves US users only. Many smaller coins trade thinly there on short candles; Entryvex flags them.
-- **Stocks** trade 9:30–16:00 New York time. A stop-loss can fill lower than planned if a stock gaps down overnight.
+- **Non-US stocks** show chart, signals, forecasts, long-term view and news; dollar sizing is only for USD-priced markets (Entryvex never mixes currencies).
+- **US stocks** trade 9:30–16:00 New York time. A stop-loss can fill lower than planned if a stock gaps down overnight.
 - **Closed-app alerts** store only an anonymous notification address and your alert settings. On iPhone/iPad, add Entryvex to your Home Screen first.
 - Times are shown in **24-hour format** in your device's time zone.
 
-**Data sources:** Binance.US · Yahoo Finance (stock prices, screeners, VIX) · SEC EDGAR filings · CoinGecko · alternative.me Fear & Greed · Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News and Bing News · Cloudflare Workers AI.
+**Data sources:** Binance.US · Yahoo Finance (stocks, indices, futures, currencies, screeners, VIX) · SEC EDGAR filings · Forex Factory economic calendar · CoinGecko · alternative.me Fear & Greed · CNBC, Financial Times, BBC, The Guardian, Nikkei Asia, South China Morning Post, Economic Times, Investing.com, Cointelegraph, Decrypt, CoinDesk, Bitcoin Magazine, Yahoo Finance, Google News and Bing News · Cloudflare Workers AI.
 
 ---
 
