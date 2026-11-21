@@ -77,3 +77,15 @@ test("forecast: the 80% range holds about 80% of outcomes on a random walk", () 
   assert.ok(f.range80[0] < f.range50[0] && f.range50[1] < f.range80[1], "50% range must sit inside the 80% range");
   assert.ok(f.pUp > 0.4 && f.pUp < 0.6, "a random walk should be close to a coin flip");
 });
+
+test("liquidity check flags markets with empty candles or tiny volume", async () => {
+  const { checkLiquidity } = await import("../public/js/engine.js");
+  const busy = Array.from({ length: 300 }, (_, i) => ({ open: 100, high: 101, low: 99, close: 100, volume: 50 }));
+  assert.equal(checkLiquidity(busy).ok, true);
+  const empty = busy.map((k, i) => (i % 3 === 0 ? { ...k, high: 100, low: 100, volume: 0 } : k));
+  const e = checkLiquidity(empty);
+  assert.equal(e.ok, false);
+  assert.ok(e.zeroFrac > 0.3);
+  const tiny = busy.map((k) => ({ ...k, volume: 2 })); // $200 per candle
+  assert.equal(checkLiquidity(tiny).ok, false);
+});

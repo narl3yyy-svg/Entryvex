@@ -15,7 +15,7 @@ const store = {
   set(k, v) { try { localStorage.setItem("evx." + k, JSON.stringify(v)); } catch {} },
 };
 
-export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval }) {
+export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onPickSymbol, onShowTrades, onAnalyzed, onPickInterval, onScanAll }) {
   let ctx = null;          // { symbol, interval, candles, spreadPct }
   let result = null;
   let token = 0;
@@ -30,7 +30,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     store.set("feePct", v);
     if (ctx) recompute();
   });
-  $("scan-all").addEventListener("click", scanWatchlist);
+  $("scan-all").addEventListener("click", () => (onScanAll ? onScanAll() : scanWatchlist()));
   onMoneyChange(() => { if (ctx && result) render(); });
 
   // Stocks: US brokers charge $0 commission, so only the (estimated) spread counts.
@@ -172,7 +172,8 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
       ? `Last setup here: <strong>${fmt.esc(last.s.name)}</strong> ${fmt.ago(last.t.signalTime * 1000)}, which ${last.t.net > 0 ? `<span class="up">ended in profit (${fmt.pct(last.t.net * 100)})</span>` : `<span class="down">ended in a loss (${fmt.pct(last.t.net * 100)})</span>`}.`
       : "No setup has fired in the loaded history.";
     const edgeCount = r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").length;
-    $("scan-context").innerHTML = `<span>Watching for 4 setups on <strong>${interval}</strong> candles; checks again every time a candle closes. ${lastTxt}</span>
+    const liq = r.liquidity && !r.liquidity.ok ? `<span class="down"><strong>⚠ Thin market.</strong> ${fmt.esc(r.liquidity.reason)}</span>` : "";
+    $("scan-context").innerHTML = liq + `<span>Watching for 4 setups on <strong>${interval}</strong> candles; checks again every time a candle closes. ${lastTxt}</span>
       <span>${edgeCount ? `<strong>${edgeCount}</strong> of 4 setups have a positive record here; you'll get a trade card when one is active.` : `None of the 4 setups has made money here after costs. Try <button class="link-btn" data-find-edge>Find an edge</button> or another coin.`}</span>`;
     $("scan-context").querySelector("[data-find-edge]")?.addEventListener("click", findEdges);
 

@@ -6,6 +6,11 @@
   <title>Entryvex</title>
   <meta name="description" content="Entryvex: live crypto market research. Live prices, charts and news in one place." />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0b0e13" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Entryvex" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -26,10 +31,45 @@
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 16a1 1 0 0 0 .9 1.4h13.6a1 1 0 0 0 .9-1.4L18 12.6V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21Z" fill="currentColor"/></svg>
         <span id="alerts-count" class="count" hidden>0</span>
       </button>
+      <button id="install-btn" class="ghost-btn" hidden title="Install Entryvex as an app">⬇ Install app</button>
       <button id="help-btn" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     </div>
   </header>
 
+
+  <div id="welcome" class="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+    <div class="welcome-card">
+      <div class="welcome-steps">
+        <section data-step="0">
+          <div class="w-ico">👋</div>
+          <h2 id="welcome-title">Welcome to Entryvex</h2>
+          <p>Live research for <strong>crypto and US stocks</strong>. Entryvex tells you when a trade is worth taking, and when it isn't, using measured history instead of guesses.</p>
+          <p class="muted small">No sign-up, no tracking. Your settings and trades stay in this browser. Entryvex never places trades for you.</p>
+        </section>
+        <section data-step="1" hidden>
+          <div class="w-ico">🧭</div>
+          <h2>1 · Pick something to watch</h2>
+          <p>Choose a coin or stock on the left, or search for one (try <em>Bitcoin</em>, <em>Apple</em> or <em>SPY</em>). Green ▲ / red ▼ shows which way each price last moved.</p>
+        </section>
+        <section data-step="2" hidden>
+          <div class="w-ico">✅</div>
+          <h2>2 · Read "Entryvex says"</h2>
+          <p>Under the chart you get one plain answer: <strong>BUY</strong>, <strong>DON'T BUY</strong> or <strong>WAIT</strong>. A BUY comes with exactly how much to buy, where to take profit, where to cut the loss, and when to sell by.</p>
+          <p class="muted small">Most of the time it says WAIT. That's honest: most moments aren't worth trading. The <strong>Opportunities</strong> tab checks your whole watchlist for you.</p>
+        </section>
+        <section data-step="3" hidden>
+          <div class="w-ico">💵</div>
+          <h2>3 · Set your money, then get alerts</h2>
+          <p>Enter your trading balance and the most you're willing to lose per trade (1% is a good start). Then tap <strong>🔔</strong> and turn on setup alerts to be told when a BUY appears.</p>
+          <p class="muted small">Took a trade? Click <strong>I took this trade</strong> and Entryvex tells you when to sell. Questions? Ask the AI analyst.</p>
+        </section>
+      </div>
+      <div class="welcome-foot">
+        <div class="w-dots"><i class="on"></i><i></i><i></i><i></i></div>
+        <div class="w-btns"><button class="link-btn" id="w-skip">Skip</button><button class="btn" id="w-next">Next</button></div>
+      </div>
+    </div>
+  </div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="alerts-overlay" class="overlay" hidden></div>
   <aside id="alerts-drawer" class="drawer" aria-label="Alerts">
@@ -47,6 +87,9 @@
       <div><dt>F</dt><dd>Show / hide the forecast range</dd></div>
       <div><dt>A</dt><dd>Open alerts</dd></div>
       <div><dt>?</dt><dd>This help</dd></div>
+    </dl>
+    <button class="link-btn" id="show-welcome">Show the welcome guide again</button>
+    <dl hidden>
     </dl>
   </div>
 
@@ -129,6 +172,7 @@
 
         <div class="tabs" id="center-tabs" role="tablist">
           <button data-tab="scanner" class="on">Scanner</button>
+          <button data-tab="opps">Opportunities <span id="opps-count" class="count-inline" hidden>0</span></button>
           <button data-tab="trades">My trades <span id="trades-count" class="count-inline" hidden>0</span></button>
           <button data-tab="signals">Signal record</button>
           <button data-tab="ai" class="ai-tab-btn"><span class="ai-badge">AI</span> Ask the analyst</button>
@@ -142,7 +186,7 @@
           </div>
           <div class="scan-controls">
             <button id="find-edges" class="ghost-btn" title="Test this coin on 5m, 15m, 1h and 4h candles to find where a setup has a real track record">Find an edge for this coin</button>
-            <button id="scan-all" class="btn">Scan watchlist</button>
+            <button id="scan-all" class="btn" title="Check every coin and stock in your watchlist on 15m, 1h and 4h candles">Scan whole watchlist</button>
           </div>
         </div>
         <details class="howto-scan" id="howto-scan">
@@ -152,7 +196,7 @@
             <li>For each one, it looks back at <strong>every time that setup happened</strong> in the last 3,000 candles and checks what would have happened if you bought: did it hit the profit target or the stop-loss first, after fees?</li>
             <li>That gives a <strong>measured confidence</strong>: e.g. "ended in profit 21 of 38 times". Not a guess.</li>
             <li>When a setup is active <em>right now</em>, you get a verdict: <span class="pill pill-edge">GO</span> proven edge · <span class="pill pill-weak">CAUTION</span> slight edge ·
-              <span class="pill pill-thin">UNPROVEN</span> too few examples · <span class="pill pill-negative">NO TRADE</span> it loses money. <strong>WAIT</strong> means no setup is active: there's nothing to do.</li>
+              <span class="pill pill-thin">UNPROVEN</span> too few examples · <span class="pill pill-flat">NO CLEAR EDGE</span> break-even, any profit looks like luck · <span class="pill pill-negative">NO TRADE</span> it loses money. <strong>WAIT</strong> means no setup is active: there's nothing to do.</li>
             <li>Most of the time it says WAIT or NO TRADE. That's normal: most patterns don't beat fees. Use <strong>Find an edge</strong> to see which candle size works best for this coin, and turn on <strong>setup alerts</strong> (🔔) so you're told when a GO appears.</li>
           </ol>
         </details>
@@ -176,6 +220,7 @@
         <p id="method" class="method small muted"></p>
         </div>
 
+        <div id="tab-opps" class="tab-body" hidden></div>
         <div id="tab-trades" class="tab-body" hidden></div>
         <div id="tab-signals" class="tab-body" hidden></div>
         <div id="tab-ai" class="tab-body" hidden>

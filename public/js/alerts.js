@@ -59,7 +59,7 @@ function flashTitle(text) {
 }
 
 function notify({ title, body, symbol, kind }) {
-  history.unshift({ t: Date.now(), title, body, symbol, kind });
+  history.unshift({ t: Date.now(), title, body, symbol, kind, unread: true });
   history = history.slice(0, 30);
   store.set("alertHistory", history);
   toast(title, body, symbol, kind);
@@ -193,8 +193,12 @@ export async function runScan() {
   await Promise.all([worker(), worker()]);
   badges = next;
   hooks.onBadges(badges);
-  const found = Object.values(next).filter((b) => b.level === "go" || b.level === "caution").length;
-  lastScanText = `Last checked ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${syms.length} coins on ${interval}, ${found ? `${found} with an active setup worth a look` : "nothing worth trading right now"}.`;
+  const go = Object.values(next).filter((b) => b.level === "go").length;
+  const caution = Object.entries(next).filter(([, b]) => b.level === "caution" && b.label === "CAUTION").length;
+  const when = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  lastScanText = `Last checked ${when}: ${syms.length} markets on ${interval}. ` + (go || caution
+    ? `${go} GO (proven edge)${caution ? `, ${caution} CAUTION (weak edge)${cfg.setup.min === "go" ? ": you're only alerted on GO, so these didn't alert you. Switch \"Alert on\" to include CAUTION if you want them" : ""}` : ""}.`
+    : "Nothing worth trading right now.");
   if ($("alert-scan-status")) $("alert-scan-status").textContent = lastScanText;
   scanning = false;
 }
@@ -265,13 +269,24 @@ function toggleDrawer(open) {
   $("alerts-drawer").classList.toggle("open", open);
   $("alerts-overlay").hidden = !open;
   if (open) renderDrawer();
+  // Opening the panel marks everything as read (after it has been shown once with the "new" markers).
+  if (open && history.some((h) => h.unread)) {
+    setTimeout(() => { history.forEach((h) => (h.unread = false)); store.set("alertHistory", history); updateBadge(); }, 400);
+  }
+}
+
+/** The bell shows how many alerts have fired that you haven't seen yet. */
+function updateBadge() {
+  const unread = history.filter((h) => h.unread).length;
+  const badge = $("alerts-count");
+  badge.textContent = unread > 9 ? "9+" : unread;
+  badge.hidden = !unread;
+  const rules = priceAlerts.filter((a) => !a.done).length + (cfg.setup.on ? 1 : 0) + (cfg.move.on ? 1 : 0);
+  $("alerts-btn").title = `${unread ? `${unread} new alert${unread === 1 ? "" : "s"}. ` : "No new alerts. "}${rules} alert rule${rules === 1 ? "" : "s"} switched on. (A)`;
 }
 
 function renderDrawer() {
-  const active = priceAlerts.filter((a) => !a.done).length + (cfg.setup.on ? 1 : 0) + (cfg.move.on ? 1 : 0);
-  const badge = $("alerts-count");
-  badge.textContent = active;
-  badge.hidden = !active;
+  updateBadge();
 
   const wl = hooks.getWatchlist();
   const sel = hooks.getSelected();
@@ -327,6 +342,6 @@ function renderDrawer() {
 
     <section>
       <h3>Recent alerts ${history.length ? `<button class="link-btn" id="al-clear-hist">Clear</button>` : ""}</h3>
-      <ul class="al-list">${history.length ? history.slice(0, 15).map((h) => `<li><span><strong>${fmt.esc(h.title)}</strong><br><span class="muted small">${fmt.esc(h.body)} · ${fmt.ago(h.t)}</span></span></li>`).join("") : `<li class="muted small">Nothing yet.</li>`}</ul>
+      <ul class="al-list">${history.length ? history.slice(0, 15).map((h) => `<li class="${h.unread ? "unread" : ""}"><span>${h.unread ? '<span class="new-dot">NEW</span> ' : ""}<strong>${fmt.esc(h.title)}</strong><br><span class="muted small">${fmt.esc(h.body)} · ${fmt.ago(h.t)}</span></span></li>`).join("") : `<li class="muted small">Nothing yet.</li>`}</ul>
     </section>`;
 }

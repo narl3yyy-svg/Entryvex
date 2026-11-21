@@ -10,6 +10,7 @@ import { settings, guard } from "./money.js";
 import { openTrades, tradeAdvice } from "./journal.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
+import { currentBuys } from "./opportunities.js";
 
 const $ = (id) => document.getElementById(id);
 const HIGHER = { "1m": "15m", "5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d", "1d": "1d" };
@@ -144,6 +145,11 @@ function html(c, checks) {
     headline = `You own ${+t.qty.toFixed(8)} ${unit}${pnl != null ? `, now <strong class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : "−"}$${Math.abs(pnl).toFixed(2)}</strong> after fees` : ""}. ${adv.why}`;
   } else if (!r) {
     verdict = "CHECKING…"; cls = "wait"; headline = "Testing this market's setups against its history…";
+  } else if (r.liquidity && !r.liquidity.ok) {
+    verdict = "DON'T BUY"; cls = "no";
+    headline = `<strong>${fmt.esc(c.base)} barely trades here.</strong> ${fmt.esc(r.liquidity.reason)}`;
+    steps = `<ol class="d-steps"><li>Switch to a bigger candle size (1h or 4h) or a busier market like BTC, ETH or a stock.</li>
+      <li>Or check <button class="link-btn" data-goto-opps>Opportunities</button> for markets that trade well and have a buy signal.</li></ol>`;
   } else if (guard().locked) {
     verdict = "STOP FOR TODAY"; cls = "no";
     headline = "You've reached your daily loss limit. The best trade right now is no trade. Entryvex resets tomorrow.";
@@ -168,9 +174,13 @@ function html(c, checks) {
       verdict = lvl === "wait" ? "WAIT · DON'T BUY YET" : "DON'T BUY";
       headline = lvl === "wait"
         ? `None of the setups Entryvex trusts is happening on ${c.base} right now, so there's no good reason to buy at this moment.`
-        : lvl === "no"
+        : lvl === "no" && best?.verdict.level === "flat"
+          ? `A setup is active, but on ${c.base} it has only <strong>broken even</strong> after costs (${fmt.pct(best.stats.ev * 100)} per trade, too small to be more than luck). Skip it.`
+          : lvl === "no"
           ? `A setup is active, but on ${c.base} it has <strong>lost money</strong> after costs in the past (${Math.round(best.stats.winRate * 100)}% wins, ${fmt.pct(best.stats.ev * 100)} per trade). Skip it.`
           : `A setup is active, but it has only happened ${best?.stats.n ?? 0} times here, too few to know if it works. Skip it.`;
+      const elsewhere = currentBuys().filter((b) => b.sym !== c.symbol);
+      if (elsewhere.length) headline += ` <span class="d-elsewhere">Elsewhere right now: ${elsewhere.slice(0, 3).map((b) => `<button class="link-btn" data-goto-opps>${fmt.esc(b.label === "GO" ? "BUY" : "small buy")} on ${fmt.esc(b.base)} (${b.iv})</button>`).join(", ")}.</span>`;
       steps = `<ol class="d-steps">
         <li><strong>Do nothing for now.</strong> Not trading is a good decision when the odds aren't on your side.</li>
         <li>Entryvex re-checks every time a ${c.interval} candle closes. Turn on <button class="link-btn" data-open-alerts>setup alerts 🔔</button> to be told the moment a BUY appears on any of your coins or stocks.</li>

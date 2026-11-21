@@ -95,6 +95,7 @@ const GROUPS = [
   ["edge", "GO (proven edge)", "Entryvex said this setup had a proven edge"],
   ["weak", "CAUTION (weak edge)", "slightly profitable before, not statistically clear"],
   ["thin", "UNPROVEN", "too few past examples to measure"],
+  ["flat", "NO CLEAR EDGE", "roughly break-even before; any profit looked like luck"],
   ["negative", "NO TRADE", "Entryvex said skip it: it lost money before"],
 ];
 

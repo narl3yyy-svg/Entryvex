@@ -12,6 +12,7 @@ import { initJournal, onTicker as journalTicker } from "./journal.js";
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
+import { initOpportunities, run as runOpportunities } from "./opportunities.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 
@@ -185,18 +186,61 @@ function renderWatchlist() {
     li.dataset.sym = sym;
     if (sym === state.selected) li.classList.add("active");
     li.innerHTML = `
+      <span class="wl-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
       <span class="wl-base">${fmt.esc(base)}${isStock(sym) ? `<span class="kind-tag">${fmt.esc(info?.kind || "Stock")}</span>` : `<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>`}${badgeHtml(sym)}</span>
       <span class="wl-price" data-f="price">—</span>
       <span class="wl-name">${fmt.esc(nameFor(sym))}</span>
       <span class="wl-chg" data-f="chg">—</span>
       <button class="wl-remove" title="Remove from watchlist" aria-label="Remove ${fmt.esc(base)}">×</button>`;
     li.addEventListener("click", (e) => {
+      if (e.target.closest(".wl-grip") || wlDrag.justDropped) return;
       if (e.target.closest(".wl-remove")) { removeFromWatchlist(sym); e.stopPropagation(); return; }
       selectSymbol(sym);
     });
     ul.appendChild(li);
     paintRow(sym);
   }
+}
+
+/* Drag to reorder (mouse and touch): grab the ⋮⋮ grip and move the row. */
+const wlDrag = { li: null, pointerId: null, justDropped: false };
+function initWatchlistDrag() {
+  const ul = $("watchlist");
+  ul.addEventListener("pointerdown", (e) => {
+    const grip = e.target.closest(".wl-grip");
+    if (!grip) return;
+    e.preventDefault();
+    wlDrag.li = grip.closest("li");
+    wlDrag.pointerId = e.pointerId;
+    wlDrag.li.classList.add("dragging");
+    ul.classList.add("is-dragging");
+    grip.setPointerCapture(e.pointerId);
+  });
+  ul.addEventListener("pointermove", (e) => {
+    if (!wlDrag.li || e.pointerId !== wlDrag.pointerId) return;
+    // Auto-scroll near the top/bottom edge of the list.
+    const box = ul.getBoundingClientRect();
+    if (e.clientY < box.top + 30) ul.scrollTop -= 8;
+    else if (e.clientY > box.bottom - 30) ul.scrollTop += 8;
+    const rows = [...ul.querySelectorAll("li:not(.dragging)")];
+    const target = rows.find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if (target) ul.insertBefore(wlDrag.li, target); else ul.appendChild(wlDrag.li);
+  });
+  const end = (e) => {
+    if (!wlDrag.li || e.pointerId !== wlDrag.pointerId) return;
+    wlDrag.li.classList.remove("dragging");
+    ul.classList.remove("is-dragging");
+    const order = [...ul.querySelectorAll("li")].map((li) => li.dataset.sym);
+    wlDrag.li = null;
+    if (order.join() !== state.watchlist.join()) {
+      state.watchlist = order;
+      store.set("watchlist", state.watchlist);
+    }
+    wlDrag.justDropped = true;
+    setTimeout(() => (wlDrag.justDropped = false), 50);
+  };
+  ul.addEventListener("pointerup", end);
+  ul.addEventListener("pointercancel", end);
 }
 
 function badgeHtml(sym) {
@@ -659,6 +703,51 @@ function initShortcuts() {
   });
 }
 
+/** "Scan watchlist": open Opportunities and re-check every market in the watchlist now. */
+function scanWholeWatchlist() {
+  document.querySelector('#center-tabs button[data-tab="opps"]')?.click();
+  $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" });
+  runOpportunities();
+}
+
+/* ---------- First-visit welcome guide ---------- */
+function initWelcome() {
+  const box = $("welcome");
+  const steps = [...box.querySelectorAll("[data-step]")];
+  const dots = [...box.querySelectorAll(".w-dots i")];
+  let i = 0;
+  const show = (n) => {
+    i = n;
+    steps.forEach((s, k) => (s.hidden = k !== i));
+    dots.forEach((d, k) => d.classList.toggle("on", k === i));
+    $("w-next").textContent = i === steps.length - 1 ? "Start" : "Next";
+  };
+  const close = () => { box.hidden = true; store.set("welcomed", true); };
+  const open = () => { show(0); box.hidden = false; $("w-next").focus(); };
+  $("w-next").addEventListener("click", () => (i < steps.length - 1 ? show(i + 1) : close()));
+  $("w-skip").addEventListener("click", close);
+  box.addEventListener("click", (e) => { if (e.target === box) close(); });
+  document.addEventListener("keydown", (e) => { if (!box.hidden && e.key === "Escape") close(); });
+  $("show-welcome").addEventListener("click", () => { $("help").hidden = true; open(); });
+  if (!store.get("welcomed", false)) open();
+}
+
+/* ---------- Installable app ---------- */
+function initInstall() {
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
+  let deferred = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; $("install-btn").hidden = false; });
+  $("install-btn").addEventListener("click", async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice.catch(() => {});
+    deferred = null; $("install-btn").hidden = true;
+  });
+  window.addEventListener("appinstalled", () => ($("install-btn").hidden = true));
+}
+
 /* ---------- Boot ---------- */
 async function boot() {
   tickClock();
@@ -675,6 +764,7 @@ async function boot() {
     onShowTrades: (showing) => (showing ? chart.timeScale().fitContent() : centerLive()),
     onAnalyzed: updateForecast,
     onPickInterval: (iv) => document.querySelector(`#intervals button[data-i="${iv}"]`)?.click(),
+    onScanAll: scanWholeWatchlist,
   });
   $("center-live").addEventListener("click", () => centerLive());
   onMoneyChange(() => refreshDecision(decisionCtx()));
@@ -684,7 +774,8 @@ async function boot() {
     if (!b) return;
     if (b.hasAttribute("data-open-alerts")) $("alerts-btn").click();
     if (b.hasAttribute("data-find-edge")) { document.querySelector('#center-tabs button[data-tab="scanner"]')?.click(); $("find-edges").click(); $("edges").scrollIntoView({ behavior: "smooth", block: "center" }); }
-    if (b.hasAttribute("data-scan-all")) { document.querySelector('#center-tabs button[data-tab="scanner"]')?.click(); $("scan-all").click(); }
+    if (b.hasAttribute("data-goto-opps")) { document.querySelector('#center-tabs button[data-tab="opps"]')?.click(); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
+    if (b.hasAttribute("data-scan-all")) scanWholeWatchlist();
   });
   $("ema-toggle").addEventListener("click", toggleEma);
   $("price-alert-btn").addEventListener("click", () => openPriceAlert(state.selected));
@@ -698,13 +789,16 @@ async function boot() {
     onBadges: (b) => { state.badges = b; renderWatchlist(); },
   });
   initShortcuts();
+  initInstall();
+  initWelcome();
+  initWatchlistDrag();
   $("forecast-toggle").addEventListener("click", toggleForecast);
 
   // Center tabs: Scanner / My trades / Signal record / AI
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
   };
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -721,6 +815,16 @@ async function boot() {
     showTab: (t) => { showTab(t); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); },
   });
   initSignals({ getInfo: (sym) => state.bySymbol.get(sym), onPick: pick });
+  initOpportunities({
+    getWatchlist: () => state.watchlist.slice(),
+    getInfo: (sym) => state.bySymbol.get(sym),
+    onPick: (sym, iv) => {
+      if (iv && iv !== state.interval) { state.interval = iv; store.set("interval", iv); document.querySelectorAll("#intervals button").forEach((x) => x.classList.toggle("on", x.dataset.i === iv)); }
+      if (sym === state.selected) loadChart(); else pick(sym);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    onUpdate: () => refreshDecision(decisionCtx()),
+  });
   initAI({ getSettings: () => ({ balance: +store.get("balance", 0), riskPct: +store.get("riskPct", 1), feePct: +store.get("feePct", 0.02) }) });
 
   document.querySelectorAll("#intervals button").forEach((b) => {

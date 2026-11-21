@@ -34,6 +34,11 @@ Right under the chart, one plain answer for whatever you're looking at:
 - **HOLD / SELL NOW**: once you own it (tracked in My trades), Entryvex tells you when to sell.
 - **Outside checks**: the bigger trend, the overall market (Bitcoin or the S&P 500), the fear gauge (Crypto Fear & Greed or the VIX), news mood and the measured odds. Shown as helping ▲ / against ▼.
 
+### Opportunities: what to buy right now, across your whole watchlist
+- Checks **every coin and stock in your watchlist** on 15-minute, 1-hour and 4-hour candles, every 15 minutes (or press **Scan whole watchlist**).
+- Lists **buy signals right now** and **setups with a good track record** to watch.
+- Skips markets that **barely trade** at that candle size (lots of empty candles, or very little money changing hands): patterns there aren't real, and stop-losses can't protect you.
+
 ### Chart + forecast
 - Live candles with volume and the 20/50 moving averages.
 - **Forecast:** dashed lines to the right of the live candle show where price has historically landed over the next 20 candles: an 80% range (outer lines), a 50% range, and the middle. Below the chart you'll see the range in dollars, **how accurate this forecast has been** (tested on past data it wasn't built from), and the measured chance the price is higher by then.
@@ -41,7 +46,7 @@ Right under the chart, one plain answer for whatever you're looking at:
 ### Scanner tab: "should I trade right now?"
 - Watches 4 common setups on the coin and candle size you're viewing.
 - For each one, it checks **every past time it happened** (last 3,000 candles) and what would have happened after fees: did it hit the profit target or the stop-loss first? That's the **measured confidence**, e.g. "ended in profit 21 of 38 times".
-- Verdicts: **GO** proven edge · **CAUTION** slight edge · **UNPROVEN** too few examples · **NO TRADE** it loses money · **WAIT** nothing is happening right now.
+- Verdicts: **GO** proven edge (profitable with ~95% statistical confidence) · **CAUTION** probable but unproven edge · **UNPROVEN** too few examples · **NO CLEAR EDGE** break-even, any profit looks like luck · **NO TRADE** it loses money · **WAIT** nothing is happening right now.
 - **Most of the time you'll see WAIT or NO TRADE.** That's normal: most patterns don't beat fees, and not trading is often the best move.
 - **Find an edge for this coin** tests 5m, 15m, 1h and 4h candles to show where this coin has actually had an edge.
 - **Scan watchlist** checks every coin at once.
@@ -81,6 +86,13 @@ Right under the chart, one plain answer for whatever you're looking at:
 | How you'll place orders | Picks the crypto trading fee. On Binance.US, a **limit order** (you set the price) costs 0%; a **market order** (buy instantly) costs 0.02%. Simple "Buy" buttons in apps usually charge much more. Stocks are always counted at $0 commission (standard at US brokers). |
 
 All settings, trades and alerts are stored **only in your own browser**.
+
+### Watchlist
+- Green ▲ / red ▼ shows which way each price **last moved**.
+- Drag the **⋮⋮** grip to reorder your watchlist.
+
+### Install it like an app
+On a phone, use your browser's **Add to Home Screen**. On a computer, click **⬇ Install app** in the top bar (Chrome/Edge). Entryvex then opens in its own window with its own icon.
 
 ### Keyboard shortcuts
 `/` search · `1`–`6` candle size · `↑` `↓` previous/next coin · `L` center live candle · `F` forecast · `E` moving averages · `A` alerts · `?` help

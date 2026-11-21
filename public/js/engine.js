@@ -73,18 +73,22 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
   const a = x.atr14[lastClosed];
   const price = candles[candles.length - 1].close;
   const active = setups.filter((s) => s.activeNow);
-  const rank = { edge: 3, weak: 2, thin: 1, negative: 0 };
+  const rank = { edge: 3, weak: 2, thin: 1, flat: 0.5, negative: 0 };
   active.sort((p, q) => rank[q.verdict.level] - rank[p.verdict.level] || q.stats.ev - p.stats.ev);
   const best = active[0] || null;
 
+  const liquidity = checkLiquidity(candles, lastClosed);
+
   let overall;
-  if (!best) overall = { level: "wait", label: "WAIT", text: "No setup is active right now. Nothing to do, which is often the right call." };
+  if (!liquidity.ok) overall = { level: "no", label: "ILLIQUID", text: liquidity.reason };
+  else if (!best) overall ={ level: "wait", label: "WAIT", text: "No setup is active right now. Nothing to do, which is often the right call." };
   else if (best.verdict.level === "edge") overall = { level: "go", label: "GO", text: `${best.name} is active, and it has a measured, positive edge on this coin and timeframe after costs.` };
   else if (best.verdict.level === "weak") overall = { level: "caution", label: "CAUTION", text: `${best.name} is active and has been slightly profitable after costs, but the edge isn't statistically clear. Small size or skip.` };
   else if (best.verdict.level === "thin") overall = { level: "caution", label: "UNPROVEN", text: `${best.name} is active, but it has happened too few times here to measure. Treat it as unproven.` };
-  else overall = { level: "no", label: "NO TRADE", text: `${best.name} is active, but historically it has lost money after costs on this coin and timeframe. Skip it.` };
+  else if (best.verdict.level === "flat") overall = { level: "no", label: "NO TRADE", text: `${best.name} is active, but after costs it has roughly broken even here. Any profit so far looks like luck. Skip it.` };
+  else overall ={ level: "no", label: "NO TRADE", text: `${best.name} is active, but historically it has lost money after costs on this coin and timeframe. Skip it.` };
 
-  const plan = best && isFinite(a) ? {
+  const plan = liquidity.ok && best && isFinite(a) ? {
     setup: best.id,
     entry: price,
     stop: price - RULES.stopAtr * a,
@@ -95,12 +99,33 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
   } : null;
 
   return {
-    setups, overall, best, plan, costPerSide, atr: a, price,
+    setups, overall, best, plan, costPerSide, atr: a, price, liquidity,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,
     },
   };
+}
+
+/**
+ * Is this market liquid enough to trade on this candle size? Measured on the last 500 closed candles.
+ * Thin markets (lots of empty candles, or very little money changing hands) produce fake patterns,
+ * and stop-losses can't protect you there because price jumps straight past them.
+ */
+export const LIQUIDITY = { maxZeroVolume: 0.2, maxFlat: 0.4, minMedianUsd: 1000 };
+export function checkLiquidity(candles, lastClosed = candles.length - 2) {
+  const recent = candles.slice(Math.max(0, lastClosed - 499), lastClosed + 1);
+  if (recent.length < 50) return { ok: true, zeroFrac: 0, flatFrac: 0, medianUsd: NaN };
+  const zeroFrac = recent.filter((k) => !(k.volume > 0)).length / recent.length;
+  const flatFrac = recent.filter((k) => k.high === k.low).length / recent.length;
+  const usd = recent.map((k) => (k.volume || 0) * k.close).sort((x, y) => x - y);
+  const medianUsd = usd[Math.floor(usd.length / 2)];
+  let reason = null;
+  if (zeroFrac > LIQUIDITY.maxZeroVolume || flatFrac > LIQUIDITY.maxFlat)
+    reason = `This market barely trades on this candle size: ${Math.round(zeroFrac * 100)}% of recent candles had no trades at all. Prices jump instead of moving smoothly, so a stop-loss can't protect you. Don't trade it here; try a bigger candle size or a busier market.`;
+  else if (medianUsd < LIQUIDITY.minMedianUsd)
+    reason = `Very little money trades here: a typical candle sees only about $${Math.round(medianUsd).toLocaleString()} change hands. Even a small order can move the price against you. Don't trade it here; try a bigger candle size or a busier market.`;
+  return { ok: !reason, zeroFrac, flatFrac, medianUsd, reason };
 }
 
 function safeTest(s, i, c, x) {
@@ -164,8 +189,12 @@ function summarize(trades) {
   const evNew = n >= 10 ? mean(trades.slice(half)) : NaN;
   const targetHits = trades.filter((t) => t.outcome === "target").length;
   const bars = trades.map((t) => t.bars).sort((a, b) => a - b);
+  // t-statistic of the average result: how many standard errors above zero it is.
+  // ~1 means "probably positive", ~2 means "positive with ~95% confidence".
+  const sd = n > 1 ? Math.sqrt(trades.reduce((s, t) => s + (t.net - ev) ** 2, 0) / (n - 1)) : NaN;
+  const tStat = sd > 0 ? ev / (sd / Math.sqrt(n)) : 0;
   return {
-    n, winRate, winLo: lo, winHi: hi, avgWin, avgLoss, ev, breakeven,
+    n, winRate, winLo: lo, winHi: hi, avgWin, avgLoss, ev, breakeven, sd, tStat,
     targetRate: targetHits / n,
     evOld, evNew,
     medianBars: bars[Math.floor(bars.length / 2)],
@@ -176,11 +205,13 @@ function summarize(trades) {
 function verdictFor(s) {
   if (s.n < RULES.minTrades) return { level: "thin", label: "Too few", why: `Only ${s.n} past occurrences. Need ${RULES.minTrades}+ to measure.` };
   if (s.ev <= 0) return { level: "negative", label: "Loses money", why: "Average result after costs is negative." };
+  if (s.tStat < 1)
+    return { level: "flat", label: "No clear edge", why: `Slightly positive on average (${(s.ev * 100).toFixed(2)}%/trade), but so small compared with how much results vary that it's most likely luck.` };
   const consistent = s.evOld > 0 && s.evNew > 0;
-  if (s.winLo > s.breakeven && consistent)
-    return { level: "edge", label: "Proven edge", why: "Win rate is above break-even even at the low end of its range, in both older and recent history." };
+  if (s.winLo > s.breakeven && consistent && s.tStat >= 2)
+    return { level: "edge", label: "Proven edge", why: "Profitable with about 95% statistical confidence, win rate above break-even even at the low end of its range, in both older and recent history." };
   return { level: "weak", label: "Weak edge", why: consistent
-    ? "Slightly profitable, but the win rate could plausibly be at or below break-even."
+    ? "Profitable, and probably not just luck, but not proven: the win rate could still be at or below break-even."
     : "Profitable overall but not consistent: older and recent history disagree." };
 }
 
