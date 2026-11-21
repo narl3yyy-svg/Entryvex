@@ -683,3 +683,4 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 .brief-sym { font-weight: 700; color: var(--accent); text-decoration: none; margin-right: 4px; }
 .brief-watch { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(224,179,65,.08); border: 1px solid rgba(224,179,65,.25); }
 .ai-briefing p { margin: 0; }
+.brief-chg { font-size: 12px; margin-right: 6px; }

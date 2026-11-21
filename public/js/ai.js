@@ -85,7 +85,11 @@ async function runBriefing() {
     const res = await fetch("/api/briefing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }) });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || "unavailable");
-    const saved = { ...d, symbols: Object.fromEntries(items.map((x) => [x.ticker.toUpperCase(), x.sym])), at: Date.now() };
+    const saved = {
+      ...d, at: Date.now(),
+      symbols: Object.fromEntries(items.map((x) => [x.ticker.toUpperCase(), x.sym])),
+      changes: Object.fromEntries(items.map((x) => [x.ticker.toUpperCase(), x.changePct])),   // real price change, from live data
+    };
     try { localStorage.setItem("evx.briefing", JSON.stringify(saved)); } catch {}
     renderBriefing(saved);
   } catch (e) {
@@ -99,7 +103,11 @@ function renderBriefing(b, status = "") {
   el.innerHTML = `<div class="brief-head"><strong>Watchlist briefing</strong>
       <button class="btn" id="brief-run" ${briefingBusy ? "disabled" : ""}>${b ? "Refresh briefing" : "Brief me on my watchlist"}</button></div>
     ${status ? `<p class="small muted">${briefingBusy ? '<span class="typing"><i></i><i></i><i></i></span> ' : ""}${fmt.esc(status)}</p>` : ""}
-    ${b?.lines?.length ? `<ul class="brief-list">${b.lines.map((l) => `<li><button class="link-btn brief-sym" data-sym="${fmt.esc(b.symbols?.[l.ticker] || "")}">${fmt.esc(l.ticker)}</button> ${fmt.esc(l.text)}</li>`).join("")}</ul>
+    ${b?.lines?.length ? `<ul class="brief-list">${b.lines.map((l) => {
+        const ch = b.changes?.[l.ticker];
+        const move = ch == null || !isFinite(ch) ? "" : `<span class="mono brief-chg ${ch >= 0 ? "up" : "down"}">${ch >= 0 ? "▲ +" : "▼ "}${ch.toFixed(2)}%</span>`;
+        return `<li><button class="link-btn brief-sym" data-sym="${fmt.esc(b.symbols?.[l.ticker] || "")}">${fmt.esc(l.ticker)}</button>${move} ${fmt.esc(l.text)}</li>`;
+      }).join("")}</ul>
       ${b.watch ? `<p class="small brief-watch"><strong>Watch:</strong> ${fmt.esc(b.watch)}</p>` : ""}
       <p class="tiny muted">Written by AI from each symbol's latest headlines, price change and Entryvex's signals${b.at ? ` at ${new Date(b.at).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` : ""}${fresh ? "" : " (over 30 minutes old: refresh for the latest)"}. It can be wrong; tap a ticker to check.</p>`
       : (!status ? `<p class="small muted">One tap: Entryvex reads the latest news for every coin and stock on your watchlist and summarizes what's going on.</p>` : "")}`;

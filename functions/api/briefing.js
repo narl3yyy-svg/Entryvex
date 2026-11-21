@@ -6,9 +6,10 @@ const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^http:\/\/localhost(:\d
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
 const SYSTEM = `You write a short market briefing for a beginner investor about the coins and stocks on their watchlist.
-Use ONLY the data provided (price change, Entryvex signal, headlines). Never invent news, numbers or events. No buy/sell advice and no price predictions.
+Use ONLY the data provided (Entryvex signal, headlines). Never invent news, numbers or events. No buy/sell advice and no price predictions.
+Do NOT state whether the price rose or fell or by how much: the exact price change is shown next to your line from live data. Describe what the NEWS is about and its mood; if there are no headlines, say "No notable news."
 Output format, exactly:
-- One line per symbol, in the given order: "TICKER: <one sentence, max 22 words, on what's happening and the news mood>"
+- One line per symbol, in the given order: "TICKER: <one sentence, max 22 words, about the news and its mood>"
 - Then a final line: "Watch: <one sentence on the 1-3 most important things across the whole list>"
 No other text, no headings, no markdown.`;
 
