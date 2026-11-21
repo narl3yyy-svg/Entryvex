@@ -1,5 +1,5 @@
 import { getSymbols } from "./binance.js";
-import { get24h, getKlines, createTickerFeed, createKlineFeed, isStock, stockInfo, registerStock, searchStocks } from "./market.js";
+import { get24h, getKlines, createTickerFeed, createKlineFeed, isStock, stockInfo, registerStock, searchStocks, POPULAR } from "./market.js";
 import { COINS, coinName, DEFAULT_WATCHLIST } from "./coins.js";
 import * as fmt from "./format.js";
 import { createScanner } from "./scanner.js";
@@ -13,7 +13,7 @@ import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
-import { initOpportunities, run as runOpportunities, setupMarkets, signalFor } from "./opportunities.js";
+import { initOpportunities, run as runOpportunities, setupMarkets, signalFor, verdictFor, isRunning as oppsRunning } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
 import { initWorld, worldVisible } from "./world.js";
@@ -21,6 +21,7 @@ import { renderCalendar, loadCalendar } from "./calendar.js";
 import { initBuyNow, updateBuyNow } from "./buynow.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
+import { recentMove } from "./move.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -76,7 +77,20 @@ function decisionCtx() {
     forecast: state.forecast && state.forecast.symbol === sym ? state.forecast : null,
     rules: { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional },
     currency: info.currency,
+    move: currentMove(sym),
+    intervalSec: IV_SEC[state.interval],
   };
+}
+const IV_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+let moveCache = { key: "", t: 0, v: null };
+/** Recent-move check for "Entryvex says" (recomputed at most every 5 s). */
+function currentMove(sym) {
+  const key = sym + ":" + state.interval;
+  if (moveCache.key === key && Date.now() - moveCache.t < 5000) return moveCache.v;
+  let v = null;
+  try { if (candles && lastCandle) v = recentMove(candles.data(), 3, 20, state.stats.get(sym)?.last ?? lastCandle.close); } catch {}
+  moveCache = { key, t: Date.now(), v };
+  return v;
 }
 let decisionTimer = 0;
 function tickDecision() {
@@ -198,7 +212,7 @@ function renderWatchlist() {
     if (sym === state.selected) li.classList.add("active");
     li.innerHTML = `
       <span class="wl-grip" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
-      <span class="wl-base">${fmt.esc(base)}${isStock(sym) ? `<span class="kind-tag">${fmt.esc(info?.kind || "Stock")}</span>` : `<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>`}${badgeHtml(sym)}</span>
+      <span class="wl-base">${fmt.esc(base)}${isStock(sym) ? `<span class="kind-tag">${fmt.esc(info?.kind || "Stock")}</span>` : `<span class="muted small"> / ${fmt.esc(info?.quote ?? "")}</span>`}<span data-f="sig"></span></span>
       <span class="wl-price" data-f="price">—</span>
       <span class="wl-name">${fmt.esc(nameFor(sym))}</span>
       <span class="wl-chg" data-f="chg">—</span>
@@ -209,6 +223,7 @@ function renderWatchlist() {
       selectSymbol(sym);
     });
     ul.appendChild(li);
+    paintSignal(li, sym);
     paintRow(sym);
   }
 }
@@ -254,10 +269,27 @@ function initWatchlistDrag() {
   ul.addEventListener("pointercancel", end);
 }
 
-function badgeHtml(sym) {
+/** Watchlist verdict: Entryvex's latest check, or the setup-alert scan as a fallback. */
+function rowVerdict(sym) {
+  const v = verdictFor(sym);
+  if (v) return v;
   const b = state.badges[sym];
-  if (!b || !["go", "caution", "no"].includes(b.level)) return "";
-  return `<span class="wl-badge ${b.level}" title="Setup alert scan on ${b.interval} candles">${fmt.esc(b.label)}</span>`;
+  if (b && b.level === "go") return { level: "buy", label: b.label, why: `Setup alert on ${b.interval} candles: ${b.label}` };
+  return null;
+}
+function paintSignal(li, sym) {
+  const v = rowVerdict(sym);
+  li.classList.toggle("sig-buy", v?.level === "buy");
+  li.classList.toggle("sig-wait", v?.level === "wait");
+  li.classList.toggle("sig-unknown", v?.level === "unknown");
+  const el = li.querySelector('[data-f="sig"]');
+  if (!el) return;
+  const cls = v ? { buy: "buy", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
+  el.innerHTML = v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "";
+  li.title = v ? v.why : "Not checked yet. Press Scan watchlist.";
+}
+function paintSignals() {
+  document.querySelectorAll("#watchlist li[data-sym]").forEach((li) => paintSignal(li, li.dataset.sym));
 }
 
 function paintRow(sym, prevLast) {
@@ -269,20 +301,16 @@ function paintRow(sym, prevLast) {
   p.textContent = fmt.price(s.last);
   c.textContent = fmt.pct(s.changePct);
   c.className = "wl-chg " + (s.changePct >= 0 ? "up" : "down");
-  // Remember the direction of the LAST price change and keep showing it until the next change.
+  // The row color is Entryvex's verdict; a price tick only blinks the price briefly.
   if (prevLast != null && prevLast !== s.last) {
-    const dir = s.last > prevLast ? "up" : "down";
-    tickDir.set(sym, dir);
-    li.classList.remove("flash-up", "flash-down");
-    void li.offsetWidth;
-    li.classList.add(dir === "up" ? "flash-up" : "flash-down");
+    p.classList.remove("blip-up", "blip-down");
+    p.classList.add(s.last > prevLast ? "blip-up" : "blip-down");
+    clearTimeout(blipTimers.get(sym));
+    blipTimers.set(sym, setTimeout(() => p.classList.remove("blip-up", "blip-down"), 900));
   }
-  const dir = tickDir.get(sym);
-  li.classList.toggle("tick-up", dir === "up");
-  li.classList.toggle("tick-down", dir === "down");
-  p.title = dir ? `Last price change was ${dir === "up" ? "UP ▲" : "DOWN ▼"}` : "";
+  paintSignal(li, sym);
 }
-const tickDir = new Map();
+const blipTimers = new Map();
 
 function addToWatchlist(sym) {
   if (!state.watchlist.includes(sym)) {
@@ -290,6 +318,7 @@ function addToWatchlist(sym) {
     store.set("watchlist", state.watchlist);
     scheduleSync();
     refreshTickers();
+    setTimeout(() => runOpportunities([sym]), 1500);   // color the new row as soon as it's checked
   }
   selectSymbol(sym);
 }
@@ -337,10 +366,30 @@ function nameFor(sym) {
 /* ---------- Search ---------- */
 let searchHits = [];
 let searchIdx = 0;
+function cryptoPair(base) {
+  for (const q of QUOTES) { const s = state.allSymbols.find((x) => x.base === base && x.quote === q); if (s) return s; }
+  return null;
+}
+/** Empty search box: popular markets to add with one tap. */
+function popularHits() {
+  const hits = [];
+  for (const b of POPULAR.crypto) { const s = cryptoPair(b); if (s) hits.push({ ...s, kind: "crypto", group: "Popular crypto · Binance.US" }); }
+  const stock = (ticker, name, kind, group, exchange = "") => hits.push({ symbol: "S:" + ticker, ticker, name, exchange, assetKind: kind, kind: "stock", group });
+  for (const t of POPULAR.indices) stock(t, POPULAR.indexNames[t], "Index", "Indices");
+  for (const [t, n] of POPULAR.etfs) stock(t, n, "ETF", "Popular ETFs");
+  for (const [t, n] of POPULAR.us) stock(t, n, "Stock", "Popular US stocks");
+  for (const [t, n, ex] of POPULAR.intl) stock(t, n, "Stock", "Popular international stocks", ex);
+  return hits;
+}
 function runSearch(q) {
   const box = $("search-results");
   q = q.trim().toLowerCase();
-  if (!q) { box.hidden = true; return; }
+  clearTimeout(stockSearchTimer);
+  if (!q) {
+    ++stockSearchToken;
+    searchHits = popularHits(); searchIdx = 0;
+    drawSearch("", false); box.hidden = false; return;
+  }
   searchHits = state.allSymbols
     .filter((s) => QUOTES.includes(s.quote))
     .map((s) => {
@@ -352,40 +401,47 @@ function runSearch(q) {
     })
     .filter((x) => x.score < 9)
     .sort((a, b) => a.score - b.score)
-    .slice(0, 8)
-    .map((x) => x.s);
-  searchHits = searchHits.slice(0, 5).map((s) => ({ ...s, kind: "crypto" }));
+    .slice(0, 5)
+    .map((x) => ({ ...x.s, kind: "crypto", group: "Crypto · Binance.US" }));
   searchIdx = 0;
   drawSearch(q, true);
   box.hidden = false;
-  // Stocks & ETFs come from a server search (debounced).
-  clearTimeout(stockSearchTimer);
+  // Stocks, ETFs and indices come from a server search (debounced).
   const token = ++stockSearchToken;
   stockSearchTimer = setTimeout(async () => {
     let stocks = [];
     try { stocks = await searchStocks(q); } catch {}
     if (token !== stockSearchToken) return;
-    searchHits = searchHits.filter((h) => h.kind === "crypto").concat(stocks.map((s) => ({ ...s, kind: "stock" })));
+    const crypto = searchHits.filter((h) => h.kind === "crypto");
+    const st = stocks.map((s) => ({ ...s, assetKind: s.kind, kind: "stock", group: "Stocks, ETFs & indices · worldwide" }));
+    // An exact stock/index match ("dji", "spy") goes above weak crypto matches.
+    const strong = st.length && (st[0].assetKind === "Index" || st[0].ticker.replace(/^\^/, "").toLowerCase() === q) && !crypto.some((c) => c.base.toLowerCase() === q);
+    searchHits = strong ? st.concat(crypto) : crypto.concat(st);
+    searchIdx = 0;
     drawSearch(q, false);
   }, 250);
 }
 let stockSearchTimer = null, stockSearchToken = 0;
 function drawSearch(q, loadingStocks) {
   const box = $("search-results");
-  const crypto = searchHits.filter((h) => h.kind === "crypto");
-  const stocks = searchHits.filter((h) => h.kind === "stock");
-  const row = (s) => {
-    const i = searchHits.indexOf(s);
+  const row = (s, i) => {
     const added = state.watchlist.includes(s.symbol) ? " · added" : "";
     return s.kind === "crypto"
       ? `<button data-i="${i}" class="${i === searchIdx ? "active" : ""}"><span><strong>${fmt.esc(s.base)}</strong> <span class="muted">/ ${fmt.esc(s.quote)}</span></span>
           <span class="muted small">${fmt.esc(coinName(s.base))}${added}</span></button>`
-      : `<button data-i="${i}" class="${i === searchIdx ? "active" : ""}"><span><strong>${fmt.esc(s.ticker)}</strong> <span class="kind-tag">${fmt.esc(s.kind)}</span></span>
-          <span class="muted small">${fmt.esc(s.name)} · ${fmt.esc(s.exchange || "")}${added}</span></button>`;
+      : `<button data-i="${i}" class="${i === searchIdx ? "active" : ""}"><span><strong>${fmt.esc(s.ticker)}</strong> <span class="kind-tag">${fmt.esc(s.assetKind || "Stock")}</span></span>
+          <span class="muted small">${fmt.esc(s.name)}${s.exchange ? " · " + fmt.esc(s.exchange) : ""}${added}</span></button>`;
   };
-  box.innerHTML =
-    `<div class="sr-head">Crypto · Binance.US</div>` + (crypto.length ? crypto.map(row).join("") : `<div class="empty">No crypto pair matches “${fmt.esc(q)}”.</div>`) +
-    `<div class="sr-head">US stocks &amp; ETFs</div>` + (stocks.length ? stocks.map(row).join("") : `<div class="empty">${loadingStocks ? "Searching…" : `No US stock matches “${fmt.esc(q)}”.`}</div>`);
+  let html = "", group = null;
+  searchHits.forEach((h, i) => {
+    if (h.group !== group) { group = h.group; html += `<div class="sr-head">${fmt.esc(group)}</div>`; }
+    html += row(h, i);
+  });
+  if (q) {
+    if (!searchHits.some((h) => h.kind === "crypto")) html += `<div class="sr-head">Crypto · Binance.US</div><div class="empty">No crypto pair on Binance.US matches “${fmt.esc(q)}”.</div>`;
+    if (!searchHits.some((h) => h.kind === "stock")) html += `<div class="sr-head">Stocks, ETFs &amp; indices</div><div class="empty">${loadingStocks ? "Searching…" : `Nothing matches “${fmt.esc(q)}”. Try the ticker or company name.`}</div>`;
+  } else html = `<div class="sr-tip muted small">Type any ticker or name: every US stock and ETF, major world indices, and stocks from 30+ exchanges.</div>` + html;
+  box.innerHTML = html;
 }
 function pickSearch(i) {
   const s = searchHits[i];
@@ -393,7 +449,7 @@ function pickSearch(i) {
   $("search").value = "";
   $("search-results").hidden = true;
   if (s.kind === "stock") {
-    registerStock(s.symbol, { name: s.name, exchange: s.exchange, kind: s.kind });
+    registerStock(s.symbol, { name: s.name, exchange: s.exchange, kind: s.assetKind || "Stock" });
     state.bySymbol.set(s.symbol, stockInfo(s.symbol));
   }
   addToWatchlist(s.symbol);
@@ -479,7 +535,18 @@ function initChart() {
     const d = p?.seriesData?.get(candles);
     const c = d || lastCandle;
     if (!c) { $("candle-info").textContent = ""; return; }
-    $("candle-info").textContent = `O ${fmt.price(c.open)}  H ${fmt.price(c.high)}  L ${fmt.price(c.low)}  C ${fmt.price(c.close)}`;
+    // Amount traded during this candle: coins/shares, plus its approximate value in the quote currency.
+    const v = p?.seriesData?.get(volume)?.value ?? (d ? NaN : lastCandle?.volume);
+    let vol = "";
+    if (isFinite(v)) {
+      const sym = state.selected, info = state.bySymbol.get(sym), stock = isStock(sym);
+      const unit = stock ? (info?.kind === "Index" ? "" : " shares") : " " + (info?.base ?? "");
+      const pre = stock ? curPrefix(stockInfo(sym).currency) : (/^(USD|USDT|USDC)$/.test(info?.quote ?? "") ? "$" : "");
+      const value = v * ((c.high + c.low + c.close) / 3);
+      const amt = v >= 1000 ? fmt.compact(v) : +v.toPrecision(4) + "";
+      vol = v > 0 ? `  Vol ${amt}${unit} (≈${pre}${fmt.compact(value)}${pre ? "" : " " + (info?.quote ?? "")})` : "  Vol 0";
+    }
+    $("candle-info").textContent = `O ${fmt.price(c.open)}  H ${fmt.price(c.high)}  L ${fmt.price(c.low)}  C ${fmt.price(c.close)}${vol}`;
   });
 }
 
@@ -727,6 +794,13 @@ function initShortcuts() {
   });
 }
 
+/** Top "Scan watchlist" button: refresh every price and re-check every market now, staying where you are. */
+function scanFromTop() {
+  if (oppsRunning()) return;
+  refreshTickers();
+  runOpportunities();
+  if (state.selected) loadChart();
+}
 /** "Scan watchlist": open Opportunities and re-check every market in the watchlist now. */
 function scanWholeWatchlist() {
   document.querySelector('#center-tabs button[data-tab="opps"]')?.click();
@@ -818,6 +892,7 @@ async function boot() {
     onScanAll: scanWholeWatchlist,
   });
   $("center-live").addEventListener("click", () => centerLive());
+  $("scan-top").addEventListener("click", scanFromTop);
   onMoneyChange(() => { refreshDecision(decisionCtx()); updateBuyNow(decisionCtx()); });
   initBuyNow();
   onJournalChange(() => refreshDecision(decisionCtx()));
@@ -887,7 +962,13 @@ async function boot() {
       if (sym === state.selected) loadChart(); else pick(sym);
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); },
+    onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); },
+    onProgress: ({ running, done, total }) => {
+      const b = $("scan-top");
+      b.disabled = running;
+      b.querySelector("span").textContent = running ? `Scanning ${Math.min(100, Math.round((done / Math.max(1, total)) * 100))}%` : "Scan watchlist";
+      paintSignals();
+    },
   });
   initPush({
     buildPrefs: () => {
@@ -935,6 +1016,7 @@ async function boot() {
 
   const input = $("search");
   input.addEventListener("input", () => runSearch(input.value));
+  input.addEventListener("focus", () => runSearch(input.value));
   input.addEventListener("keydown", (e) => {
     const box = $("search-results");
     if (box.hidden) return;

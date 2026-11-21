@@ -27,6 +27,7 @@
     <div class="topbar-right">
       <span id="status" class="status" data-state="connecting"><i></i><span>Connecting…</span></span>
       <span id="clock" class="clock mono"></span>
+      <button id="scan-top" class="btn scan-all-btn" title="Re-check every coin and stock in your watchlist now (15m, 1h and 4h candles) and refresh prices">⟳ <span>Scan watchlist</span></button>
       <button id="alerts-btn" class="icon-btn" title="Alerts (A)" aria-label="Alerts">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 16a1 1 0 0 0 .9 1.4h13.6a1 1 0 0 0 .9-1.4L18 12.6V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21Z" fill="currentColor"/></svg>
         <span id="alerts-count" class="count" hidden>0</span>
@@ -43,13 +44,13 @@
         <section data-step="0">
           <div class="w-ico">👋</div>
           <h2 id="welcome-title">Welcome to Entryvex</h2>
-          <p>Live research for <strong>crypto and US stocks</strong>. Entryvex tells you when a trade is worth taking, and when it isn't, using measured history instead of guesses.</p>
+          <p>Live research for <strong>crypto and stocks worldwide</strong>. Entryvex tells you when a trade is worth taking, and when it isn't, using measured history instead of guesses.</p>
           <p class="muted small">No sign-up, no tracking. Your settings and trades stay in this browser. Entryvex never places trades for you.</p>
         </section>
         <section data-step="1" hidden>
           <div class="w-ico">🧭</div>
           <h2>1 · Pick something to watch</h2>
-          <p>Choose a coin or stock on the left, or search for one (try <em>Bitcoin</em>, <em>Apple</em> or <em>SPY</em>). Green ▲ / red ▼ shows which way each price last moved.</p>
+          <p>Choose a coin or stock on the left, or search for one (try <em>Bitcoin</em>, <em>Apple</em>, <em>SPY</em> or <em>Dow</em>). Each row's color is Entryvex's verdict: <strong style="color:var(--up)">green</strong> = buy signal now, <strong style="color:var(--down)">red</strong> = don't buy yet, <strong style="color:#e8b931">yellow</strong> = not enough data to judge.</p>
         </section>
         <section data-step="2" hidden>
           <div class="w-ico">✅</div>
@@ -100,9 +101,10 @@
         <span class="muted small">Crypto + stocks · live</span>
       </div>
       <div class="search">
-        <input id="search" type="search" placeholder="Add a coin or stock (e.g. SOL, Apple, SPY)…" autocomplete="off" spellcheck="false" />
+        <input id="search" type="search" placeholder="Add a coin, stock, ETF or index (SOL, Apple, SPY, Dow)…" autocomplete="off" spellcheck="false" />
         <div id="search-results" class="search-results" hidden></div>
       </div>
+      <div class="wl-legend" title="Colors come from Entryvex's check of each market on 15m, 1h and 4h candles"><span><i style="background:var(--up)"></i>Buy now</span><span><i style="background:var(--down)"></i>Don't buy yet</span><span><i style="background:#e8b931"></i>Not enough data</span></div>
       <ul id="watchlist" class="watchlist"></ul>
     </aside>
 

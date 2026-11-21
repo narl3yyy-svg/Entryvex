@@ -211,17 +211,70 @@ const US_EXCHANGES = new Set(["NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "
 // Major international exchanges (Yahoo codes): Europe, Asia-Pacific, the Americas.
 const INTL_EXCHANGES = new Set(["LSE", "GER", "FRA", "PAR", "AMS", "BRU", "MIL", "MCE", "EBS", "STO", "CPH", "HEL", "OSL", "VIE", "LIS",
   "JPX", "HKG", "SHH", "SHZ", "KSC", "KOE", "TAI", "TWO", "NSI", "BSE", "ASX", "NZE", "SES", "TOR", "VAN", "SAO", "MEX"]);
+// Everyday names people type for the big indices → the index itself, shown first.
+const INDEX_ALIASES = {
+  "^DJI": ["dji", "djia", "dow", "dow jones", "dow 30", "dow jones industrial average", "the dow"],
+  "^GSPC": ["spx", "s&p", "s&p 500", "s&p500", "sp500", "sp 500", "gspc"],
+  "^IXIC": ["nasdaq", "nasdaq composite", "ixic", "comp"],
+  "^NDX": ["ndx", "nasdaq 100", "nasdaq-100", "nas100"],
+  "^RUT": ["rut", "russell", "russell 2000", "small caps"],
+  "^VIX": ["vix", "volatility", "fear index"],
+  "^FTSE": ["ftse", "ftse 100", "footsie", "uk100"],
+  "^GDAXI": ["dax", "dax 40", "germany 40", "de40"],
+  "^FCHI": ["cac", "cac 40", "france 40"],
+  "^STOXX50E": ["stoxx", "euro stoxx", "euro stoxx 50", "sx5e"],
+  "^N225": ["nikkei", "nikkei 225", "n225", "japan 225"],
+  "^HSI": ["hang seng", "hsi", "hong kong 50"],
+  "000001.SS": ["shanghai", "shanghai composite", "sse"],
+  "^BSESN": ["sensex", "bse"],
+  "^NSEI": ["nifty", "nifty 50"],
+  "^KS11": ["kospi"],
+  "^AXJO": ["asx", "asx 200", "australia 200"],
+  "^GSPTSE": ["tsx", "s&p/tsx"],
+  "^BVSP": ["bovespa", "ibovespa"],
+};
+const INDEX_NAMES = { "^DJI": "Dow Jones Industrial Average", "^GSPC": "S&P 500", "^IXIC": "Nasdaq Composite", "^NDX": "Nasdaq-100", "^RUT": "Russell 2000",
+  "^VIX": "CBOE Volatility Index (VIX)", "^FTSE": "FTSE 100", "^GDAXI": "DAX 40", "^FCHI": "CAC 40", "^STOXX50E": "Euro Stoxx 50", "^N225": "Nikkei 225",
+  "^HSI": "Hang Seng", "000001.SS": "Shanghai Composite", "^BSESN": "BSE Sensex", "^NSEI": "Nifty 50", "^KS11": "KOSPI", "^AXJO": "S&P/ASX 200",
+  "^GSPTSE": "S&P/TSX Composite", "^BVSP": "Bovespa" };
+function aliasHits(q) {
+  const s = q.toLowerCase().replace(/\s+/g, " ").trim();
+  if (s.length < 2) return [];
+  return Object.entries(INDEX_ALIASES)
+    .map(([sym, names]) => ({ sym, score: names.includes(s) ? 0 : names.some((n) => n.startsWith(s)) && s.length >= 3 ? 1 : 9 }))
+    .filter((x) => x.score < 9).sort((a, b) => a.score - b.score)
+    .map(({ sym }) => ({ symbol: "S:" + sym, ticker: sym, name: INDEX_NAMES[sym], exchange: "Index", kind: "Index", intl: !/^\^(DJI|GSPC|IXIC|NDX|RUT|VIX)$/.test(sym) }));
+}
+
 export async function searchStocks(q) {
   q = q.trim();
   if (!q) return [];
-  const res = await fetch(`/api/market?src=search&q=${encodeURIComponent(q)}`);
-  if (!res.ok) return [];
-  const j = await res.json();
-  return (j.quotes || [])
+  const aliases = aliasHits(q);
+  let quotes = [];
+  try {
+    const res = await fetch(`/api/market?src=search&q=${encodeURIComponent(q)}`);
+    if (res.ok) quotes = (await res.json()).quotes || [];
+  } catch {}
+  const Q = q.toUpperCase().replace(/^\^/, "");
+  const found = quotes
     .filter((x) => (x.quoteType === "EQUITY" || x.quoteType === "ETF" || x.quoteType === "INDEX") && x.symbol && x.symbol.length <= 12
       && (US_EXCHANGES.has(x.exchange) || INTL_EXCHANGES.has(x.exchange) || x.quoteType === "INDEX"))
-    .sort((a, b) => (US_EXCHANGES.has(b.exchange) ? 1 : 0) - (US_EXCHANGES.has(a.exchange) ? 1 : 0))
-    .slice(0, 8)
-    .map((x) => ({ symbol: "S:" + x.symbol, ticker: x.symbol, name: x.longname || x.shortname || x.symbol, exchange: x.exchDisp || x.exchange,
-      kind: x.quoteType === "ETF" ? "ETF" : x.quoteType === "INDEX" ? "Index" : "Stock", intl: !US_EXCHANGES.has(x.exchange) }));
+    // Keep Yahoo's relevance order, but put an exact ticker match first (DJI → ^DJI, AAPL → AAPL).
+    .map((x, i) => ({ x, rank: (x.symbol.replace(/^\^/, "") === Q ? 0 : 1) * 100 + i }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ x }) => ({ symbol: "S:" + x.symbol, ticker: x.symbol, name: INDEX_NAMES[x.symbol] || x.longname || x.shortname || x.symbol, exchange: x.exchDisp || x.exchange,
+      kind: x.quoteType === "ETF" ? "ETF" : x.quoteType === "INDEX" ? "Index" : "Stock", intl: !US_EXCHANGES.has(x.exchange) && x.quoteType !== "INDEX" }));
+  const seen = new Set();
+  return [...aliases, ...found].filter((h) => !seen.has(h.symbol) && seen.add(h.symbol)).slice(0, 8);
 }
+
+/** Popular markets for the empty search box (quick add). */
+export const POPULAR = {
+  crypto: ["BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "LTC", "DOT", "SUI", "SHIB", "BCH", "XLM", "HBAR", "UNI", "AAVE", "NEAR"],
+  indices: ["^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX"],
+  etfs: [["SPY", "SPDR S&P 500 ETF"], ["QQQ", "Invesco QQQ (Nasdaq-100)"], ["DIA", "SPDR Dow Jones ETF"], ["IWM", "iShares Russell 2000"], ["VOO", "Vanguard S&P 500"], ["VTI", "Vanguard Total Stock Market"], ["GLD", "SPDR Gold Shares"], ["TLT", "iShares 20+ Year Treasury"], ["SMH", "VanEck Semiconductor"], ["ARKK", "ARK Innovation"]],
+  us: [["NVDA", "NVIDIA"], ["AAPL", "Apple"], ["MSFT", "Microsoft"], ["AMZN", "Amazon"], ["GOOGL", "Alphabet"], ["META", "Meta Platforms"], ["TSLA", "Tesla"], ["AVGO", "Broadcom"], ["BRK-B", "Berkshire Hathaway"], ["JPM", "JPMorgan Chase"], ["AMD", "AMD"], ["NFLX", "Netflix"], ["PLTR", "Palantir"], ["COIN", "Coinbase"], ["MSTR", "Strategy (MicroStrategy)"]],
+  intl: [["TSM", "TSMC (US listing)", "NYSE"], ["ASML", "ASML (US listing)", "Nasdaq"], ["7203.T", "Toyota", "Tokyo"], ["6758.T", "Sony", "Tokyo"], ["0700.HK", "Tencent", "Hong Kong"], ["9988.HK", "Alibaba", "Hong Kong"], ["005930.KS", "Samsung Electronics", "Seoul"],
+    ["SAP.DE", "SAP", "XETRA"], ["MC.PA", "LVMH", "Paris"], ["NESN.SW", "Nestlé", "Zurich"], ["NOVO-B.CO", "Novo Nordisk", "Copenhagen"], ["SHEL.L", "Shell", "London"], ["AZN.L", "AstraZeneca", "London"], ["RELIANCE.NS", "Reliance Industries", "NSE India"], ["SHOP.TO", "Shopify", "Toronto"], ["BHP.AX", "BHP", "Sydney"]],
+  indexNames: INDEX_NAMES,
+};

@@ -12,9 +12,11 @@ const $ = (id) => document.getElementById(id);
 const INTERVALS = ["15m", "1h", "4h"];
 const REFRESH_MS = 15 * 60_000;
 
-let hooks = { getWatchlist: () => [], getInfo: () => null, nameFor: (s) => s, onPick: () => {}, onUpdate: () => {} };
+let hooks = { getWatchlist: () => [], getInfo: () => null, nameFor: (s) => s, onPick: () => {}, onUpdate: () => {}, onProgress: () => {} };
 let rows = [];          // { sym, iv, r }
 let lastRun = 0, running = false, progress = "";
+const pending = new Set();   // symbols in the current run
+const checked = new Set();   // symbols checked at least once (even if they returned no usable data)
 let timer = null;
 
 const store = { get(k, d) { try { const v = localStorage.getItem("evx." + k); return v == null ? d : JSON.parse(v); } catch { return d; } } };
@@ -29,7 +31,7 @@ export function initOpportunities(h) {
     if (b.id === "opps-refresh") run();
   });
   render();
-  setTimeout(run, 15_000);  // let the page finish loading first
+  setTimeout(() => run(), 4_000);  // let the page finish loading first
 }
 
 /** Active buy signals found in the latest run (used by the "Entryvex says" panel). */
@@ -71,18 +73,53 @@ export function signalFor(sym) {
   return "no setup with a reliable track record";
 }
 
+/**
+ * Watchlist color for a symbol, from its latest check on 15m/1h/4h candles:
+ *   buy     – a setup with a positive track record is active right now (BUY / SMALL BUY)
+ *   wait    – Entryvex has enough history to judge, and there is no buy signal now
+ *   unknown – not enough data to judge: too little price history, barely trades here,
+ *             or every setup has too few past trades to measure
+ *   checking / null – being checked now / not checked yet
+ */
+export function verdictFor(sym) {
+  const mine = rows.filter((x) => x.sym === sym);
+  if (!mine.length) {
+    if (running && (pending.has(sym))) return { level: "checking", label: "…", why: "Entryvex is checking this market now." };
+    if (checked.has(sym)) return { level: "unknown", label: "?", why: "Not enough price history to measure any setup (needs 250+ candles on 15m, 1h or 4h)." };
+    return null;
+  }
+  const buy = mine.find(({ r }) => isBuy(r));
+  if (buy) return { level: "buy", label: buy.r.overall.level === "go" ? "BUY" : "SMALL BUY",
+    why: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} candles: ${buy.r.best.name} (won ${Math.round(buy.r.best.stats.winRate * 100)}% of ${buy.r.best.stats.n} past trades).` };
+  const usable = mine.filter(({ r }) => !(r.liquidity && !r.liquidity.ok));
+  if (!usable.length) return { level: "unknown", label: "?", why: "Barely trades on this exchange, so its patterns can't be measured reliably." };
+  const measured = usable.some(({ r }) => r.setups.some((x) => x.verdict.level !== "thin"));
+  if (!measured) return { level: "unknown", label: "?", why: "Too few past trades for any setup to measure it accurately yet." };
+  const watching = usable.flatMap(({ iv, r }) => r.setups.filter((x) => x.verdict.level === "edge" || x.verdict.level === "weak").map((x) => `${x.name} on ${iv}`));
+  return { level: "wait", label: "WAIT", why: watching.length
+    ? `Don't buy yet: no buy signal right now. Becomes a buy when this appears: ${watching.slice(0, 2).join(", ")}.`
+    : "Don't buy: none of Entryvex's setups has a reliable track record on this market right now." };
+}
+export function isRunning() { return running; }
+export function lastChecked() { return lastRun; }
+
 function isBuy(r) {
   if (r.liquidity && !r.liquidity.ok) return false;
   return r.overall.level === "go" || (r.overall.level === "caution" && r.best?.verdict.level === "weak");
 }
 
-export async function run() {
-  if (running) return;
+/** Check every market in the watchlist (or just `only`, e.g. a newly added symbol). */
+export async function run(only) {
+  if (running) { if (only) queued.push(...only); return; }
   running = true;
   clearTimeout(timer);
   const fee = (+store.get("feePct", 0.02) || 0) / 100;
+  const syms = only ? only.filter((s) => hooks.getWatchlist().includes(s)) : hooks.getWatchlist();
   const jobs = [];
-  for (const sym of hooks.getWatchlist()) for (const iv of INTERVALS) jobs.push({ sym, iv });
+  for (const sym of syms) for (const iv of INTERVALS) jobs.push({ sym, iv });
+  const total = jobs.length;
+  pending.clear(); syms.forEach((s) => pending.add(s));
+  hooks.onProgress({ running: true, done: 0, total });
   const out = [];
   let done = 0;
   progress = `Checking ${jobs.length} combinations…`;
@@ -100,18 +137,25 @@ export async function run() {
         }
       } catch (e) { /* skip markets that fail to load */ }
       done++;
+      if (done % 3 === 0) hooks.onProgress({ running: true, done, total });
       if (done % 6 === 0) { progress = `Checked ${done} of ${done + jobs.length}…`; render(); }
     }
   };
   await Promise.all([worker(), worker(), worker()]);
-  rows = out;
-  lastRun = Date.now();
+  const keep = hooks.getWatchlist();
+  rows = only ? rows.filter((x) => !syms.includes(x.sym) && keep.includes(x.sym)).concat(out) : out;
+  syms.forEach((s) => checked.add(s));
+  if (!only) lastRun = Date.now();
   running = false;
+  pending.clear();
   progress = "";
   render();
+  hooks.onProgress({ running: false, done: total, total });
   hooks.onUpdate(currentBuys());
-  timer = setTimeout(run, REFRESH_MS);
+  timer = setTimeout(() => run(), only && lastRun ? Math.max(5_000, REFRESH_MS - (Date.now() - lastRun)) : REFRESH_MS);
+  if (queued.length) { const q = [...new Set(queued)]; queued.length = 0; run(q); }
 }
+const queued = [];
 
 function render() {
   const root = $("tab-opps");
