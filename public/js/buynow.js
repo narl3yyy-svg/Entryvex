@@ -11,7 +11,7 @@ import { cachedLongTerm } from "./longterm.js";
 import { sizePosition, floorStep } from "./sizing.js";
 import { settings } from "./money.js";
 import { isStock, stockInfo } from "./market.js";
-import { RULES } from "./engine.js";
+import { RULES, riskDistance } from "./engine.js";
 import * as fmt from "./format.js";
 import { fxRate, loadFx, money as fxMoney, majorOf } from "./fx.js";
 
@@ -77,8 +77,9 @@ function render() {
   const atr = r?.atr;
 
   // Entryvex's suggested amount: risk your "max loss per trade" if price falls 1 ATR (its standard stop).
-  const stop = atr ? price - RULES.stopAtr * atr : null;
-  const target = atr ? price + RULES.targetAtr * atr : null;
+  const dist = atr ? riskDistance(atr, price, cost) : null;
+  const stop = dist ? price - dist : null;
+  const target = dist ? price + (RULES.targetAtr / RULES.stopAtr) * dist : null;
   const suggested = bal > 0 && stop ? sizePosition({ balance: bal, riskPct: settings.riskPct, entry: price, stop, target, costPerSide: cost, rules: c.rules }) : null;
 
   let amount = customAmount > 0 ? customAmount * rate : suggested?.spend || 0;   // typed in US dollars

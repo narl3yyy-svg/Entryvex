@@ -110,3 +110,14 @@ test("probAbove: 50% near the middle, falls as the level rises, matches the 80% 
   assert.ok(Math.abs(probAbove(f, f.range80[1]) - 0.10) < 0.02, "~10% of outcomes end above the top of the 80% range");
   assert.ok(Math.abs(probAbove(f, f.range80[0]) - 0.90) < 0.02, "~90% end above the bottom of the 80% range");
 });
+
+import { riskDistance } from "../public/js/engine.js";
+test("stops are never so tight that costs eat the target", () => {
+  // 1-minute BTC: ATR ≈ 0.06% of price, costs 0.07% per side.
+  const d = riskDistance(0.0006 * 58000, 58000, 0.0007);
+  assert.ok(Math.abs(d - 4 * 0.0007 * 58000) < 1e-9, "cost floor applies");
+  const target = 1.5 * d / 58000;
+  assert.ok(target >= 3 * 2 * 0.0007 - 1e-12, "target covers the round trip three times");
+  // Bigger candles: plain 1 ATR.
+  assert.equal(riskDistance(500, 58000, 0.0007), 500);
+});

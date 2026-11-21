@@ -4,7 +4,7 @@
 // the outcome is checked against real Binance.US candles using the exact same rules as the
 // backtest (buy next candle's open, 1×ATR stop, 1.5×ATR target, 24-candle limit, costs).
 // Over time this shows whether Entryvex's live confidence actually holds up.
-import { RULES, exitOnCandle } from "./engine.js";
+import { RULES, exitOnCandle, riskDistance } from "./engine.js";
 import { getKlinesSince } from "./market.js";
 import * as fmt from "./format.js";
 
@@ -60,7 +60,8 @@ async function resolveOpen() {
       const c = raw.filter((k) => k.closeTime < now);  // closed candles only
       if (!c.length) continue;
       const entry = c[0].open;
-      const stop = entry - RULES.stopAtr * s.atr, target = entry + RULES.targetAtr * s.atr;
+      const d = riskDistance(s.atr, entry, s.cost ?? 0.0007);
+      const stop = entry - d, target = entry + (RULES.targetAtr / RULES.stopAtr) * d;
       let outcome = null, exit = null, bars = 0;
       for (let j = 0; j < Math.min(c.length, RULES.maxBars); j++) {
         bars = j + 1;

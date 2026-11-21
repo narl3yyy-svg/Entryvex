@@ -18,7 +18,17 @@ export const RULES = {
   maxBars: 24,      // give up and exit at market after this many candles
   minTrades: 30,    // below this, history is too thin to trust
   warmup: 200,      // candles needed before indicators are reliable
+  minRiskCosts: 4,  // the stop is never closer than 4× the one-way cost (so the target ≥ 3× the round-trip cost)
 };
+
+/**
+ * Stop distance (as a price amount) for a trade: 1 ATR, but never so small that fees and spread
+ * eat the profit target. On tiny candles (1m/5m) one ATR can be smaller than the round-trip cost,
+ * which would make every trade a loser by construction. Fixed rule, not tuned to results.
+ */
+export function riskDistance(atr, price, costPerSide) {
+  return Math.max(RULES.stopAtr * atr, RULES.minRiskCosts * costPerSide * price);
+}
 
 export const SETUPS = [
   {
@@ -88,13 +98,14 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
   else if (best.verdict.level === "flat") overall = { level: "no", label: "NO TRADE", text: `${best.name} is active, but after costs it has roughly broken even here. Any profit so far looks like luck. Skip it.` };
   else overall ={ level: "no", label: "NO TRADE", text: `${best.name} is active, but historically it has lost money after costs on this coin and timeframe. Skip it.` };
 
+  const d = isFinite(a) ? riskDistance(a, price, costPerSide) : NaN;
   const plan = liquidity.ok && best && isFinite(a) ? {
     setup: best.id,
     entry: price,
-    stop: price - RULES.stopAtr * a,
-    target: price + RULES.targetAtr * a,
-    stopPct: (RULES.stopAtr * a) / price,
-    targetPct: (RULES.targetAtr * a) / price,
+    stop: price - d,
+    target: price + (RULES.targetAtr / RULES.stopAtr) * d,
+    stopPct: d / price,
+    targetPct: ((RULES.targetAtr / RULES.stopAtr) * d) / price,
     medianBars: best.stats.medianBars,
   } : null;
 
@@ -178,9 +189,9 @@ function backtest(c, x, setup, lastClosed, cost) {
     if (!safeTest(setup, i, c, x)) continue;
     const entryIdx = i + 1;
     const entry = c[entryIdx].open;
-    const a = x.atr14[i];
-    const stop = entry - RULES.stopAtr * a;
-    const target = entry + RULES.targetAtr * a;
+    const d = riskDistance(x.atr14[i], entry, cost);
+    const stop = entry - d;
+    const target = entry + (RULES.targetAtr / RULES.stopAtr) * d;
     let exit = null, outcome = null, j = entryIdx;
     for (; j <= Math.min(entryIdx + RULES.maxBars - 1, lastClosed); j++) {
       const r = exitOnCandle(c[j], stop, target);
