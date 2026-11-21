@@ -761,3 +761,29 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
   .style-bar { padding: 12px 14px 0; }
   .style-seg button { padding: 6px 8px; font-size: 12px; }
 }
+
+/* Stock picks (Entryvex Stock Rank) */
+.picks-intro { margin-bottom: 8px; }
+.picks-load { padding: 18px 4px; color: var(--muted); font-size: 13px; }
+.picks-table { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 6px 0; }
+.pk-row { display: grid; grid-template-columns: 34px minmax(0, 2.2fr) 1fr 0.8fr 0.8fr 0.7fr; gap: 8px; align-items: center; padding: 8px 10px; background: transparent; border: 0; border-top: 1px solid var(--line); color: inherit; text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
+.pk-row:first-child { border-top: 0; }
+.pk-row:hover:not(.pk-head) { background: #1a2130; }
+.pk-head { cursor: default; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: #141a24; }
+.pk-row.pk-top { box-shadow: inset 3px 0 0 var(--up); }
+.pk-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picks-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.picks-stats > div { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.picks-stats span { font-size: 11px; color: var(--muted); }
+.picks-stats strong { font-size: 18px; }
+.picks-chart { width: 100%; height: 220px; margin-top: 6px; }
+.picks-legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); margin: 4px 0 8px; }
+.picks-legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: 3px; }
+.picks-facts { margin: 6px 0 10px; padding-left: 18px; line-height: 1.55; }
+.picks-honest { margin: 8px 0; }
+.picks-honest summary { cursor: pointer; font-size: 13px; }
+@media (max-width: 640px) {
+  .pk-row { grid-template-columns: 26px minmax(0, 1.8fr) 1fr 0.8fr; }
+  .pk-row span:nth-child(5), .pk-row span:nth-child(6) { display: none; }
+  .picks-stats { grid-template-columns: 1fr; }
+}

@@ -8,6 +8,7 @@ import { getBuyNowSummary } from "./buynow.js";
 import { currentBuys, topWatch, signalFor } from "./opportunities.js";
 import { worldSnapshot } from "./world.js";
 import { upcomingHighImpact } from "./calendar.js";
+import { rankFor, picksSnapshot } from "./picks.js";
 
 const $ = (id) => document.getElementById(id);
 let live = {};
@@ -173,6 +174,7 @@ async function snapshot() {
       perSymbol: (hooks.getWatchlistInfo?.() || []).slice(0, 20).map((w) => `${w.ticker}: ${w.changePct != null ? (w.changePct >= 0 ? "+" : "") + w.changePct.toFixed(2) + "% today, " : ""}${signalFor(w.sym)}`),
     },
     worldMarkets: worldSnapshot(),
+    stockRank: { thisStock: rankFor(live.symbol), model: picksSnapshot() },
     highImpactEventsNext24h: upcomingHighImpact(24).slice(0, 10).map((e) => `${e.country} ${e.title} at ${new Date(e.t).toISOString()}${e.forecast ? ` (expected ${e.forecast}, last ${e.previous})` : ""}`),
     user: { tradingBalanceUsd: s.balance || "not set", maxLossPerTradePct: s.riskPct, feePerBuyOrSellPct: s.feePct,
       openTradesInThisCoin: openTrades().filter((t) => t.symbol === live.symbol).map((t) => ({ boughtAt: t.entry, amount: t.qty, stop: t.stop, target: t.target })) },

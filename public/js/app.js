@@ -22,6 +22,7 @@ import { initBuyNow, updateBuyNow } from "./buynow.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 import { recentMove } from "./move.js";
+import { initPicks, picksVisible } from "./picks.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -933,10 +934,12 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "movers", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "movers", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
     moversVisible(tab === "movers");
+    picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
   };
+  initPicks({ onPick: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
   showTab(store.get("centerTab", "scanner"));
 

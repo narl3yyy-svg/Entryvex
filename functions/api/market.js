@@ -6,8 +6,8 @@
 const UA = "Mozilla/5.0 (compatible; Entryvex/1.0; +https://entryvex.trade)";
 const SEC_UA = "Entryvex research dashboard https://entryvex.trade";
 const SYM = /^[A-Z0-9.^=\-]{1,12}$/;
-const INTERVALS = new Set(["1m", "5m", "15m", "60m", "1d", "1wk"]);
-const RANGES = new Set(["1d", "2d", "5d", "7d", "1mo", "60d", "3mo", "1y", "730d", "2y", "5y", "10y"]);
+const INTERVALS = new Set(["1m", "5m", "15m", "60m", "1d", "1wk", "1mo"]);
+const RANGES = new Set(["1d", "2d", "5d", "7d", "1mo", "60d", "3mo", "1y", "730d", "2y", "5y", "10y", "20y"]);
 
 function route(p) {
   const src = p.get("src");
@@ -15,7 +15,7 @@ function route(p) {
     const s = (p.get("symbol") || "").toUpperCase();
     const iv = p.get("interval"), range = p.get("range");
     if (!SYM.test(s) || !INTERVALS.has(iv) || !RANGES.has(range)) return null;
-    const ttl = iv === "1m" || iv === "5m" ? 15 : iv === "15m" || iv === "60m" ? 60 : 900;
+    const ttl = iv === "1m" || iv === "5m" ? 15 : iv === "15m" || iv === "60m" ? 60 : iv === "1mo" ? 3600 : 900;
     const q = `${encodeURIComponent(s)}?interval=${iv}&range=${range}&includePrePost=false`;
     return { urls: [`https://query1.finance.yahoo.com/v8/finance/chart/${q}`, `https://query2.finance.yahoo.com/v8/finance/chart/${q}`], ttl, ua: UA };
   }
