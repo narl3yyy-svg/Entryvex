@@ -168,12 +168,19 @@ export function createTickerFeed(symbols, { onTick, onStatus }) {
     });
   }
   if (stocks.length) {
+    // Markets that are closed (nights, weekends, holidays) are only re-checked every 5 minutes:
+    // their price can't change, so there's no point asking every 10 seconds.
+    const last = new Map();   // symbol → { t, open }
     const poll = async () => {
       if (closed) return;
-      const res = await Promise.allSettled(stocks.map(stockQuote));
+      const now = Date.now();
+      const due = stocks.filter((s) => { const l = last.get(s); return !l || l.open !== false || now - l.t > 5 * 60_000; });
+      const res = await Promise.allSettled(due.map(stockQuote));
       let ok = 0;
-      res.forEach((r) => { if (r.status === "fulfilled" && r.value) { ok++; onTick(r.value); } });
-      status.s = ok ? "live" : "down"; report();
+      res.forEach((r, k) => {
+        if (r.status === "fulfilled" && r.value) { ok++; onTick(r.value); last.set(due[k], { t: now, open: r.value.marketOpen }); }
+      });
+      if (due.length) { status.s = ok ? "live" : "down"; report(); }
       timer = setTimeout(poll, document.visibilityState === "visible" ? 10_000 : 30_000);
     };
     poll();
@@ -190,10 +197,12 @@ export function createKlineFeed(sym, interval, { onCandle, onStatus }) {
   }
   let closed = false, timer = null, lastTime = 0;
   const every = interval === "1m" || interval === "5m" ? 10_000 : 30_000;
+  let isOpen = null;
   const poll = async () => {
     if (closed) return;
     try {
-      const { candles } = await stockChart(sym, interval, "recent");
+      const { candles, meta } = await stockChart(sym, interval, "recent");
+      isOpen = marketOpen(meta);
       const recent = candles.slice(-3);
       recent.forEach((c, i) => {
         if (c.time < lastTime) return;
@@ -202,7 +211,8 @@ export function createKlineFeed(sym, interval, { onCandle, onStatus }) {
       lastTime = recent.at(-2)?.time ?? lastTime;
       onStatus("live");
     } catch { onStatus("down"); }
-    timer = setTimeout(poll, document.visibilityState === "visible" ? every : every * 3);
+    // Closed market: the candles can't change, so check again in 5 minutes instead.
+    timer = setTimeout(poll, isOpen === false ? 5 * 60_000 : document.visibilityState === "visible" ? every : every * 3);
   };
   onStatus("connecting");
   poll();
