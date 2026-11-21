@@ -25,6 +25,12 @@ function route(p) {
     const qs = `q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0&listsCount=0`;
     return { urls: [`https://query1.finance.yahoo.com/v1/finance/search?${qs}`, `https://query2.finance.yahoo.com/v1/finance/search?${qs}`], ttl: 3600, ua: UA };
   }
+  if (src === "screener") {
+    const id = p.get("id") || "";
+    if (!["most_actives", "day_gainers", "day_losers"].includes(id)) return null;
+    const qs = `scrIds=${id}&count=25`;
+    return { urls: [`https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`, `https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`], ttl: 60, ua: UA };
+  }
   if (src === "sec-tickers") return { urls: ["https://www.sec.gov/files/company_tickers.json"], ttl: 86400, ua: SEC_UA };
   if (src === "sec-concept") {
     const cik = p.get("cik") || "", tax = p.get("tax") || "", concept = p.get("concept") || "";

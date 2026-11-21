@@ -10,7 +10,8 @@ import { settings, guard } from "./money.js";
 import { openTrades, tradeAdvice } from "./journal.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
-import { currentBuys } from "./opportunities.js";
+import { currentBuys, topWatch } from "./opportunities.js";
+import { describeOdds, reliability } from "./forecast.js";
 
 const $ = (id) => document.getElementById(id);
 const HIGHER = { "1m": "15m", "5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d", "1d": "1d" };
@@ -181,7 +182,7 @@ function html(c, checks) {
           : `A setup is active, but it has only happened ${best?.stats.n ?? 0} times here, too few to know if it works. Skip it.`;
       const elsewhere = currentBuys().filter((b) => b.sym !== c.symbol);
       if (elsewhere.length) headline += ` <span class="d-elsewhere">Elsewhere right now: ${elsewhere.slice(0, 3).map((b) => `<button class="link-btn" data-goto-opps>${fmt.esc(b.label === "GO" ? "BUY" : "small buy")} on ${fmt.esc(b.base)} (${b.iv})</button>`).join(", ")}.</span>`;
-      steps = `<ol class="d-steps">
+      steps = whenToBuy(c, r, best) + predicts(c) + `<ol class="d-steps">
         <li><strong>Do nothing for now.</strong> Not trading is a good decision when the odds aren't on your side.</li>
         <li>Entryvex re-checks every time a ${c.interval} candle closes. Turn on <button class="link-btn" data-open-alerts>setup alerts 🔔</button> to be told the moment a BUY appears on any of your coins or stocks.</li>
         <li>Want to look elsewhere? Try <button class="link-btn" data-find-edge>Find an edge for this ${stock ? "stock" : "coin"}</button> or <button class="link-btn" data-scan-all>Scan watchlist</button>.</li>
@@ -205,6 +206,41 @@ function html(c, checks) {
     ${steps}
     <details class="d-more" ${held.length ? "" : ""}><summary>Why? Outside checks (${all ? `${tail} for · ${head} against` : "loading"})</summary>${checksHtml}</details>
   </div>`;
+}
+
+/** "When would Entryvex say BUY?": the price conditions for setups with a positive track record. */
+function whenToBuy(c, r, best) {
+  const trig = (r.triggers || []).filter((t) => t.setup && (t.setup.verdict.level === "edge" || t.setup.verdict.level === "weak"));
+  const fill = (t) => t.text.replace("{L}", t.level != null
+    ? `<strong>${fmt.price(t.level)}</strong> <span class="muted">(${t.away >= 0 ? "+" : ""}${t.away.toFixed(1)}% from now)</span>` : "");
+  if (!trig.length) {
+    const alt = topWatch(3).filter((w) => w.sym !== c.symbol);
+    return `<div class="d-when"><div class="d-when-title">When would Entryvex say BUY?</div>
+      <p class="small">None of the 4 setups has a reliable track record on <strong>${fmt.esc(c.base)}</strong> with ${c.interval} candles, so <strong>there's no price where Entryvex would say BUY here</strong>. Trading it anyway would be a guess.</p>
+      ${alt.length ? `<p class="small">Where Entryvex <em>would</em> buy instead (when the setup appears): ${alt.map((w) => `<button class="link-btn" data-goto-opps>${fmt.esc(w.base)} ${w.iv} · ${fmt.esc(w.s.name)}</button> <span class="muted">(${Math.round(w.s.stats.winRate * 100)}% of ${w.s.stats.n}, ${fmt.pct(w.s.stats.ev * 100)}/trade)</span>`).join(" · ")}</p>`
+        : `<p class="small muted">Try <button class="link-btn" data-find-edge>Find an edge</button> to test other candle sizes for ${fmt.esc(c.base)}.</p>`}
+    </div>`;
+  }
+  return `<div class="d-when"><div class="d-when-title">When would Entryvex say BUY?</div>
+    <ul class="d-trig">${trig.map((t) => `<li class="${t.ready ? "" : "muted"}">
+      <span class="pill pill-${t.setup.verdict.level}">${fmt.esc(t.setup.verdict.label)}</span>
+      <strong>${fmt.esc(t.setup.name)}:</strong> ${t.ready ? "BUY if " + fill(t) : "Not possible right now: " + fill(t)}.
+      <span class="muted small">Past record here: ended in profit ${Math.round(t.setup.stats.winRate * t.setup.stats.n)} of ${t.setup.stats.n} times, ${fmt.pct(t.setup.stats.ev * 100)} per trade after costs.</span></li>`).join("")}</ul>
+    <p class="tiny muted">Entryvex re-checks after every ${c.interval} candle closes and switches to BUY (with the full plan) the moment one of these happens.</p>
+  </div>`;
+}
+
+/** What the measured forecast says, in one or two plain sentences. */
+function predicts(c) {
+  const f = c.forecast;
+  if (!f) return "";
+  const mins = (f.H * f.intervalSec) / 60;
+  const h = mins < 60 ? `${Math.round(mins)} minutes` : mins < 1440 ? `${+(mins / 60).toFixed(1)} hours` : `${+(mins / 1440).toFixed(1)} days`;
+  const rel = reliability(f.accuracy80);
+  return `<div class="d-when"><div class="d-when-title">What Entryvex predicts (next ~${h})</div>
+    <p class="small">Most likely between <strong class="down">${fmt.price(f.range80[0])}</strong> and <strong class="up">${fmt.price(f.range80[1])}</strong> (80% range), middle ${fmt.price(f.mid)}.
+    Chance it's higher by then: <strong>${Math.round(f.pUp * 100)}%</strong>, ${describeOdds(f.pUp)}.
+    <span class="muted">This forecast has been ${rel.label} (${Math.round(f.accuracy80 * 100)}% of past tests landed inside the range).</span></p></div>`;
 }
 
 function confidenceMeter(p, lo, hi, be, n) {

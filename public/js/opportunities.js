@@ -37,6 +37,16 @@ export function currentBuys() {
   return rows.filter(({ r }) => isBuy(r)).map(({ sym, iv, r }) => ({ sym, iv, label: r.overall.label, setup: r.best.name, base: baseOf(sym) }));
 }
 
+/** Best setups with a positive record that aren't active yet (used by "Entryvex says"). */
+export function topWatch(n = 3) {
+  const out = [];
+  for (const { sym, iv, r } of rows) {
+    if (r.liquidity && !r.liquidity.ok) continue;
+    for (const s of r.setups) if ((s.verdict.level === "edge" || s.verdict.level === "weak") && !s.activeNow) out.push({ sym, iv, s, base: baseOf(sym) });
+  }
+  return out.sort((a, b) => b.s.stats.ev - a.s.stats.ev).slice(0, n);
+}
+
 function isBuy(r) {
   if (r.liquidity && !r.liquidity.ok) return false;
   return r.overall.level === "go" || (r.overall.level === "caution" && r.best?.verdict.level === "weak");

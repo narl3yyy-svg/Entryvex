@@ -625,3 +625,36 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
   .tabs button { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; margin: 0; font-size: 13px; }
   .tabs button.on { border-color: var(--accent); background: rgba(46,229,157,.08); }
 }
+
+/* Market movers */
+.movers-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.movers-head .live-dot { display: inline-block; vertical-align: 1px; margin-right: 4px; animation: pulse 2s infinite; }
+.movers-table td { vertical-align: middle; }
+.movers-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1180px) { .movers-split { grid-template-columns: minmax(0, 1fr); } }
+
+/* "When would Entryvex say BUY?" + predictions */
+.d-when { border-top: 1px solid var(--line); padding-top: 10px; }
+.d-when-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.d-when p { margin: 4px 0 0; line-height: 1.5; }
+.d-trig { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.d-trig li { line-height: 1.5; font-size: 13.5px; }
+.d-trig .pill { margin-right: 4px; }
+
+/* Long-term view */
+.longterm:empty { display: none; }
+.longterm { margin: 0 18px 10px; }
+.lt-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.lt-card p { margin: 0; line-height: 1.5; }
+.lt-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lt-hold { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lt-hold div { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; background: var(--panel); }
+.lt-hold span { font-size: 11px; color: var(--muted); }
+.lt-hold strong { font-size: 16px; }
+.lt-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.lt-grid div { display: flex; flex-direction: column; gap: 2px; }
+.lt-grid span { font-size: 11px; color: var(--muted); }
+.lt-grid strong { font-family: var(--mono); font-weight: 500; }
+.lt-fund { border-top: 1px solid var(--line); padding-top: 8px; }
+@media (max-width: 1180px) { .lt-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .longterm { margin: 0 14px 10px; } .lt-hold { grid-template-columns: minmax(0, 1fr); } }

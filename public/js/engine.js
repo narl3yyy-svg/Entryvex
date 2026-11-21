@@ -98,13 +98,53 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
     medianBars: best.stats.medianBars,
   } : null;
 
+  const triggers = buyTriggers(candles, x, lastClosed, setups, price);
+
   return {
-    setups, overall, best, plan, costPerSide, atr: a, price, liquidity,
+    setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,
     },
   };
+}
+
+/**
+ * "When would Entryvex say BUY?": for each setup, what has to happen next (in prices) for it to fire,
+ * computed from the current indicator values. `ready` = all conditions except the final trigger are met.
+ */
+function buyTriggers(c, x, i, setups, price) {
+  if (i < RULES.warmup) return [];
+  const pctAway = (lvl) => ((lvl - price) / price) * 100;
+  const out = [];
+  const by = Object.fromEntries(setups.map((s) => [s.id, s]));
+  const hi20 = Math.max(...c.slice(i - 19, i + 1).map((k) => k.high));   // the level the next candle must beat
+  const uptrend = x.ema20[i] > x.ema50[i] && x.ema50[i] > x.ema50[i - 5];
+  const aligned = c[i].close > x.ema20[i] && x.ema20[i] > x.ema50[i] && x.ema50[i] > x.ema200[i];
+
+  out.push({
+    id: "breakout", setup: by.breakout, level: hi20, away: pctAway(hi20), ready: true,
+    text: "a candle closes above {L} (the 20-candle high) on at least 1.5× normal volume",
+  });
+  out.push(uptrend
+    ? { id: "pullback", setup: by.pullback, level: x.ema20[i], away: pctAway(x.ema20[i]), ready: true,
+        text: price > x.ema20[i]
+          ? "price dips to about {L} (its 20-candle average) and a green candle closes back above it"
+          : "a green candle closes back above {L} (its 20-candle average) while the uptrend holds" }
+    : { id: "pullback", setup: by.pullback, level: null, away: null, ready: false,
+        text: "first needs an uptrend (the 20-candle average above a rising 50-candle average); there isn't one now" });
+  out.push({
+    id: "oversold", setup: by.oversold, level: x.bbLower[i], away: pctAway(x.bbLower[i]), ready: x.rsi14[i] < 40,
+    text: price > x.bbLower[i]
+      ? `price drops below about {L} (the lower Bollinger band) with RSI under 30 (now ${x.rsi14[i].toFixed(0)}), then a green candle closes higher`
+      : `price is already below {L} (the lower Bollinger band); it needs RSI under 30 (now ${x.rsi14[i].toFixed(0)}) and then a green candle that closes higher`,
+  });
+  out.push(aligned
+    ? { id: "momentum", setup: by.momentum, level: null, away: null, ready: true,
+        text: `RSI climbs back above 55 (now ${x.rsi14[i].toFixed(0)}) while the uptrend holds` }
+    : { id: "momentum", setup: by.momentum, level: null, away: null, ready: false,
+        text: "first needs a strong uptrend (price above its 20, 50 and 200-candle averages); there isn't one now" });
+  return out;
 }
 
 /**

@@ -89,3 +89,14 @@ test("liquidity check flags markets with empty candles or tiny volume", async ()
   const tiny = busy.map((k) => ({ ...k, volume: 2 })); // $200 per candle
   assert.equal(checkLiquidity(tiny).ok, false);
 });
+
+test("long-term stats: hold odds are a valid probability and ranges are ordered", async () => {
+  const { longTermStats } = await import("../public/js/longterm.js");
+  const daily = randomWalk(1500, 5, 0.015).map((k, i) => ({ ...k, time: 1_500_000_000 + i * 86400 }));
+  const lt = longTermStats(daily, true);
+  assert.ok(lt.hold.pUp >= 0 && lt.hold.pUp <= 1);
+  assert.ok(lt.hold.p10 <= lt.hold.median && lt.hold.median <= lt.hold.p90);
+  assert.ok(lt.hold.n > 1000);
+  assert.ok(lt.vol > 10 && lt.vol < 40, `annualized vol ${lt.vol} should be near 1.5% * sqrt(252) ≈ 24%`);
+  assert.equal(longTermStats(daily.slice(0, 100), true), null);
+});

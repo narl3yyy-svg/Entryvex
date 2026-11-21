@@ -13,6 +13,8 @@ import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
 import { initOpportunities, run as runOpportunities } from "./opportunities.js";
+import { initMovers, moversVisible } from "./movers.js";
+import { renderLongTerm } from "./longterm.js";
 import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 
@@ -55,7 +57,9 @@ function updateForecast(ctx, result) {
   renderForecastBox();
   pushAIContext();
   renderDecision(decisionCtx());
+  if (ltSymbol !== ctx.symbol) { ltSymbol = ctx.symbol; renderLongTerm(decisionCtx()); }
 }
+let ltSymbol = null;
 
 /* "Entryvex says" panel */
 function decisionCtx() {
@@ -214,7 +218,7 @@ function initWatchlistDrag() {
     wlDrag.pointerId = e.pointerId;
     wlDrag.li.classList.add("dragging");
     ul.classList.add("is-dragging");
-    grip.setPointerCapture(e.pointerId);
+    try { grip.setPointerCapture(e.pointerId); } catch {}
   });
   ul.addEventListener("pointermove", (e) => {
     if (!wlDrag.li || e.pointerId !== wlDrag.pointerId) return;
@@ -798,7 +802,8 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "movers", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    moversVisible(tab === "movers");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
   };
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -815,6 +820,9 @@ async function boot() {
     showTab: (t) => { showTab(t); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); },
   });
   initSignals({ getInfo: (sym) => state.bySymbol.get(sym), onPick: pick });
+  initMovers({
+    onOpen: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); pick(sym); },
+  });
   initOpportunities({
     getWatchlist: () => state.watchlist.slice(),
     getInfo: (sym) => state.bySymbol.get(sym),
