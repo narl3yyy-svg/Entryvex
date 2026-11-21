@@ -24,6 +24,7 @@ import { onJournalChange } from "./journal.js";
 import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx } from "./fx.js";
+import { renderEarnings } from "./earnings.js";
 
 const $ = (id) => document.getElementById(id);
 const QUOTES = ["USDT", "USD", "USDC"];
@@ -65,7 +66,7 @@ function updateForecast(ctx, result) {
   pushAIContext();
   renderDecision(decisionCtx());
   updateBuyNow(decisionCtx());
-  if (ltSymbol !== ctx.symbol) { ltSymbol = ctx.symbol; renderLongTerm({ ...decisionCtx(), onLoaded: () => updateBuyNow(decisionCtx()) }); }
+  if (ltSymbol !== ctx.symbol) { ltSymbol = ctx.symbol; renderLongTerm({ ...decisionCtx(), onLoaded: () => updateBuyNow(decisionCtx()) }); renderEarnings(decisionCtx()); }
 }
 let ltSymbol = null;
 

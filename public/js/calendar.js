@@ -2,6 +2,7 @@
 // decisions and speeches, inflation, jobs, GDP, retail sales…), shown in the viewer's local time
 // with a countdown. High-impact events coming up soon also feed the "Entryvex says" outside checks.
 import * as fmt from "./format.js";
+import { loadEarningsCalendar, upcomingList } from "./earnings.js";
 
 const FLAGS = { USD: "🇺🇸", EUR: "🇪🇺", GBP: "🇬🇧", JPY: "🇯🇵", CNY: "🇨🇳", CAD: "🇨🇦", AUD: "🇦🇺", NZD: "🇳🇿", CHF: "🇨🇭", ALL: "🌐" };
 const NAMES = { USD: "United States", EUR: "Euro area", GBP: "United Kingdom", JPY: "Japan", CNY: "China", CAD: "Canada", AUD: "Australia", NZD: "New Zealand", CHF: "Switzerland", ALL: "Global" };
@@ -41,8 +42,28 @@ export async function renderCalendar() {
   const el = document.getElementById("calendar");
   if (!el) return;
   el.innerHTML = `<p class="muted small">Loading this week's events…</p>`;
-  try { await loadCalendar(); } catch { el.innerHTML = `<p class="muted small">The economic calendar is unavailable right now.</p>`; return; }
+  const [eco] = await Promise.allSettled([loadCalendar(), loadEarningsCalendar()]);
+  if (eco.status === "rejected") { el.innerHTML = `<p class="muted small">The economic calendar is unavailable right now.</p>` + earningsHtml(); return; }
   draw();
+}
+
+/** Company earnings: your watchlist's stocks (next 3 weeks) and the biggest companies reporting this week. */
+function earningsHtml() {
+  let wl = [];
+  try { wl = JSON.parse(localStorage.getItem("evx.watchlist") || "[]"); } catch {}
+  const { mine, big } = upcomingList(wl, 7);
+  if (!mine.length && !big.length) return "";
+  const day = (d) => new Date(d + "T12:00:00Z").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const when = (t) => (t === "pre" ? "before open" : t === "post" ? "after close" : "");
+  const eps = (v) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
+  const row = (e, mineRow) => `<div class="cal-row earn-row ${mineRow ? "earn-mine" : ""}">
+      <span class="mono cal-time">${fmt.esc(day(e.date))}</span><span class="cal-flag">🇺🇸</span>
+      <span class="cal-title"><strong>${fmt.esc(e.s)}</strong> ${fmt.esc(e.n)}<small class="muted">${fmt.esc([when(e.t), e.e != null ? `analysts expect EPS ${eps(e.e)}` : "", e.ly != null ? `last year ${eps(e.ly)}` : ""].filter(Boolean).join(" · "))}</small></span>
+      <span class="pill pill-thin">Earnings</span></div>`;
+  return `<div class="cal-day"><div class="world-gname">📣 Earnings: your watchlist (next 3 weeks)</div>
+      ${mine.length ? mine.map((e) => row(e, true)).join("") : `<p class="muted small">None of your watchlist's US stocks report in the next 3 weeks.</p>`}</div>
+    ${big.length ? `<div class="cal-day"><div class="world-gname">📣 Biggest companies reporting in the next 7 days</div>${big.map((e) => row(e, false)).join("")}</div>` : ""}
+    <p class="tiny muted">Stocks often jump several percent on earnings, overnight and past any stop-loss. Source: Nasdaq earnings calendar.</p>`;
 }
 
 function draw() {
@@ -77,6 +98,7 @@ function draw() {
           </div>`;
         }).join("")}
       </div>`).join("") : `<p class="muted small">No ${showMedium ? "high or medium" : "high"}-impact events left this week.</p>`}
-    <p class="tiny muted">High-impact releases often cause sharp, fast moves in stocks, crypto and currencies. Many day traders avoid opening new trades in the 30 minutes around them. Source: Forex Factory weekly calendar.</p>`;
+    <p class="tiny muted">High-impact releases often cause sharp, fast moves in stocks, crypto and currencies. Many day traders avoid opening new trades in the 30 minutes around them. Source: Forex Factory weekly calendar.</p>
+    ${earningsHtml()}`;
   el.querySelector("#cal-medium")?.addEventListener("change", (ev) => { showMedium = ev.target.checked; draw(); });
 }

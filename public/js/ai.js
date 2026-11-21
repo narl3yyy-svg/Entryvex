@@ -9,6 +9,7 @@ import { currentBuys, topWatch, signalFor } from "./opportunities.js";
 import { worldSnapshot } from "./world.js";
 import { upcomingHighImpact } from "./calendar.js";
 import { rankFor, picksSnapshot } from "./picks.js";
+import { earningsSnapshot, upcomingList } from "./earnings.js";
 
 const $ = (id) => document.getElementById(id);
 let live = {};
@@ -175,6 +176,7 @@ async function snapshot() {
     },
     worldMarkets: worldSnapshot(),
     stockRank: { thisStock: rankFor(live.symbol), model: picksSnapshot() },
+    earnings: { thisStock: earningsSnapshot(live.symbol), watchlistReportsComing: upcomingList((hooks.getWatchlistInfo?.() || []).map((w) => w.sym), 21).mine.slice(0, 12).map((e) => `${e.s} on ${e.date}${e.t === "pre" ? " before open" : e.t === "post" ? " after close" : ""}`) },
     highImpactEventsNext24h: upcomingHighImpact(24).slice(0, 10).map((e) => `${e.country} ${e.title} at ${new Date(e.t).toISOString()}${e.forecast ? ` (expected ${e.forecast}, last ${e.previous})` : ""}`),
     user: { tradingBalanceUsd: s.balance || "not set", maxLossPerTradePct: s.riskPct, feePerBuyOrSellPct: s.feePct,
       openTradesInThisCoin: openTrades().filter((t) => t.symbol === live.symbol).map((t) => ({ boughtAt: t.entry, amount: t.qty, stop: t.stop, target: t.target })) },

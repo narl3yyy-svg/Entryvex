@@ -103,7 +103,7 @@ export function plainEnglish({ m, d }) {
 
 /* ---------------- Stocks: company report card from SEC filings ---------------- */
 let secTickers = null;
-async function secCik(ticker) {
+export async function secCik(ticker) {
   if (!secTickers) {
     const res = await fetch("/api/market?src=sec-tickers");
     if (!res.ok) throw new Error("SEC " + res.status);

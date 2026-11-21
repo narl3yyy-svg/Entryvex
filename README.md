@@ -94,6 +94,7 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 
 - **Report card:** for stocks, the latest quarterly sales and profit from **SEC filings**, margin, market cap and P/E; for crypto, size, supply and distance from its all-time high.
 - **News:** live headlines for the coin or stock you're viewing, tagged ▲ positive / ▼ negative, with an AI summary of what's happening.
+- **Earnings:** each US stock's next report date with the analysts' consensus EPS (Nasdaq), and how much it has really moved on its past earnings days vs a normal day (measured from SEC 8-K filings). Warns when a report is days away, since prices can gap past a stop-loss.
 - **Global headlines:** business and markets news from the Americas, Europe and Asia (CNBC, Financial Times, BBC, The Guardian, Nikkei Asia, South China Morning Post, Economic Times, Investing.com), plus crypto news.
 - **Watchlist briefing:** one tap and the AI reads the latest news for every coin and stock on your watchlist and summarizes what's going on.
 - **Ask the analyst:** an AI that answers using everything Entryvex knows: live price, forecasts, measured signals and buy triggers, outside checks, long-term stats, earnings, your buy-now numbers and signals across your whole watchlist.
