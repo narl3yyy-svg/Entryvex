@@ -53,15 +53,18 @@ export async function enablePush(onStep = () => {}) {
     await within(navigator.serviceWorker.ready, 15_000, "The background helper didn't start. Reload the page and try again.");
 
     // 3. A push address from the browser's push service.
-    onStep("Getting a notification address from your browser…");
+    onStep("Getting a notification address from your browser… (up to 30 seconds)");
     const { publicKey } = await within(fetch("/api/push/key").then((r) => r.json()), 15_000, "Couldn't reach the alert server. Try again in a minute.");
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      const brave = await isBrave();
-      sub = await within(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }), 25_000,
-        brave ? "Brave blocks this by default. Open brave://settings/privacy, turn on “Use Google services for push messaging”, restart Brave, then try again."
-          : "Your browser's push service didn't answer. Check that notifications aren't turned off for your browser in Windows (Settings → System → Notifications), then try again, or use Chrome or Edge.");
-    }
+    const brave = await isBrave();
+    const edge = /Edg\//.test(navigator.userAgent);
+    const noAnswer = brave
+      ? "Brave blocks this by default. Open brave://settings/privacy, turn on “Use Google services for push messaging”, restart Brave, then try again."
+      : `Your browser's push service (${edge ? "Microsoft's" : "Google's"}) didn't answer, so the browser can't get a notification address. Common causes: `
+        + `an ad-blocker or network filter (Pi-hole, AdGuard, router or company firewall) blocking ${edge ? "Microsoft's notification servers (*.notify.windows.com)" : "Google's push servers (fcm.googleapis.com, mtalk.google.com)"}, `
+        + `a VPN, or notifications turned off for the browser in Windows (Settings → System → Notifications). Fix that and try again${edge ? "" : ", or try Microsoft Edge, which uses a different push service"}. `
+        + "Alerts still work as normal while Entryvex is open.";
+    let sub = await within(reg.pushManager.getSubscription(), 10_000, noAnswer);
+    if (!sub) sub = await within(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }), 20_000, noAnswer);
 
     // 4. Send the settings to Entryvex's alert server.
     onStep("Saving your alert settings…");
