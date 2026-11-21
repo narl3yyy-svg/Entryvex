@@ -96,16 +96,28 @@
 
   <main class="layout">
     <aside class="panel watch">
-      <div class="panel-head">
-        <h2>Watchlist</h2>
-        <span class="muted small">Crypto + stocks · live</span>
+      <div class="panel-head wl-head">
+        <div class="tabs wl-tabs" id="wl-tabs" role="tablist">
+          <button data-v="watch" class="on">Watchlist</button>
+          <button data-v="browse" title="Top 200 crypto, top 1,000 stocks, top 700 ETFs and world indices">Browse markets</button>
+        </div>
       </div>
-      <div class="search">
-        <input id="search" type="search" placeholder="Add a coin, stock, ETF or index (SOL, Apple, SPY, Dow)…" autocomplete="off" spellcheck="false" />
-        <div id="search-results" class="search-results" hidden></div>
+      <div id="wl-view">
+        <div class="search">
+          <input id="search" type="search" placeholder="Add a coin, stock, ETF or index (SOL, Apple, SPY, Dow)…" autocomplete="off" spellcheck="false" />
+          <div id="search-results" class="search-results" hidden></div>
+        </div>
+        <div id="wl-summary" class="wl-summary" aria-live="polite"></div>
+        <ul id="watchlist" class="watchlist"></ul>
       </div>
-      <div id="wl-summary" class="wl-summary" aria-live="polite"></div>
-      <ul id="watchlist" class="watchlist"></ul>
+      <div id="browse-view" hidden>
+        <div class="seg browse-seg" id="browse-seg">
+          <button data-b="crypto" class="on">Crypto</button><button data-b="stocks">Stocks</button><button data-b="etfs">ETFs</button><button data-b="indices">Indices</button>
+        </div>
+        <div class="search"><input id="browse-filter" type="search" placeholder="Filter this list…" autocomplete="off" spellcheck="false" /></div>
+        <div id="browse-meta" class="muted tiny browse-meta"></div>
+        <ul id="browse-list" class="watchlist browse-list"></ul>
+      </div>
     </aside>
 
     <section class="panel chart-panel">

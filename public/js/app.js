@@ -25,6 +25,7 @@ import { onJournalChange } from "./journal.js";
 import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx } from "./fx.js";
+import { initBrowse } from "./browse.js";
 import { renderEarnings } from "./earnings.js";
 import { renderNewsAi } from "./newsai.js";
 
@@ -1151,6 +1152,14 @@ async function boot() {
     picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
   };
+  // Browse markets: ranked lists next to the watchlist (open on the chart, or ＋ to add).
+  const registerFromBrowse = (sym, meta) => { if (meta && isStock(sym)) { registerStock(sym, meta); state.bySymbol.set(sym, stockInfo(sym)); } };
+  initBrowse({
+    cryptoPair: (base) => cryptoPair(base)?.symbol || null,
+    isWatched: (sym) => state.watchlist.includes(sym),
+    onOpen: (sym, meta) => { registerFromBrowse(sym, meta); selectSymbol(sym); if (innerWidth < 900) $("chart").scrollIntoView({ behavior: "smooth", block: "start" }); },
+    onAdd: (sym, meta) => { registerFromBrowse(sym, meta); addToWatchlist(sym); },
+  });
   initPicks({ onPick: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
   showTab(store.get("centerTab", "scanner"));

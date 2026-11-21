@@ -28,9 +28,13 @@ function route(p) {
   }
   if (src === "screener") {
     const id = p.get("id") || "";
-    if (!["most_actives", "day_gainers", "day_losers"].includes(id)) return null;
-    const qs = `scrIds=${id}&count=25`;
-    return { urls: [`https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`, `https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`], ttl: 60, ua: UA };
+    // Ranked lists for "Browse": biggest companies and most-traded ETFs, 250 per page (start 0–750).
+    const big = ["largest_market_cap", "most_actives_etfs"].includes(id);
+    if (!big && !["most_actives", "day_gainers", "day_losers"].includes(id)) return null;
+    const start = big ? Math.max(0, Math.min(750, parseInt(p.get("start") || "0", 10) || 0)) : 0;
+    if (big && start % 250) return null;
+    const qs = big ? `scrIds=${id}&count=250&start=${start}` : `scrIds=${id}&count=25`;
+    return { urls: [`https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`, `https://query2.finance.yahoo.com/v1/finance/screener/predefined/saved?${qs}`], ttl: big ? 1800 : 60, ua: UA, slim: big ? slimScreener : null };
   }
   if (src === "calendar") {
     // This week's economic calendar (central banks, inflation, jobs, GDP…) for major economies.
@@ -83,6 +87,16 @@ function slimSecEarnings(text) {
     if (form[k] === "8-K" && String(items[k] || "").split(",").includes("2.02")) out.push({ d: date[k], a: acc[k] });
   }
   return out;
+}
+
+/** Ranked screener page → just what the Browse list shows. */
+function slimScreener(j) {
+  const q = j?.finance?.result?.[0]?.quotes || [];
+  return q.filter((x) => x.symbol && x.symbol.length <= 12).map((x) => ({
+    s: x.symbol, n: String(x.shortName || x.longName || x.symbol).slice(0, 60), p: x.regularMarketPrice ?? null,
+    c: x.regularMarketChangePercent ?? null, mc: x.marketCap ?? x.netAssets ?? null, v: x.regularMarketVolume ?? null,
+    t: x.quoteType === "ETF" ? "ETF" : "Stock", cur: x.currency || "USD", ex: x.fullExchangeName || x.exchange || "",
+  }));
 }
 
 /** Keep only what Entryvex shows from the earnings calendar (much smaller for phones). */
