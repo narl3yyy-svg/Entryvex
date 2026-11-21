@@ -840,3 +840,12 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 /* gap between candle sizes and the 1Y/5Y/ALL views */
 .seg .seg-gap { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--line); }
 .ct-pat { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--line); font-weight: 600; font-size: 12px; }
+
+/* Phones: candle sizes + 1Y/5Y/ALL wrap instead of overflowing the screen */
+@media (max-width: 640px) {
+  #intervals { flex-wrap: wrap; max-width: 100%; }
+  #intervals button { padding: 5px 8px; }
+  #intervals .seg-gap { display: none; }
+  .toolbar { flex-wrap: wrap; min-width: 0; }
+}
+.d-regime { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

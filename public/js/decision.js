@@ -203,7 +203,7 @@ function html(c, checks) {
           : `A setup is active, but it has only happened ${best?.stats.n ?? 0} times here, too few to know if it works. Skip it.`;
       const elsewhere = currentBuys().filter((b) => b.sym !== c.symbol);
       if (elsewhere.length) headline += ` <span class="d-elsewhere">Elsewhere right now: ${elsewhere.slice(0, 3).map((b) => `<button class="link-btn" data-goto-opps>${fmt.esc(b.label === "GO" ? "BUY" : "small buy")} on ${fmt.esc(b.base)} (${b.iv})</button>`).join(", ")}.</span>`;
-      steps = patternNote(c, r) + moveNote(c) + whenToBuy(c, r, best) + predicts(c) + `<ol class="d-steps">
+      steps = regimeNote(c, r) + patternNote(c, r) + moveNote(c) + whenToBuy(c, r, best) + predicts(c) + `<ol class="d-steps">
         <li><strong>Do nothing for now.</strong> Not trading is a good decision when the odds aren't on your side.</li>
         <li>Entryvex re-checks every time a ${c.interval} candle closes. Turn on <button class="link-btn" data-open-alerts>setup alerts 🔔</button> to be told the moment a BUY appears on any of your coins or stocks.</li>
         <li>Want to look elsewhere? Try <button class="link-btn" data-find-edge>Find an edge for this ${stock ? "stock" : "coin"}</button> or <button class="link-btn" data-scan-all>Scan watchlist</button>.</li>
@@ -249,6 +249,16 @@ function whenToBuy(c, r, best) {
       <span class="muted small">Past record here: ended in profit ${Math.round(t.setup.stats.winRate * t.setup.stats.n)} of ${t.setup.stats.n} times, ${fmt.pct(t.setup.stats.ev * 100)} per trade after costs.</span></li>`).join("")}</ul>
     <p class="tiny muted">Entryvex re-checks after every ${c.interval} candle closes and switches to BUY (with the full plan) the moment one of these happens.</p>
   </div>`;
+}
+
+/** Which kind of market we're in, and that setups are judged by their record in this kind of market. */
+function regimeNote(c, r) {
+  const g = r?.regime;
+  if (!g || g.now === "unknown") return "";
+  const judged = r.setups.filter((s) => s.basis === "regime").length;
+  const up = g.now === "up";
+  return `<p class="small d-regime"><span class="pill ${up ? "pill-edge" : "pill-negative"}">${up ? "▲ Rising market" : "▼ Falling market"}</span>
+    ${fmt.esc(c.base)} is in a ${fmt.esc(g.label)} on ${c.interval} candles. ${judged ? `${judged} of ${r.setups.length} setups are judged only by how they did in ${up ? "rising" : "falling"} markets like this one` : "Setups are judged by their whole record (too few past trades in this kind of market alone)"}${up ? "." : ". Buying setups usually struggle in falling markets."}</p>`;
 }
 
 /** Candlestick patterns that just formed, each with its MEASURED record on this market. */

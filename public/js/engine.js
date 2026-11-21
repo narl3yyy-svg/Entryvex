@@ -81,11 +81,19 @@ export const SETUPS = [
 export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = {}) {
   const x = computeAll(candles);
   const lastClosed = candles.length - (formingLast ? 2 : 1);
+  // Market regime now: price above or below its 200-candle average. Long setups behave very
+  // differently in rising and falling markets, so each setup is judged by its record in the SAME
+  // regime as now, when there are enough such trades (otherwise by its whole record).
+  const regimeNow = regimeAt(candles, x, lastClosed);
   const setups = SETUPS.map((s) => {
     const trades = backtest(candles, x, s, lastClosed, costPerSide);
-    const stats = summarize(trades);
+    const statsAll = summarize(trades);
+    const same = trades.filter((t) => t.regime === regimeNow);
+    const statsRegime = summarize(same);
+    const useRegime = regimeNow !== "unknown" && statsRegime.n >= RULES.minTrades;
+    const stats = useRegime ? statsRegime : statsAll;
     const activeNow = lastClosed >= RULES.warmup && safeTest(s, lastClosed, candles, x);
-    return { ...s, trades, stats, activeNow, verdict: verdictFor(stats, s.strict) };
+    return { ...s, trades, stats, statsAll, statsRegime, basis: useRegime ? "regime" : "all", activeNow, verdict: verdictFor(stats, s.strict) };
   });
 
   const a = x.atr14[lastClosed];
@@ -121,6 +129,7 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
 
   return {
     setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers,
+    regime: { now: regimeNow, label: REGIME_LABEL[regimeNow] },
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,
@@ -194,6 +203,14 @@ export function checkLiquidity(candles, lastClosed = candles.length - 2) {
   return { ok: !reason, zeroFrac, flatFrac, medianUsd, reason };
 }
 
+export const REGIME_LABEL = { up: "rising market (price above its 200-candle average)", down: "falling market (price below its 200-candle average)", unknown: "not enough history to tell" };
+/** "up" / "down" by price vs its 200-candle average at candle i. */
+export function regimeAt(c, x, i) {
+  const m = x.ema200?.[i];
+  if (!isFinite(m) || i < RULES.warmup) return "unknown";
+  return c[i].close >= m ? "up" : "down";
+}
+
 function safeTest(s, i, c, x) {
   try { return !!s.test(i, c, x) && isFinite(x.atr14[i]); } catch { return false; }
 }
@@ -218,7 +235,7 @@ function backtest(c, x, setup, lastClosed, cost) {
       exit = c[j].close; outcome = "timeout";
     }
     const net = (exit - entry) / entry - 2 * cost;
-    trades.push({ signalTime: c[i].time, entryTime: c[entryIdx].time, exitTime: c[j].time, entry, exit, outcome, net, bars: j - entryIdx + 1 });
+    trades.push({ signalTime: c[i].time, entryTime: c[entryIdx].time, exitTime: c[j].time, entry, exit, outcome, net, bars: j - entryIdx + 1, regime: regimeAt(c, x, i) });
     i = j; // no overlapping trades: next signal only after this one is closed
   }
   return trades;

@@ -157,6 +157,7 @@ async function snapshot() {
     entryvexSays: a ? {
       verdict: a.liquidity && !a.liquidity.ok ? "DON'T BUY (market barely trades)" : a.overall.label,
       liquidity: a.liquidity && !a.liquidity.ok ? a.liquidity.reason : "trades normally",
+      marketRegime: a.regime ? `${a.regime.label}; setups are judged by their record in this kind of market when they have 30+ such trades` : null,
       buyTriggersWithTrackRecord: (a.triggers || []).filter((t) => t.setup && ["edge", "weak"].includes(t.setup.verdict.level)).map((t) => ({
         setup: t.setup.name, verdict: t.setup.verdict.label, possibleNow: t.ready,
         condition: t.text.replace("{L}", t.level != null ? String(round(t.level)) : ""), distanceFromPricePct: t.away != null ? round(t.away, 3) : null,

@@ -207,7 +207,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     const spread = isFinite(ctx.spreadPct) ? (ctx.spreadPct * 100).toFixed(3) + "%" : "unknown";
     $("method").innerHTML = `How this is measured: every past time a setup appeared ${from ? `between ${from.toLocaleDateString()} and ${to.toLocaleDateString()}` : ""},
       we "bought" at the next candle's open, set a stop ${RULES.stopAtr}× ATR below and a target ${RULES.targetAtr}× ATR above (on small candles, never closer than ${RULES.minRiskCosts}× the trading cost, so fees can't eat the target), and exited at whichever hit first
-      (if both hit in one candle, we count the loss). Costs: ${stockMode ? `$0 commission + ${spread} spread (estimated)` : `${(+feeInput.value).toFixed(2)}% fee + ${spread} spread (measured live)`} on both the buy and the sell.
+      (if both hit in one candle, we count the loss). Each setup is judged by its trades in the same kind of market as now (${r.regime?.now === "down" ? "falling" : r.regime?.now === "up" ? "rising" : "any"}: price ${r.regime?.now === "down" ? "below" : "above"} its 200-candle average) when it has at least ${RULES.minTrades} of them, otherwise by all of them. Costs: ${stockMode ? `$0 commission + ${spread} spread (estimated)` : `${(+feeInput.value).toFixed(2)}% fee + ${spread} spread (measured live)`} on both the buy and the sell.
       ${stockMode ? "Regular trading hours only (9:30am–4pm New York time); long trades only." : "Long trades only (Binance.US spot can't short)."} Past results don't guarantee future results.`;
 
     if (shownSetup) showTrades(shownSetup, false);
