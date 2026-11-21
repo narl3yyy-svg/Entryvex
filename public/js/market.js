@@ -17,7 +17,9 @@ export function registerStock(sym, meta) {
 export function stockInfo(sym) {
   const t = tickerOf(sym), m = stockMeta[sym] || {};
   const currency = m.currency || "USD";
-  return { symbol: sym, base: t, name: m.name || t, exchange: m.exchange, kind: m.kind || "Stock", ...STOCK_RULES, quote: currency, currency };
+  // Index symbols always start with "^" (older saved entries may say "stock").
+  const kind = t.startsWith("^") ? "Index" : m.kind && m.kind !== "stock" ? m.kind : "Stock";
+  return { symbol: sym, base: t, name: m.name || t, exchange: m.exchange, kind, ...STOCK_RULES, quote: currency, currency };
 }
 
 /* ---------------- Yahoo chart parsing ---------------- */
