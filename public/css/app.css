@@ -618,3 +618,10 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 .watchlist.is-dragging { cursor: grabbing; }
 .watchlist.is-dragging .wl-grip { cursor: grabbing; }
 .watchlist li.dragging { opacity: .9; background: #232b38 !important; box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 3px 0 0 var(--accent) !important; z-index: 2; }
+
+/* Phones: show every tab (wrap into pills instead of scrolling sideways) */
+@media (max-width: 760px) {
+  .tabs { flex-wrap: wrap; overflow: visible; border-bottom: 0; gap: 6px; }
+  .tabs button { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; margin: 0; font-size: 13px; }
+  .tabs button.on { border-color: var(--accent); background: rgba(46,229,157,.08); }
+}
