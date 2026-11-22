@@ -3,7 +3,7 @@
 //   1) BUY signals active right now, and
 //   2) setups with a positive track record that aren't active yet ("watch these").
 // Refreshes every 15 minutes while Entryvex is open.
-import { analyze } from "./engine.js";
+import { analyzeAsync, trainPooledAsync } from "./pool.js";
 import { getKlineHistory, getBookTicker, isStock } from "./market.js";
 import { logFromAnalysis } from "./signals.js";
 import * as fmt from "./format.js";
@@ -135,24 +135,61 @@ export async function run(only) {
   let done = 0;
   progress = `Checking ${jobs.length} combinations…`;
   render();
-  const worker = async () => {
+  // 1) Load every market's candles (saved history + only what's new).
+  const loaded = [];
+  const step = (k) => { done += k; hooks.onProgress({ running: true, done: Math.round(done), total }); };
+  const loader = async () => {
     while (jobs.length) {
       const { sym, iv } = jobs.shift();
       try {
         const [c, book] = await Promise.all([getKlineHistory(sym, iv, 3000), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
-        if (c.length > 250) {
-          const cost = (isStock(sym) ? 0 : fee) + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0);
-          const r = analyze(c, { costPerSide: cost });
-          logFromAnalysis(sym, iv, c, r);
-          out.push({ sym, iv, r });
-        }
-      } catch (e) { /* skip markets that fail to load */ }
-      done++;
-      if (done % 3 === 0) hooks.onProgress({ running: true, done, total });
-      if (done % 6 === 0) { progress = `Checked ${done} of ${done + jobs.length}…`; render(); }
+        if (c.length > 250) loaded.push({ sym, iv, c, cost: (isStock(sym) ? 0 : fee) + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0) });
+      } catch { /* skip markets that fail to load */ }
+      step(0.5);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([loader(), loader(), loader(), loader(), loader(), loader()]);
+
+  // 2) One shared prediction model per candle size, trained on all of these markets together
+  //    (better on unseen data than one model per market). Retrained only when a new candle closed.
+  //    Measured on unseen data: clearly better than per-market models on daily candles (losses per
+  //    trade about a quarter as big), slightly worse on 1h/4h, so it's only used for daily.
+  if (!only) {
+    for (const iv of INTERVALS.filter((v) => SHARED_MODEL_IVS.has(v))) {
+      const group = loaded.filter((m) => m.iv === iv);
+      const sig = iv + "|" + group.map((m) => `${m.sym}:${m.c.at(-2)?.time}`).sort().join(",");
+      if (pooledByIv.get(iv)?.sig === sig) continue;
+      try {
+        const model = await trainPooledAsync(group.map((m) => ({ candles: m.c, cost: m.cost })));
+        pooledByIv.set(iv, { sig, model });
+      } catch { pooledByIv.delete(iv); }
+    }
+  }
+
+  // 3) Analyze each market in background threads, reusing results when nothing has changed.
+  const queueA = loaded.slice();
+  const analyzer = async () => {
+    while (queueA.length) {
+      const { sym, iv, c, cost } = queueA.shift();
+      try {
+        const pooled = pooledByIv.get(iv);
+        const key = `${sym}|${iv}`, lastClosedTime = c.at(-2)?.time;
+        const hit = resultCache.get(key);
+        let r;
+        if (hit && hit.t === lastClosedTime && hit.sig === pooled?.sig && Math.abs(hit.cost - cost) < 0.0002) r = hit.r;
+        else {
+          r = await analyzeAsync(c, { costPerSide: cost, pooled: pooled?.model || null });
+          resultCache.set(key, { t: lastClosedTime, cost, sig: pooled?.sig, r });
+        }
+        logFromAnalysis(sym, iv, c, r);
+        out.push({ sym, iv, r });
+      } catch { /* skip */ }
+      step(0.5);
+      if (out.length % 6 === 0) { progress = `Checked ${out.length} of ${loaded.length}…`; render(); }
+    }
+  };
+  await Promise.all([analyzer(), analyzer(), analyzer(), analyzer()]);
+  done = total; jobs.length = 0;
   const keep = hooks.getWatchlist();
   rows = only ? rows.filter((x) => !syms.includes(x.sym) && keep.includes(x.sym)).concat(out) : out;
   syms.forEach((s) => checked.add(s));
@@ -168,6 +205,11 @@ export async function run(only) {
   if (queued.length) { const q = [...new Set(queued)]; queued.length = 0; run(q); }
 }
 const queued = [];
+const resultCache = new Map();
+const SHARED_MODEL_IVS = new Set(["1d"]);
+const pooledByIv = new Map();    // interval → { sig, model } (the shared prediction model)
+/** The shared prediction model for a candle size, if the watchlist check has trained one (for the chart). */
+export function pooledModelFor(iv) { return pooledByIv.get(iv)?.model || null; }   // "SYM|interval" → { t: last closed candle time, cost, r }
 
 function render() {
   const root = $("tab-opps");

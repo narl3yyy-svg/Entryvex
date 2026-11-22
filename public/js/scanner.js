@@ -1,5 +1,6 @@
 // Setup Scanner panel: runs the engine for the selected coin and draws the results.
 import { analyze, RULES } from "./engine.js";
+import { pooledModelFor } from "./opportunities.js";
 import { getKlineHistory, getBookTicker, isStock } from "./market.js";
 import { coinName } from "./coins.js";
 import * as fmt from "./format.js";
@@ -78,7 +79,8 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
   }
 
   function recompute() {
-    result = analyze(ctx.candles, { costPerSide: costPerSide(ctx.spreadPct, ctx.symbol) });
+    // Use the shared prediction model for this candle size when the watchlist check has trained one.
+    result = analyze(ctx.candles, { costPerSide: costPerSide(ctx.spreadPct, ctx.symbol), pooled: pooledModelFor(ctx.interval) });
     logFromAnalysis(ctx.symbol, ctx.interval, ctx.candles, result);
     render();
     onAnalyzed?.(ctx, result);

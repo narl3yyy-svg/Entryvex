@@ -12,7 +12,7 @@
 
 import { computeAll } from "./indicators.js";
 import { PATTERNS } from "./patterns.js";
-import { trainModel } from "./model.js";
+import { trainModel, featuresAt, fitLogistic, predictorFrom, auc, FEATURE_NAMES, MODEL } from "./model.js";
 
 export const RULES = {
   stopAtr: 1.0,     // stop-loss distance in ATRs below entry
@@ -79,7 +79,7 @@ export const SETUPS = [
  * @param candles  oldest → newest; the LAST candle may still be forming and is never used as a signal.
  * @param costPerSide  fraction (0.0007 = 0.07%) charged on entry AND on exit (fee + half-spread).
  */
-export function analyze(candles, { costPerSide = 0.0007, formingLast = true, useModel = true } = {}) {
+export function analyze(candles, { costPerSide = 0.0007, formingLast = true, useModel = true, modelLabel = "trade", pooled = null } = {}) {
   const x = computeAll(candles);
   const lastClosed = candles.length - (formingLast ? 2 : 1);
   // Market regime now: price above or below its 200-candle average. Long setups behave very
@@ -103,12 +103,21 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true, use
   // the same stop/target/time limit/costs as every setup, and judged with the stricter bar.
   let model = null;
   if (useModel) {
-    try { model = trainModel(candles, x, lastClosed, costPerSide); } catch { model = null; }
+    // Trained on the exact trade it will be judged by: buy next open, target before stop within the time limit, after costs.
+    const label = modelLabel === "trade" ? (i) => tradeWins(candles, x, i, lastClosed, costPerSide) : null;
+    try {
+      // A shared model trained across the whole watchlist (see trainPooled) predicts better than one
+      // trained on a single market's history; use it when the watchlist check has made one.
+      model = pooled ? applyPooled(pooled, candles, x, lastClosed, costPerSide)
+        : trainModel(candles, x, lastClosed, costPerSide, { label, labelBars: RULES.maxBars + 1 });
+    } catch { model = null; }
   }
   if (model?.ok) {
     const ms = {
       id: "model", name: "Entryvex model", model: true, strict: true,
-      plain: `Entryvex's prediction model is confident price will be higher after ${model.H} candles (it learned from this market's older history and was tested on the newest part it never saw).`,
+      plain: model.shared
+        ? "Entryvex's prediction model (trained on every market in your watchlist at this candle size) expects this trade to work: target before stop, after costs. It's judged only on the period after its training cutoff."
+        : "Entryvex's prediction model (trained on this market's older history) expects this trade to work: target before stop, after costs. It's judged only on the newest part of history it never saw.",
       test: (i) => i >= model.testStart && (model.probs.get(i) ?? 0) >= model.threshold,
     };
     const trades = backtest(candles, x, ms, lastClosed, costPerSide);
@@ -151,7 +160,7 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true, use
   return {
     setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers,
     regime: { now: regimeNow, label: REGIME_LABEL[regimeNow] },
-    model: model?.ok ? { pNow: model.pNow, threshold: model.threshold, H: model.H, test: model.test, weights: model.weights } : null,
+    model: model?.ok ? { pNow: model.pNow, threshold: model.threshold, H: model.H, test: model.test, weights: model.weights, shared: !!model.shared } : null,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,
@@ -231,6 +240,68 @@ export function regimeAt(c, x, i) {
   const m = x.ema200?.[i];
   if (!isFinite(m) || i < RULES.warmup) return "unknown";
   return c[i].close >= m ? "up" : "down";
+}
+
+/**
+ * One model for many markets at one candle size: more examples to learn from, so it generalizes
+ * better (tested: clearly better on unseen data on 1h and daily). Every market shares ONE time
+ * cutoff: training only uses trades that finished before it, and each market is judged only after it.
+ * @param markets [{ candles, cost }]
+ * @returns plain data { w, b, mu, sd, cutoff, threshold, n } (safe to send between threads) or null
+ */
+export function trainPooled(markets, { target = "trade" } = {}) {
+  const H = target === "trade" ? RULES.maxBars + 1 : MODEL.H;
+  const prepared = markets.filter((m) => m.candles?.length > 600).map((m) => ({ ...m, x: computeAll(m.candles), last: m.candles.length - 2 }));
+  if (prepared.length < 3) return null;
+  const cut = prepared.map(({ candles: c, last }) => c[Math.floor(210 + (last - H - 210) * MODEL.trainFrac)].time).sort((a, b) => a - b);
+  const cutoff = cut[Math.floor(cut.length / 2)];   // median market's 70% point
+  const X = [], y = [];
+  for (const { candles: c, x, last, cost } of prepared) {
+    for (let i = 210; i + H <= last && c[i + H].time < cutoff; i++) {
+      const f = featuresAt(c, x, i);
+      if (!f) continue;
+      const yi = target === "trade" ? tradeWins(c, x, i, last, cost) : (c[i + H].close > c[i].close * (1 + 2 * cost) ? 1 : 0);
+      if (yi == null) continue;
+      X.push(f); y.push(yi);
+    }
+  }
+  if (X.length < 800 || y.every((v) => v === y[0])) return null;
+  const m = fitLogistic(X, y);
+  const p = X.map((f) => m.predict(f)).sort((a, b) => a - b);
+  return { w: m.w, b: m.b, mu: m.mu, sd: m.sd, cutoff, threshold: p[Math.floor(p.length * (1 - MODEL.topFrac))], n: X.length, markets: prepared.length, target };
+}
+
+/** Use a shared model on one market: predictions only count after its training cutoff. */
+function applyPooled(pm, c, x, lastClosed, cost) {
+  const predict = predictorFrom(pm);
+  const H = RULES.maxBars + 1;
+  const testStart = c.findIndex((k) => k.time > pm.cutoff);
+  if (testStart < 0 || lastClosed - testStart < 50) return { ok: false };
+  const probs = new Map(), tp = [], ty = [];
+  for (let i = Math.max(210, testStart); i <= lastClosed; i++) {
+    const f = featuresAt(c, x, i);
+    if (!f) continue;
+    const p = predict(f);
+    probs.set(i, p);
+    if (i + H <= lastClosed) { const yi = tradeWins(c, x, i, lastClosed, cost); if (yi != null) { tp.push(p); ty.push(yi); } }
+  }
+  const top = tp.map((p, k) => [p, ty[k]]).filter(([p]) => p >= pm.threshold);
+  return {
+    ok: true, shared: true, probs, threshold: pm.threshold, testStart: Math.max(210, testStart), pNow: probs.get(lastClosed) ?? null, H,
+    test: { auc: auc(tp, ty), base: ty.length ? ty.reduce((a, v) => a + v, 0) / ty.length : NaN, hitTop: top.length ? top.filter(([, v]) => v).length / top.length : NaN, nTop: top.length, n: tp.length },
+    weights: FEATURE_NAMES.map((name, j) => ({ name, w: pm.w[j] })).sort((a, b) => Math.abs(b.w) - Math.abs(a.w)),
+  };
+}
+
+/** Would the standard trade signalled at candle i have made money after costs? (1/0, null if unfinished) */
+function tradeWins(c, x, i, lastClosed, cost) {
+  const e = i + 1;
+  if (e + RULES.maxBars - 1 > lastClosed || !isFinite(x.atr14[i])) return null;
+  const entry = c[e].open, d = riskDistance(x.atr14[i], entry, cost);
+  const stop = entry - d, target = entry + (RULES.targetAtr / RULES.stopAtr) * d;
+  let exit = c[e + RULES.maxBars - 1].close;
+  for (let j = e; j < e + RULES.maxBars; j++) { const r = exitOnCandle(c[j], stop, target); if (r) { exit = r.exit; break; } }
+  return (exit - entry) / entry - 2 * cost > 0 ? 1 : 0;
 }
 
 function safeTest(s, i, c, x) {

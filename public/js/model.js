@@ -66,6 +66,11 @@ export function fitLogistic(X, y, { iters = MODEL.iters, lr = MODEL.lr, l2 = MOD
   return { w, b, mu, sd, predict: (f) => { let z = b; for (let j = 0; j < d; j++) z += w[j] * ((f[j] - mu[j]) / sd[j]); return sigmoid(z); } };
 }
 
+/** Rebuild a predictor from plain parameters { w, b, mu, sd }. */
+export function predictorFrom({ w, b, mu, sd }) {
+  return (f) => { let z = b; for (let j = 0; j < w.length; j++) z += w[j] * ((f[j] - mu[j]) / sd[j]); return sigmoid(z); };
+}
+
 /** Area under the ROC curve: 0.5 = no skill, 1 = perfect ranking. */
 export function auc(p, y) {
   const pos = [], neg = [];
@@ -87,22 +92,27 @@ export function auc(p, y) {
  * Train on the older part, test on the newest part.
  * Returns { ok, probs (per candle index, test part + now), threshold, testStart, pNow, test: { auc, base, hitTop, n } , weights }.
  */
-export function trainModel(c, x, lastClosed, costPerSide) {
-  const H = MODEL.H;
+export function trainModel(c, x, lastClosed, costPerSide, { label = null, labelBars = MODEL.H } = {}) {
+  const H = label ? labelBars : MODEL.H;
   const first = 210, lastLabeled = lastClosed - H;
   if (lastLabeled - first < 600) return { ok: false, reason: "not enough history" };
   const split = Math.floor(first + (lastLabeled - first) * MODEL.trainFrac);
   const need = 1 + 2 * costPerSide;
+  // What counts as a "win": by default, higher than costs after H candles; with `label`, the exact
+  // trade Entryvex would take (target before stop, within the time limit, after costs).
+  const outcome = label || ((i) => (c[i + H].close > c[i].close * need ? 1 : 0));
   const X = [], y = [];
   for (let i = first; i <= split - H; i++) {        // gap of H candles before the test part
     const f = featuresAt(c, x, i);
     if (!f) continue;
-    X.push(f); y.push(c[i + H].close > c[i].close * need ? 1 : 0);
+    const yi = outcome(i);
+    if (yi == null) continue;
+    X.push(f); y.push(yi);
   }
   if (X.length < 400 || y.every((v) => v === y[0])) return { ok: false, reason: "not enough varied history" };
   const m = fitLogistic(X, y);
   const trainP = X.map((f) => m.predict(f)).sort((a, b) => a - b);
-  const threshold = Math.max(0.5, trainP[Math.floor(trainP.length * (1 - MODEL.topFrac))]);
+  const threshold = label ? trainP[Math.floor(trainP.length * (1 - MODEL.topFrac))] : Math.max(0.5, trainP[Math.floor(trainP.length * (1 - MODEL.topFrac))]);
   const probs = new Map();
   const tp = [], ty = [];
   for (let i = split; i <= lastClosed; i++) {
@@ -110,7 +120,7 @@ export function trainModel(c, x, lastClosed, costPerSide) {
     if (!f) continue;
     const p = m.predict(f);
     probs.set(i, p);
-    if (i <= lastLabeled) { tp.push(p); ty.push(c[i + H].close > c[i].close * need ? 1 : 0); }
+    if (i <= lastLabeled) { const yi = outcome(i); if (yi != null) { tp.push(p); ty.push(yi); } }
   }
   const base = ty.length ? ty.reduce((s, v) => s + v, 0) / ty.length : NaN;
   const top = tp.map((p, k) => [p, ty[k]]).filter(([p]) => p >= threshold);
