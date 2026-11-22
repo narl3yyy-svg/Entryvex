@@ -382,7 +382,7 @@ function paintSignal(li, sym) {
   li.classList.toggle("sig-unknown", v?.level === "unknown");
   const el = li.querySelector('[data-f="sig"]');
   if (!el) return;
-  const cls = v ? { buy: "buy", watch: "watch", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
+  const cls = v ? { buy: "buy", watch: "sig-watching", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
   el.innerHTML = v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "";
   li.title = v ? v.why : "Not checked yet. Press Scan watchlist.";
 }

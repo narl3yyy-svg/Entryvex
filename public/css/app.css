@@ -904,5 +904,6 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .al-topic { display: inline-block; padding: 2px 6px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); user-select: all; word-break: break-all; }
 /* WATCH: a setup with a winning record exists, waiting for it to appear */
 .watchlist li.sig-watch { box-shadow: inset 3px 0 0 #4c9aff; background: rgba(76,154,255,.07); }
-.wl-sig.watch { background: rgba(76,154,255,.18); color: #8dbbff; }
+.wl-sig.sig-watching { background: rgba(76,154,255,.18); color: #8dbbff; }
 .wl-summary strong.wt { color: #8dbbff; }
+.wl-sig { white-space: nowrap; }
