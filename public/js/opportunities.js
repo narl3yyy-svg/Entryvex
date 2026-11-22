@@ -15,7 +15,21 @@ const IV_SHORT = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h",
 const IV_NAME = { "1m": "1-minute", "5m": "5-minute", "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily", "1w": "weekly" };
 let INTERVALS = ["15m"];
 let fullAgain = false;
-const REFRESH_MS = 15 * 60_000;
+// How often the whole watchlist is re-checked (minutes; 0 = only when you press Scan watchlist).
+// Unchanged markets are reused, so frequent checks are cheap. In a background tab it slows to ≥5 min.
+export const SCAN_CHOICES = [1, 5, 15, 30, 0];
+export function scanEvery() { const v = +store.get("scanEvery", 5); return SCAN_CHOICES.includes(v) ? v : 5; }
+function nextDelay() {
+  const m = scanEvery();
+  if (!m) return null;
+  return (document.visibilityState === "visible" ? m : Math.max(m, 5)) * 60_000;
+}
+function schedule(ms = nextDelay()) { clearTimeout(timer); if (ms != null) timer = setTimeout(() => run(), ms); }
+export function setScanEvery(min) {
+  try { localStorage.setItem("evx.scanEvery", JSON.stringify(min)); } catch {}
+  schedule(min ? Math.min(min * 60_000, 3000) : null);   // apply now: check again shortly, then on the new rhythm
+}
+let prevBuys = null;   // BUY signals found by the previous check (null = first check since the page opened)
 
 let hooks = { getWatchlist: () => [], getInfo: () => null, nameFor: (s) => s, onPick: () => {}, onUpdate: () => {}, onProgress: () => {} };
 let rows = [];          // { sym, iv, r }
@@ -199,8 +213,18 @@ export async function run(only) {
   progress = "";
   render();
   hooks.onProgress({ running: false, done: total, total });
-  hooks.onUpdate(currentBuys());
-  timer = setTimeout(() => run(), only && lastRun ? Math.max(5_000, REFRESH_MS - (Date.now() - lastRun)) : REFRESH_MS);
+  const buysNow = currentBuys();
+  // A market just turned green: tell the user right away (not on the first check after opening the page).
+  if (!only && prevBuys) {
+    for (const b of buysNow) {
+      if (prevBuys.has(`${b.sym}|${b.iv}`)) continue;
+      hooks.onNewBuy?.(b);
+    }
+  }
+  if (!only) prevBuys = new Set(buysNow.map((b) => `${b.sym}|${b.iv}`));
+  hooks.onUpdate(buysNow);
+  const d = nextDelay();
+  schedule(d == null ? null : only && lastRun ? Math.max(5_000, d - (Date.now() - lastRun)) : d);
   if (fullAgain) { fullAgain = false; queued.length = 0; run(); return; }
   if (queued.length) { const q = [...new Set(queued)]; queued.length = 0; run(q); }
 }

@@ -69,7 +69,7 @@ const IV_MS = { "1m": 60e3, "5m": 300e3, "15m": 900e3, "1h": 3600e3, "4h": 14400
 export async function getKlineHistory(symbol, interval, total = 3000) {
   const key = `${symbol}:${interval}:${total}`;
   const hit = historyCache.get(key);
-  if (hit && Date.now() - hit.t < 300_000) return hit.v.slice();
+  if (hit && Date.now() - hit.t < 45_000) return hit.v.slice();   // short: every check should see the newest closed candle
 
   // Saved from an earlier visit? Then only download the candles since the last saved one.
   const dbKey = `bn:${symbol}:${interval}`;
@@ -91,7 +91,7 @@ export async function getKlineHistory(symbol, interval, total = 3000) {
         const merged = mergeCandles(saved, fresh);
         const out = merged.slice(-total);
         historyCache.set(key, { t: Date.now(), v: out });
-        saveCandles(dbKey, merged, 3000, all);
+        if (fresh.length > 1) saveCandles(dbKey, merged, 3000, all);   // only when a new candle closed
         return out.slice();
       } catch { /* fall through to a full download */ }
     }

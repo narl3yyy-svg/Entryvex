@@ -86,7 +86,7 @@ export async function getKlineHistory(sym, interval, total = 3000) {
   if (!isStock(sym)) return bn.getKlineHistory(sym, interval, total);
   const key = `${sym}:${interval}`;
   const hit = histCache.get(key);
-  if (hit && Date.now() - hit.t < 120_000) return hit.v.slice(-total);
+  if (hit && Date.now() - hit.t < 60_000) return hit.v.slice(-total);
   // Saved from an earlier visit and still overlapping the short "recent" range? Then download only that.
   const dbKey = `yh:${sym}:${interval}`;
   const { candles: saved } = await loadCandles(dbKey);
@@ -97,7 +97,7 @@ export async function getKlineHistory(sym, interval, total = 3000) {
       if (fresh.length && fresh[0].time <= saved.at(-1).time) {
         const merged = mergeCandles(saved, fresh).slice(-6000);
         histCache.set(key, { t: Date.now(), v: merged });
-        saveCandles(dbKey, merged, 6000);
+        if (fresh.at(-1).time > saved.at(-1).time) saveCandles(dbKey, merged, 6000);   // only when a new candle appeared
         return merged.slice(-total);
       }
     } catch { /* fall through to a full download */ }

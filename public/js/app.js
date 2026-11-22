@@ -14,7 +14,7 @@ import { initJournal, onTicker as journalTicker, openTrades } from "./journal.js
 import { initSignals } from "./signals.js";
 import { initAI, setAIContext } from "./ai.js";
 import { renderDecision, refreshDecision } from "./decision.js";
-import { initOpportunities, run as runOpportunities, setupMarkets, signalFor, verdictFor, isRunning as oppsRunning, lastChecked as oppsLastChecked } from "./opportunities.js";
+import { initOpportunities, run as runOpportunities, setupMarkets, signalFor, verdictFor, isRunning as oppsRunning, lastChecked as oppsLastChecked, scanEvery, setScanEvery, SCAN_CHOICES } from "./opportunities.js";
 import { initMovers, moversVisible } from "./movers.js";
 import { renderLongTerm } from "./longterm.js";
 import { initWorld, worldVisible } from "./world.js";
@@ -392,6 +392,12 @@ function paintSignal(li, sym) {
   el.innerHTML = v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "";
   li.title = v ? v.why : "Not checked yet. Press Scan watchlist.";
 }
+/** "Auto-check every …" selector (re-checks the whole watchlist on its own). */
+function autoSelect() {
+  const v = scanEvery();
+  return `<label class="wl-auto" title="How often Entryvex re-checks every market in your watchlist on its own. Markets with no new candle are reused, so frequent checks are light.">⟳
+    <select id="wl-auto">${SCAN_CHOICES.map((m) => `<option value="${m}" ${m === v ? "selected" : ""}>${m ? `every ${m} min` : "off"}</option>`).join("")}</select></label>`;
+}
 function paintSignals() {
   document.querySelectorAll("#watchlist li[data-sym]").forEach((li) => paintSignal(li, li.dataset.sym));
   const n = { buy: 0, watch: 0, wait: 0, unknown: 0 };
@@ -400,12 +406,12 @@ function paintSignals() {
   // One line that is also the color key: green = buy now, red = don't buy yet, yellow = not enough data.
   const el = $("wl-summary");
   el.title = "Row colors: green = buy signal now · blue = watch: a setup with a winning record exists here, waiting for it to appear · red = don't buy: nothing has a winning record here lately · yellow = not enough data to judge. Checked on the candle size shown on the chart. No buy signals is normal: most of the time, waiting is the right call.";
-  el.innerHTML = oppsRunning() ? `<span>Checking every market…</span>`
+  el.innerHTML = oppsRunning() ? `<span>Checking every market…</span><span class="when"></span>${autoSelect()}`
     : at ? `<span><i class="dot" style="background:var(--up)"></i><strong class="b">${n.buy}</strong> buy</span>
         <span><i class="dot" style="background:#4c9aff"></i><strong class="wt">${n.watch}</strong> watch</span>
         <span><i class="dot" style="background:var(--down)"></i><strong class="w">${n.wait}</strong> wait</span>
         <span><i class="dot" style="background:#e8b931"></i><strong class="u">${n.unknown}</strong> no data</span>
-        <span class="when">${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</span>`
+        <span class="when">${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</span>${autoSelect()}`
     : `<span><i class="dot" style="background:var(--up)"></i>buy</span><span><i class="dot" style="background:var(--down)"></i>wait</span><span><i class="dot" style="background:#e8b931"></i>no data</span>`;
 }
 
@@ -1126,6 +1132,7 @@ async function boot() {
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
+  $("wl-summary").addEventListener("change", (e) => { if (e.target.id === "wl-auto") setScanEvery(+e.target.value); });
   $("sym-pair").addEventListener("click", (e) => {
     if (!e.target.closest("[data-open-picks]")) return;
     document.querySelector('#center-tabs button[data-tab="picks"]')?.click();
@@ -1216,7 +1223,10 @@ async function boot() {
       if (sym === state.selected) loadChart(); else pick(sym);
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    getInterval: () => (state.interval === "1w" ? "1d" : state.interval),   // weekly has too little history to test setups: use daily
+    getInterval: () => (state.interval === "1w" ? "1d" : state.interval),
+    // A watchlist market just turned green: pop-up, sound, and a desktop notification if those are on.
+    onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, title: `${b.label === "GO" ? "BUY" : "SMALL BUY"}: ${b.base} on ${b.iv} candles`,
+      body: `${b.setup} just appeared and has a winning record here. Tap to see the plan.` }),   // weekly has too little history to test setups: use daily
     onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); },
     onProgress: ({ running, done, total }) => {
       const b = $("scan-top");
