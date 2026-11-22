@@ -11,6 +11,7 @@ import * as fmt from "./format.js";
 const $ = (id) => document.getElementById(id);
 // The watchlist is checked on the candle size shown on the chart (it follows the 1m…1D buttons,
 // the 1Y/5Y/ALL views and the Day/Swing/Long-term style switch).
+const IV_SHORT = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1D", "1w": "1W" };
 const IV_NAME = { "1m": "1-minute", "5m": "5-minute", "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily", "1w": "weekly" };
 let INTERVALS = ["15m"];
 let fullAgain = false;
@@ -94,16 +95,18 @@ export function verdictFor(sym) {
     return null;
   }
   const buy = mine.find(({ r }) => isBuy(r));
-  if (buy) return { level: "buy", label: buy.r.overall.level === "go" ? "BUY" : "SMALL BUY",
+  if (buy) return { level: "buy", label: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} ${IV_SHORT[buy.iv] || buy.iv}`,
     why: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} candles: ${buy.r.best.name} (won ${Math.round(buy.r.best.stats.winRate * 100)}% of ${buy.r.best.stats.n} past trades).` };
   const usable = mine.filter(({ r }) => !(r.liquidity && !r.liquidity.ok));
   if (!usable.length) return { level: "unknown", label: "?", why: "Barely trades on this exchange, so its patterns can't be measured reliably." };
   const measured = usable.some(({ r }) => r.setups.some((x) => x.verdict.level !== "thin"));
   if (!measured) return { level: "unknown", label: "?", why: "Too few past trades for any setup to measure it accurately yet." };
-  const watching = usable.flatMap(({ iv, r }) => r.setups.filter((x) => x.verdict.level === "edge" || x.verdict.level === "weak").map((x) => `${x.name} on ${iv}`));
-  return { level: "wait", label: "WAIT", why: watching.length
-    ? `Don't buy yet: no buy signal right now. Becomes a buy when this appears: ${watching.slice(0, 2).join(", ")}.`
-    : "Don't buy: none of Entryvex's setups has a reliable track record on this market right now." };
+  const watching = usable.flatMap(({ iv, r }) => r.setups.filter((x) => x.verdict.level === "edge" || x.verdict.level === "weak").map((x) => ({ iv, x })))
+    .sort((a, b) => (b.x.verdict.level === "edge") - (a.x.verdict.level === "edge") || b.x.stats.ev - a.x.stats.ev);
+  // WATCH: a setup with a winning record exists here; it just isn't happening right now.
+  if (watching.length) return { level: "watch", label: `WATCH ${IV_SHORT[watching[0].iv] || watching[0].iv}`,
+    why: `No buy signal right now, but ${watching.length === 1 ? "a setup has" : `${watching.length} setups have`} a winning record here: ${watching.slice(0, 3).map(({ iv, x }) => `${x.name} on ${iv} (${Math.round(x.stats.winRate * 100)}% wins, ${x.stats.ev >= 0 ? "+" : ""}${(x.stats.ev * 100).toFixed(2)}%/trade)`).join("; ")}. It turns green the moment one appears.` };
+  return { level: "wait", label: "WAIT", why: "Don't buy: on 1h, 4h and daily candles, none of Entryvex's setups (or its prediction model) has made money here after costs lately." };
 }
 export function isRunning() { return running; }
 export function lastChecked() { return lastRun; }
@@ -116,7 +119,9 @@ function isBuy(r) {
 /** Check every market in the watchlist (or just `only`, e.g. a newly added symbol). */
 export async function run(only) {
   if (running) { if (only) queued.push(...only); else fullAgain = true; return; }
-  INTERVALS = [hooks.getInterval?.() || "15m"];
+  // The chart's candle size plus 1h, 4h and daily: good setups often live on a different candle size
+  // than the one on screen (lately mostly on daily), and the watchlist should still show them.
+  INTERVALS = [...new Set([hooks.getInterval?.() || "1h", "1h", "4h", "1d"])];
   running = true;
   clearTimeout(timer);
   const fee = (+store.get("feePct", 0.02) || 0) / 100;
@@ -183,7 +188,7 @@ function render() {
   if (count) { count.textContent = buys.length; count.hidden = !buys.length; }
 
   root.innerHTML = `
-    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on ${IV_NAME[INTERVALS[0]] || INTERVALS[0]} candles (the candle size on the chart) with the same measured method as the scanner,
+    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on ${INTERVALS.map((iv) => IV_NAME[iv] || iv).join(", ")} candles (the chart's candle size plus 1h, 4h and daily) with the same measured method as the scanner,
       and refreshes every 15 minutes while it's open. Click any row to open it.</p>
     <div class="opps-status">
       <span>${running ? `<span class="typing"><i></i><i></i><i></i></span> ${fmt.esc(progress)}` : lastRun

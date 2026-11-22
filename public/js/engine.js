@@ -12,6 +12,7 @@
 
 import { computeAll } from "./indicators.js";
 import { PATTERNS } from "./patterns.js";
+import { trainModel } from "./model.js";
 
 export const RULES = {
   stopAtr: 1.0,     // stop-loss distance in ATRs below entry
@@ -78,7 +79,7 @@ export const SETUPS = [
  * @param candles  oldest → newest; the LAST candle may still be forming and is never used as a signal.
  * @param costPerSide  fraction (0.0007 = 0.07%) charged on entry AND on exit (fee + half-spread).
  */
-export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = {}) {
+export function analyze(candles, { costPerSide = 0.0007, formingLast = true, useModel = true } = {}) {
   const x = computeAll(candles);
   const lastClosed = candles.length - (formingLast ? 2 : 1);
   // Market regime now: price above or below its 200-candle average. Long setups behave very
@@ -95,6 +96,26 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
     const activeNow = lastClosed >= RULES.warmup && safeTest(s, lastClosed, candles, x);
     return { ...s, trades, stats, statsAll, statsRegime, basis: useRegime ? "regime" : "all", activeNow, verdict: verdictFor(stats, s.strict) };
   });
+
+  // The Entryvex model (model.js): one prediction combining trend, momentum, RSI, volume, breakouts,
+  // candle patterns and market type, learned on the older 70% of this market's history. Its buy
+  // signal (its most confident 20% of calls) is replayed ONLY on the newest 30% it never saw, with
+  // the same stop/target/time limit/costs as every setup, and judged with the stricter bar.
+  let model = null;
+  if (useModel) {
+    try { model = trainModel(candles, x, lastClosed, costPerSide); } catch { model = null; }
+  }
+  if (model?.ok) {
+    const ms = {
+      id: "model", name: "Entryvex model", model: true, strict: true,
+      plain: `Entryvex's prediction model is confident price will be higher after ${model.H} candles (it learned from this market's older history and was tested on the newest part it never saw).`,
+      test: (i) => i >= model.testStart && (model.probs.get(i) ?? 0) >= model.threshold,
+    };
+    const trades = backtest(candles, x, ms, lastClosed, costPerSide);
+    const stats = summarize(trades);
+    const activeNow = ms.test(lastClosed);
+    setups.push({ ...ms, trades, stats, statsAll: stats, statsRegime: stats, basis: "unseen", activeNow, verdict: verdictFor(stats, true) });
+  }
 
   const a = x.atr14[lastClosed];
   const price = candles[candles.length - 1].close;
@@ -130,6 +151,7 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true } = 
   return {
     setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers,
     regime: { now: regimeNow, label: REGIME_LABEL[regimeNow] },
+    model: model?.ok ? { pNow: model.pNow, threshold: model.threshold, H: model.H, test: model.test, weights: model.weights } : null,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,

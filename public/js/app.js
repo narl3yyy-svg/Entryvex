@@ -127,7 +127,8 @@ function drawForecast() {
     cap.hidden = false;
     cap.innerHTML = `<strong>Forecast, next ~${horizonText(f)}:</strong> the price ended inside the <span class="fc-zone-swatch"></span> shaded zone
       <strong>${Math.round(f.accuracy80 * 100)}%</strong> of the time in past tests. Most likely <strong>${fmt.price(last.q[2])}</strong>
-      · <span class="${f.pUp >= 0.5 ? "up" : "down"}">${Math.round(f.pUp * 100)}% chance higher</span>`;
+      · <span class="${f.pUp >= 0.5 ? "up" : "down"}">${Math.round(f.pUp * 100)}% chance higher</span>
+      ${(() => { const m = modelInfo(); return m ? `<br>Entryvex model: <strong>${Math.round(m.p * 100)}%</strong> chance of a profit after costs <span class="muted">(${m.skill === "good" ? "proven on unseen data" : m.skill === "some" ? "a little skill on unseen data" : "no proven skill on this market yet"})</span>` : ""; })()}`;
   }
   drawForecastZone();
 }
@@ -208,7 +209,27 @@ function renderForecastBox() {
         <strong class="mono">${Math.round(f.pUp * 100)}%</strong><small class="muted">${describeOdds(f.pUp)}</small></div>
       <div title="Only counting past moments when the trend looked like it does now"><span>When the trend looked like now</span>
         <strong class="mono">${isFinite(f.pUpTrend) ? Math.round(f.pUpTrend * 100) + "% higher" : "—"}</strong><small class="muted">price ${f.trendLabel.split(" (")[0]} · ${f.nTrend.toLocaleString()} cases</small></div>
+      ${modelTile()}
     </div>`;
+}
+
+/** The Entryvex model's call for now, with how good it proved to be on history it never saw. */
+function modelInfo() {
+  const a = state.analysis;
+  if (!a || a.symbol !== state.selected || a.interval !== state.interval) return null;
+  const m = a.result?.model, s = a.result?.setups?.find((x) => x.id === "model");
+  if (!m || m.pNow == null) return null;
+  const skill = !isFinite(m.test.auc) ? "untested" : m.test.auc >= 0.58 ? "good" : m.test.auc >= 0.54 ? "some" : "none";
+  return { p: m.pNow, auc: m.test.auc, skill, verdict: s?.verdict, stats: s?.stats, H: m.H, top: m.weights.slice(0, 3).map((w) => w.name) };
+}
+function modelTile() {
+  const m = modelInfo();
+  if (!m) return "";
+  const label = { good: "proven skill on unseen data", some: "a little skill on unseen data", none: "no better than chance here yet", untested: "not tested yet" }[m.skill];
+  return `<div title="Learns from this market's own chart (trend, momentum, RSI, volume, breakouts, candle patterns, market type) and is tested on recent history it never saw. Leans most on: ${fmt.esc(m.top.join(", "))}.">
+    <span>Entryvex model: chance of a profit after costs in ~${m.H} candles</span>
+    <strong class="mono ${m.skill === "none" ? "" : m.p >= 0.55 ? "up" : m.p <= 0.45 ? "down" : ""}">${Math.round(m.p * 100)}%</strong>
+    <small class="muted">${label} (score ${isFinite(m.auc) ? m.auc.toFixed(2) : "—"}, 0.50 = guessing)${m.verdict?.level === "edge" || m.verdict?.level === "weak" ? ` · its buy calls made ${(m.stats.ev * 100).toFixed(2)}%/trade on unseen data` : ""}</small></div>`;
 }
 function toggleForecast() {
   state.showForecast = !state.showForecast;
@@ -356,24 +377,26 @@ function rowVerdict(sym) {
 function paintSignal(li, sym) {
   const v = rowVerdict(sym);
   li.classList.toggle("sig-buy", v?.level === "buy");
+  li.classList.toggle("sig-watch", v?.level === "watch");
   li.classList.toggle("sig-wait", v?.level === "wait");
   li.classList.toggle("sig-unknown", v?.level === "unknown");
   const el = li.querySelector('[data-f="sig"]');
   if (!el) return;
-  const cls = v ? { buy: "buy", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
+  const cls = v ? { buy: "buy", watch: "watch", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
   el.innerHTML = v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "";
   li.title = v ? v.why : "Not checked yet. Press Scan watchlist.";
 }
 function paintSignals() {
   document.querySelectorAll("#watchlist li[data-sym]").forEach((li) => paintSignal(li, li.dataset.sym));
-  const n = { buy: 0, wait: 0, unknown: 0 };
+  const n = { buy: 0, watch: 0, wait: 0, unknown: 0 };
   for (const sym of state.watchlist) { const v = rowVerdict(sym); if (v && n[v.level] != null) n[v.level]++; }
   const at = oppsLastChecked();
   // One line that is also the color key: green = buy now, red = don't buy yet, yellow = not enough data.
   const el = $("wl-summary");
-  el.title = "Row colors: green = buy signal now · red = don't buy yet · yellow = not enough data to judge. Checked on the candle size shown on the chart. No buy signals is normal: most of the time, waiting is the right call.";
+  el.title = "Row colors: green = buy signal now · blue = watch: a setup with a winning record exists here, waiting for it to appear · red = don't buy: nothing has a winning record here lately · yellow = not enough data to judge. Checked on the candle size shown on the chart. No buy signals is normal: most of the time, waiting is the right call.";
   el.innerHTML = oppsRunning() ? `<span>Checking every market…</span>`
     : at ? `<span><i class="dot" style="background:var(--up)"></i><strong class="b">${n.buy}</strong> buy</span>
+        <span><i class="dot" style="background:#4c9aff"></i><strong class="wt">${n.watch}</strong> watch</span>
         <span><i class="dot" style="background:var(--down)"></i><strong class="w">${n.wait}</strong> wait</span>
         <span><i class="dot" style="background:#e8b931"></i><strong class="u">${n.unknown}</strong> no data</span>
         <span class="when">${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</span>`

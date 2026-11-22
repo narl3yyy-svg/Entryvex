@@ -128,7 +128,7 @@ function render() {
   const all = lists[tab];
   if (!all) { ul.innerHTML = ""; return; }
   const rows = filter ? all.filter((r) => r.ticker.toLowerCase().includes(filter) || String(r.name).toLowerCase().includes(filter)) : all;
-  const label = { trending: "most-searched coins on CoinGecko right now", crypto: "coins by market value", stocks: "companies by market value", etfs: "most-traded ETFs", indices: "world stock indices" }[tab];
+  const label = { trending: "most-searched coins on CoinGecko right now", crypto: "coins by market value", stocks: "companies by market value", etfs: "most-traded ETFs", indices: "world stock indexes" }[tab];
   $("browse-meta").textContent = `${filter ? `${rows.length} of ` : "Top "}${all.length} ${label}${loadedAt[tab] ? ` · ${new Date(loadedAt[tab]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""}. Tap to open, ＋ to add to your watchlist.`
     + (tab === "trending" ? `${loadedAt.trendingCats?.length ? ` Hot topics: ${loadedAt.trendingCats.join(", ")}.` : ""} This shows attention, not quality: trending coins are often small, already up a lot, and reverse fast.` : "");
   ul.innerHTML = rows.map((r) => {
