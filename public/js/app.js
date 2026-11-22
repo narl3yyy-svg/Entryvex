@@ -317,6 +317,12 @@ function renderWatchlist() {
     li.addEventListener("click", (e) => {
       if (e.target.closest(".wl-grip") || wlDrag.justDropped) return;
       if (e.target.closest(".wl-remove")) { removeFromWatchlist(sym); e.stopPropagation(); return; }
+      // A BUY row opens on the candle size the buy signal is on, so the chart and "Entryvex says" match the pill.
+      const v = rowVerdict(sym);
+      if (v?.level === "buy" && v.iv && v.iv !== state.interval) {
+        state.selected = sym;   // set first so the interval change loads this market
+        document.querySelector(`#intervals button[data-i="${v.iv}"]`)?.click();
+      }
       selectSymbol(sym);
     });
     ul.appendChild(li);
@@ -1138,6 +1144,7 @@ async function boot() {
     if (b.hasAttribute("data-find-edge")) { document.querySelector('#center-tabs button[data-tab="scanner"]')?.click(); $("find-edges").click(); $("edges").scrollIntoView({ behavior: "smooth", block: "center" }); }
     if (b.hasAttribute("data-goto-opps")) { document.querySelector('#center-tabs button[data-tab="opps"]')?.click(); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
     if (b.hasAttribute("data-scan-all")) scanWholeWatchlist();
+    if (b.dataset.gotoIv) document.querySelector(`#intervals button[data-i="${b.dataset.gotoIv}"]`)?.click();
   });
   $("ema-toggle").addEventListener("click", toggleEma);
   $("patterns-toggle").addEventListener("click", togglePatterns);

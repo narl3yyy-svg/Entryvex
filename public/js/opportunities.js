@@ -95,7 +95,7 @@ export function verdictFor(sym) {
     return null;
   }
   const buy = mine.find(({ r }) => isBuy(r));
-  if (buy) return { level: "buy", label: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} ${IV_SHORT[buy.iv] || buy.iv}`,
+  if (buy) return { level: "buy", iv: buy.iv, label: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} ${IV_SHORT[buy.iv] || buy.iv}`,
     why: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} candles: ${buy.r.best.name} (won ${Math.round(buy.r.best.stats.winRate * 100)}% of ${buy.r.best.stats.n} past trades).` };
   const usable = mine.filter(({ r }) => !(r.liquidity && !r.liquidity.ok));
   if (!usable.length) return { level: "unknown", label: "?", why: "Barely trades on this exchange, so its patterns can't be measured reliably." };

@@ -34,6 +34,7 @@ async function eventRisk() {
 
 const $ = (id) => document.getElementById(id);
 const HIGHER = { "1m": "15m", "5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d", "1d": "1d" };
+const IV_WORD = { "1m": "1-minute", "5m": "5-minute", "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily", "1w": "weekly" };
 const SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 };
 const ctxCache = new Map();
 
@@ -185,9 +186,12 @@ function html(c, checks) {
       verdict = lvl === "go" ? "BUY" : "SMALL BUY OR SKIP";
       cls = lvl === "go" ? "buy" : "caution";
       const s = best.stats;
+      const what = best.model
+        ? `<strong>The Entryvex model</strong> is confident this trade works right now${lvl === "go" ? "," : "."}`
+        : `<strong>${fmt.esc(best.name)}</strong> just appeared${lvl === "go" ? "," : "."}`;
       headline = lvl === "go"
-        ? `<strong>${fmt.esc(best.name)}</strong> just appeared, and on this ${stock ? "stock" : "coin"} it has ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after costs.`
-        : `<strong>${fmt.esc(best.name)}</strong> just appeared. It has been only slightly profitable here (${Math.round(s.winRate * 100)}% of ${s.n} times), so it's not a strong signal. Use a smaller amount or skip it.`;
+        ? `${what} and on this ${stock ? "stock" : "coin"} it has ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after costs.`
+        : `${what} It has been only slightly profitable here (${Math.round(s.winRate * 100)}% of ${s.n} times), so it's not a strong signal. Use a smaller amount or skip it.`;
       if (head >= 3) headline += ` <span class="down">Careful: ${head} of ${all.length} outside checks are against it right now.</span>`;
       if (stock && c.marketOpen === false) headline += ` <span class="muted">The market is closed: you can only place this when it opens${stockInfo(c.symbol).currency === "USD" ? " (9:30am New York time)" : ""}, so re-check then.</span>`;
       meter = confidenceMeter(s.winRate, s.winLo, s.winHi, s.breakeven, s.n);
@@ -221,7 +225,11 @@ function html(c, checks) {
           <span><strong>${fmt.esc(x.label)}</strong> ${fmt.esc(x.text)}</span></div>`).join("")}</div>
        <p class="tiny muted">${tail} helping · ${head} against · ${all.length - tail - head} neutral. These checks add context from outside sources; they are <em>not</em> part of the measured win rate, because there isn't enough history to prove how much they help.</p>`;
 
-  return `<div class="d-card d-${cls}">
+  // A buy on this market at another candle size (the watchlist checks 1h, 4h and daily too).
+  const otherIv = !held.length && cls !== "buy" && cls !== "caution" ? currentBuys().find((b) => b.sym === c.symbol && b.iv !== c.interval) : null;
+  const otherBanner = otherIv ? `<div class="d-other-iv"><span>📈 <strong>${otherIv.label === "GO" ? "BUY" : "SMALL BUY"} on ${fmt.esc(IV_WORD[otherIv.iv] || otherIv.iv)} candles</strong> right now (${fmt.esc(otherIv.setup)}). This card is about the ${fmt.esc(IV_WORD[c.interval] || c.interval)} chart on screen.</span>
+      <button class="btn" data-goto-iv="${fmt.esc(otherIv.iv)}">Show the ${fmt.esc(IV_WORD[otherIv.iv] || otherIv.iv)} buy</button></div>` : "";
+  return `<div class="d-card d-${cls}">${otherBanner}
     <div class="d-top">
       <div class="d-verdict"><span class="d-label">Entryvex says</span><strong>${verdict}</strong></div>
       <div class="d-headline">${headline}</div>
