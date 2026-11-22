@@ -16,6 +16,7 @@ import { describeOdds, reliability } from "./forecast.js";
 import { upcomingHighImpact, loadCalendar } from "./calendar.js";
 import { earningsCheck } from "./earnings.js";
 import { newsAiCheck } from "./newsai.js";
+import { trendingCheck } from "./trending.js";
 
 /** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
 async function eventRisk() {
@@ -117,7 +118,7 @@ async function outsideChecks(c) {
   const hit = ctxCache.get(key);
   if (hit && Date.now() - hit.t < 120_000) return hit.v;
   const stock = isStock(c.symbol);
-  const results = await Promise.allSettled([bigTrend(c.symbol, c.interval), marketBackdrop(stock), fearGauge(stock), newsMood(c.symbol, c.base, c.name), eventRisk(), stock ? earningsCheck(c.symbol) : null, newsAiCheck(c.symbol, c.name)]);
+  const results = await Promise.allSettled([bigTrend(c.symbol, c.interval), marketBackdrop(stock), fearGauge(stock), newsMood(c.symbol, c.base, c.name), eventRisk(), stock ? earningsCheck(c.symbol) : null, newsAiCheck(c.symbol, c.name), stock ? null : trendingCheck(c.base)]);
   const v = results.map((r) => (r.status === "fulfilled" ? r.value : null)).filter(Boolean);
   ctxCache.set(key, { t: Date.now(), v });
   return v;

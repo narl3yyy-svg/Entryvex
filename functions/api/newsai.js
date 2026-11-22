@@ -28,6 +28,10 @@ const priceSym = (s) => (isStock(s) ? s : baseOf(s) + "USDT");
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
+  if (url.searchParams.get("trending")) {   // hourly record of CoinGecko's trending list (for measuring it)
+    const log = env?.PUSH ? (await env.PUSH.get("trend:log", "json")) || [] : [];
+    return json({ log }, 200, 300);
+  }
   const sym = (url.searchParams.get("sym") || "").toUpperCase();
   if (!SYM.test(sym) || /[\^=]/.test(sym)) return json({ error: "bad symbol" }, 400);
   if (url.searchParams.get("track")) {
@@ -128,6 +132,28 @@ export async function cronNews(env, now = Date.now()) {
   const slot = (tick / 2) % TRACKED.length;
   const sym = TRACKED[slot];
   await readNews(env, "https://entryvex.trade", sym, NAMES[sym] || baseOf(sym), null).catch(() => {});
+}
+
+/**
+ * Cron: once an hour, record CoinGecko's trending coins with their prices, so Entryvex can later
+ * measure whether "everyone is looking at it" predicts what the price does next.
+ * One KV write an hour; keeps ~6 weeks.
+ */
+export async function cronTrending(env, now = Date.now()) {
+  if (!env?.PUSH) return;
+  const tick = Math.floor(now / (5 * 60e3));
+  if (tick % 12 !== 1) return;   // once an hour, on a tick the news reader doesn't use
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/search/trending", { headers: { accept: "application/json", "user-agent": "Entryvex/1.0 (+https://entryvex.trade)" } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const coins = (j.coins || []).map((c, i) => ({ s: String(c.item?.symbol || "").toUpperCase(), id: c.item?.id, pos: i + 1, p: c.item?.data?.price ?? null }))
+      .filter((c) => c.s && c.p > 0);
+    if (!coins.length) return;
+    const log = (await env.PUSH.get("trend:log", "json")) || [];
+    log.push({ t: Date.now(), c: coins });
+    await env.PUSH.put("trend:log", JSON.stringify(log.slice(-1000)));
+  } catch {}
 }
 
 function json(obj, status = 200, maxAge = 0) {

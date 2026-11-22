@@ -6,10 +6,11 @@
 // Tap a row to open it on the chart; ＋ adds it to your watchlist. Lists refresh every 30 minutes.
 import { POPULAR } from "./market.js";
 import * as fmt from "./format.js";
+import { getTrending } from "./trending.js";
 
 const $ = (id) => document.getElementById(id);
 const TTL = 30 * 60e3;
-const lists = { crypto: null, stocks: null, etfs: null, indices: null };
+const lists = { trending: null, crypto: null, stocks: null, etfs: null, indices: null };
 const loadedAt = {};
 let tab = "crypto", filter = "";
 let hooks = { cryptoPair: () => null, onOpen: () => {}, onAdd: () => {}, isWatched: () => false };
@@ -64,12 +65,22 @@ async function load(which) {
     lists[which] = await LOADERS[which]();
     loadedAt[which] = Date.now();
   } catch {
-    if (!lists[which]) { $("browse-meta").textContent = "Couldn't load this list right now. Try again in a minute."; return; }
+    if (!lists[which]) { if (which === tab) $("browse-meta").textContent = "Couldn't load this list right now (the free data source may be busy). Try again in a minute."; return; }
   }
   if (which === tab) render();
 }
 
 const LOADERS = {
+  async trending() {
+    const t = await getTrending();
+    loadedAt.trendingCats = t.categories;
+    return t.coins.map((c) => {
+      const pair = hooks.cryptoPair(c.symbol);
+      return { rank: c.pos, sym: pair || `S:${c.symbol}-USD`, ticker: c.symbol, name: c.name, price: c.price, chg: c.chg24, cap: null,
+        note: `${c.cap ? "size #" + c.cap : "tiny"}${pair ? "" : " · not on Binance.US"}`,
+        meta: pair ? null : { name: c.name, exchange: "Crypto (USD)", kind: "Crypto" } };
+    });
+  },
   async crypto() {
     const r = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=220&page=1&sparkline=false&price_change_percentage=24h");
     if (!r.ok) throw new Error("coingecko " + r.status);
@@ -117,8 +128,9 @@ function render() {
   const all = lists[tab];
   if (!all) { ul.innerHTML = ""; return; }
   const rows = filter ? all.filter((r) => r.ticker.toLowerCase().includes(filter) || String(r.name).toLowerCase().includes(filter)) : all;
-  const label = { crypto: "coins by market value", stocks: "companies by market value", etfs: "most-traded ETFs", indices: "world stock indices" }[tab];
-  $("browse-meta").textContent = `${filter ? `${rows.length} of ` : "Top "}${all.length} ${label}${loadedAt[tab] ? ` · ${new Date(loadedAt[tab]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""}. Tap to open, ＋ to add to your watchlist.`;
+  const label = { trending: "most-searched coins on CoinGecko right now", crypto: "coins by market value", stocks: "companies by market value", etfs: "most-traded ETFs", indices: "world stock indices" }[tab];
+  $("browse-meta").textContent = `${filter ? `${rows.length} of ` : "Top "}${all.length} ${label}${loadedAt[tab] ? ` · ${new Date(loadedAt[tab]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""}. Tap to open, ＋ to add to your watchlist.`
+    + (tab === "trending" ? `${loadedAt.trendingCats?.length ? ` Hot topics: ${loadedAt.trendingCats.join(", ")}.` : ""} This shows attention, not quality: trending coins are often small, already up a lot, and reverse fast.` : "");
   ul.innerHTML = rows.map((r) => {
     const watched = hooks.isWatched(r.sym);
     const pre = r.cur && r.cur !== "USD" ? r.cur + " " : r.price != null ? "$" : "";
