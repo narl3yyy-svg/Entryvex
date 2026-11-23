@@ -68,17 +68,17 @@ function flashTitle(text) {
   document.addEventListener("visibilitychange", stop);
 }
 
-function notify({ title, body, symbol, kind }) {
-  history.unshift({ t: Date.now(), title, body, symbol, kind, unread: true });
+function notify({ title, body, symbol, kind, interval = null }) {
+  history.unshift({ t: Date.now(), title, body, symbol, kind, interval, unread: true });
   history = history.slice(0, 30);
   store.set("alertHistory", history);
-  toast(title, body, symbol, kind);
+  toast(title, body, symbol, kind, interval);
   beep();
   flashTitle(title);
   if (cfg.desktop && "Notification" in window && Notification.permission === "granted") {
     try {
       const n = new Notification(title, { body, icon: "/favicon.svg", tag: `${kind}:${symbol}` });
-      n.onclick = () => { window.focus(); if (symbol) hooks.onPick(symbol); n.close(); };
+      n.onclick = () => { window.focus(); if (symbol) openAlert(symbol, interval); n.close(); };
     } catch {}
   }
   renderDrawer();
@@ -87,12 +87,19 @@ function notify({ title, body, symbol, kind }) {
 /** Let other parts of the app (e.g. My trades) raise an alert. */
 export function pushAlert(a) { notify(a); }
 
-function toast(title, body, symbol, kind) {
+/** Open the coin or stock an alert is about (on the alert's candle size when it has one). */
+function openAlert(symbol, interval) {
+  toggleDrawer(false);
+  hooks.onPick(symbol, interval);
+}
+
+function toast(title, body, symbol, kind, interval = null) {
   const box = $("toasts");
   const el = document.createElement("button");
   el.className = `toast toast-${kind || "info"}`;
   el.innerHTML = `<strong>${fmt.esc(title)}</strong><span>${fmt.esc(body)}</span>`;
-  el.addEventListener("click", () => { if (symbol) hooks.onPick(symbol); el.remove(); });
+  if (symbol) el.title = "Open it";
+  el.addEventListener("click", () => { if (symbol) openAlert(symbol, interval); el.remove(); });
   box.prepend(el);
   setTimeout(() => el.classList.add("out"), 9000);
   setTimeout(() => el.remove(), 9600);
@@ -195,7 +202,7 @@ export async function runScan() {
           const s = r.best.stats;
           const base = baseOf(sym);
           notify({
-            kind: r.overall.level === "go" ? "go" : "caution", symbol: sym,
+            kind: r.overall.level === "go" ? "go" : "caution", symbol: sym, interval,
             title: `${r.overall.label}: ${base} · ${r.best.name} (${interval})`,
             body: `Ended in profit ${Math.round(s.winRate * s.n)} of ${s.n} past times, avg ${fmt.pct(s.ev * 100)} per trade after costs. Open it for the trade card.`,
           });
@@ -225,6 +232,10 @@ export function initAlerts(h) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") toggleDrawer(false); });
 
   const d = $("alerts-drawer");
+  d.addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-hist-sym]");
+    if (li) openAlert(li.dataset.histSym, li.dataset.histIv || null);
+  });
   d.addEventListener("change", (e) => {
     const t = e.target;
     // Price-alert form fields must NOT redraw the panel: redrawing while you click "Add"
@@ -396,6 +407,6 @@ function renderDrawer() {
 
     <section>
       <h3>Recent alerts ${history.length ? `<button class="link-btn" id="al-clear-hist">Clear</button>` : ""}</h3>
-      <ul class="al-list">${history.length ? history.slice(0, 15).map((h) => `<li class="${h.unread ? "unread" : ""}"><span>${h.unread ? '<span class="new-dot">NEW</span> ' : ""}<strong>${fmt.esc(h.title)}</strong><br><span class="muted small">${fmt.esc(h.body)} · ${fmt.ago(h.t)}</span></span></li>`).join("") : `<li class="muted small">Nothing yet.</li>`}</ul>
+      <ul class="al-list">${history.length ? history.slice(0, 15).map((h) => `<li class="${h.unread ? "unread" : ""}${h.symbol ? " al-open" : ""}" ${h.symbol ? `data-hist-sym="${fmt.esc(h.symbol)}" data-hist-iv="${fmt.esc(h.interval || "")}" title="Open it"` : ""}><span>${h.unread ? '<span class="new-dot">NEW</span> ' : ""}<strong>${fmt.esc(h.title)}</strong><br><span class="muted small">${fmt.esc(h.body)} · ${fmt.ago(h.t)}</span></span>${h.symbol ? `<span class="al-go">Open ›</span>` : ""}</li>`).join("") : `<li class="muted small">Nothing yet.</li>`}</ul>
     </section>`;
 }

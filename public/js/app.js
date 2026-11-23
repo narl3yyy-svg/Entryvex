@@ -1163,7 +1163,16 @@ async function boot() {
     getInfo: (sym) => state.bySymbol.get(sym),
     getSelected: () => state.selected,
     getPrice: (sym) => state.stats.get(sym)?.last,
-    onPick: (sym) => { if (!state.watchlist.includes(sym)) addToWatchlist(sym); else selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    // Clicking an alert opens that coin or stock (on the alert's candle size), without adding it to the watchlist.
+    onPick: (sym, iv) => {
+      if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym));
+      if (iv && iv !== state.interval && document.querySelector(`#intervals button[data-i="${iv}"]`)) {
+        state.selected = sym;
+        document.querySelector(`#intervals button[data-i="${iv}"]`).click();
+      }
+      selectSymbol(sym);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
     onBadges: (b) => { state.badges = b; renderWatchlist(); },
   });
   initShortcuts();
@@ -1225,7 +1234,7 @@ async function boot() {
     },
     getInterval: () => (state.interval === "1w" ? "1d" : state.interval),
     // A watchlist market just turned green: pop-up, sound, and a desktop notification if those are on.
-    onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, title: `${b.label === "GO" ? "BUY" : "SMALL BUY"}: ${b.base} on ${b.iv} candles`,
+    onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, interval: b.iv, title: `${b.label === "GO" ? "BUY" : "SMALL BUY"}: ${b.base} on ${b.iv} candles`,
       body: `${b.setup} just appeared and has a winning record here. Tap to see the plan.` }),   // weekly has too little history to test setups: use daily
     onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); },
     onProgress: ({ running, done, total }) => {

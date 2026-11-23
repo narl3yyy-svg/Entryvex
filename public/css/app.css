@@ -912,3 +912,6 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
   background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.4); font-size: 13px; }
 .wl-auto { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); }
 .wl-auto select { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; font: 11px var(--font); padding: 1px 2px; }
+.al-list li.al-open { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-radius: 8px; }
+.al-list li.al-open:hover { background: var(--panel-2); }
+.al-go { color: var(--accent); font-size: 12px; white-space: nowrap; }
