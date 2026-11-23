@@ -431,7 +431,8 @@ function botLine(sym) {
   if (!v) return "";
   if (v.holding) {
     const p = v.holding, pnl = ((p.last || p.entry) / p.entry - 1) * 100;
-    return `<p class="small simple-bot">🤖 <strong>The Entryvex bot owns ${fmt.esc(p.market)}</strong> (bought at ${fmt.price(p.entry)}, now ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%; selling at ${fmt.price(p.target)} or ${fmt.price(p.stop)}). <button class="link-btn" data-open-bot>See its trades</button></p>`;
+    return `<div class="small simple-bot">🤖 <strong>The Entryvex bot owns ${fmt.esc(p.market)}</strong> (bought at ${fmt.price(p.entry)}, now ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%; it sells at ${fmt.price(p.target)} to take profit or ${fmt.price(p.stop)} to cut the loss). <button class="link-btn" data-open-bot>Why it bought</button>
+      <div class="simple-actions"><button class="btn" data-copy-bot>Copy this trade</button><span class="muted tiny">Adds it to My trades with the bot's stop and target, sized for your balance. You place the real order yourself. The bot isn't proven yet, so keep it small.</span></div></div>`;
   }
   if (v.trades) return `<p class="small simple-bot">🤖 The Entryvex bot has traded this ${v.trades} time${v.trades === 1 ? "" : "s"} (${v.wins} won) and doesn't own it now. <button class="link-btn" data-open-bot>See why</button></p>`;
   return "";

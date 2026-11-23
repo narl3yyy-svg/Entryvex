@@ -969,3 +969,4 @@ body.mode-simple .style-bar, body.mode-simple #patterns-toggle, body.mode-simple
 body.mode-simple #center-tabs button:not([data-tab="bot"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
 @media (max-width: 640px) { .simple { margin: 4px 0 8px; } .simple-word { font-size: 28px; } .mode-seg button { padding: 4px 7px; } }
 .simple-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.wl-sig.wl-bot { background: rgba(122,162,255,.16); padding: 1px 5px; }

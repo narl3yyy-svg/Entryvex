@@ -26,7 +26,10 @@ import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx, fxRate } from "./fx.js";
 import { initBrowse } from "./browse.js";
-import { initBot, botVisible, followBot } from "./bot.js";
+import { initBot, botVisible, followBot, botViewCached } from "./bot.js";
+import { sizePosition } from "./sizing.js";
+import { settings as moneySettings } from "./money.js";
+import { addTrade } from "./journal.js";
 import { renderEarnings } from "./earnings.js";
 import { renderNewsAi } from "./newsai.js";
 
@@ -429,7 +432,9 @@ function paintSignal(li, sym) {
   const el = li.querySelector('[data-f="sig"]');
   if (!el) return;
   const cls = v ? { buy: "buy", watch: "sig-watching", wait: "wait", unknown: "unknown", checking: "checking" }[v.level] : "";
-  el.innerHTML = v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "";
+  const bot = botViewCached(sym)?.holding;
+  el.innerHTML = (v ? `<span class="wl-sig ${cls}">${fmt.esc(v.level === "unknown" ? "NO DATA" : v.label)}</span>` : "")
+    + (bot ? `<span class="wl-sig wl-bot" title="The Entryvex paper-trading bot owns this (bought at ${fmt.esc(fmt.price(bot.entry))})">🤖</span>` : "");
   li.title = v ? v.why : "Not checked yet. Press Scan watchlist.";
 }
 /** "Auto-check every …" selector (re-checks the whole watchlist on its own). */
@@ -1073,6 +1078,34 @@ function onIntervalChanged() {
   clearTimeout(ivTimer);
   ivTimer = setTimeout(() => runOpportunities(), 600);
 }
+/* Copy the bot's open trade on this market into My trades, sized for the user's balance. */
+function copyBotTrade() {
+  const sym = state.selected, p = botViewCached(sym)?.holding;
+  const price = state.stats.get(sym)?.last ?? lastCandle?.close;
+  if (!p || !(price > 0)) return;
+  const name = nameFor(sym);
+  if (price <= p.stop || price >= p.target) {
+    pushAlert({ kind: "info", symbol: sym, title: "Too late to copy", body: `${name} is already ${price <= p.stop ? "at or below the bot's stop-loss" : "at or above the bot's target"}. Entryvex won't copy a trade whose plan has already played out.` });
+    return;
+  }
+  if (!(moneySettings.balance > 0)) {
+    pushAlert({ kind: "info", symbol: sym, title: "Enter your trading balance first", body: "Type it in Trading balance (under the chart) so Entryvex can size the copy for you." });
+    $("m-balance")?.scrollIntoView({ behavior: "smooth", block: "center" }); $("m-balance")?.focus();
+    return;
+  }
+  const info = state.bySymbol.get(sym) || {};
+  const cost = isStock(sym) ? 0.0002 : 0.0005;
+  const sz = sizePosition({ balance: moneySettings.balance, riskPct: moneySettings.riskPct, entry: price, stop: p.stop, target: p.target, costPerSide: cost,
+    rules: { stepSize: info.stepSize, minQty: info.minQty, tickSize: info.tickSize, minNotional: info.minNotional } });
+  if (!sz?.ok) {
+    pushAlert({ kind: "info", symbol: sym, title: "Can't size this copy", body: sz?.reason === "too-small" ? "Your balance and max-loss setting make this trade smaller than the exchange minimum." : "The bot's stop and target don't leave room for a trade at today's price." });
+    return;
+  }
+  addTrade({ symbol: sym, entry: price, qty: sz.qty, stop: p.stop, target: p.target, setup: `Copied the bot: ${p.name}`, interval: p.iv, source: "bot-copy", sellBy: p.sellBy });
+  pushAlert({ kind: "info", symbol: sym, title: `Copied: buy ${+sz.qty.toFixed(8)} ${isStock(sym) ? "shares of " + name : name}`,
+    body: `About $${sz.spend.toFixed(2)} at ${fmt.price(price)}. Now place it at your exchange or broker, then set a take-profit at ${fmt.price(p.target)} and a stop-loss at ${fmt.price(p.stop)}. It's in My trades; Entryvex will tell you when to sell.` });
+}
+
 /* ---------- Simple / Pro mode ---------- */
 // Simple (default for everyone): click a coin or stock and get one big BUY / SELL / WAIT card with how
 // much and when to sell. Pro: every tool, table and number.
@@ -1094,6 +1127,7 @@ function initMode() {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.hasAttribute("data-mode-pro")) applyMode("pro");
+    if (b.hasAttribute("data-copy-bot")) copyBotTrade();
     if (b.hasAttribute("data-take-pro")) {   // the trade card (with "I took this trade") lives in Pro's Scanner tab
       applyMode("pro");
       document.querySelector('#center-tabs button[data-tab="scanner"]')?.click();

@@ -48,6 +48,7 @@ export function addTrade(t) {
   // Entryvex's plan has a time limit: if neither level is hit within 24 candles, sell at market.
   const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 }[trade.interval];
   if (sec && trade.source !== "manual") trade.sellBy = trade.openedAt + 24 * sec * 1000;
+  if (t.sellBy > Date.now()) trade.sellBy = +t.sellBy;   // e.g. copying the bot: same sell-by time as the bot
   hooks.ensureWatched(trade.symbol);
   trades.push(trade);
   if (t.exit) closeTrade(trade.id, +t.exit, "manual");
