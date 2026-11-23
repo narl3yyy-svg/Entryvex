@@ -68,8 +68,8 @@ function tile(iv) {
   return `<div class="score-tile">
     <div class="score-tile-h"><strong>${CHART[iv]}</strong> <span class="muted small">forecasting the ${HORIZON[iv]}</span></div>
     <div class="bot-tiles">
-      <div><span>Price landed in the 80% range</span><strong class="${rv.cls}">${rp ?? "—"}%</strong><small>aim: 80% · ${rv.word}</small></div>
-      <div><span>Up/down lean was right</span><strong class="${dv.cls}">${dp ?? "—"}%</strong><small>coin flip: 50% · ${dv.word}</small></div>
+      <div><span>Price landed in the 80% range</span><strong class="${rv.cls}">${rp == null ? "—" : rp + "%"}</strong><small>aim: 80% · ${rv.word}</small></div>
+      <div><span>Up/down lean was right</span><strong class="${dv.cls}">${dp == null ? "—" : dp + "%"}</strong><small>coin flip: 50% · ${dv.word}</small></div>
     </div>
     <p class="muted small">${live ? `Live: ${o.live.n} forecasts saved in advance and checked.` : `${o.back.n} tests on past data (each forecast used only the candles before that moment).`} Live checks so far: ${o.live.n}.</p>
   </div>`;
@@ -82,7 +82,7 @@ function cell(m, iv) {
   const rv = rangeVerdict(rp), dv = dirVerdict(dp, r.called);
   return `<td title="${live ? "Live record" : "Tested on past data"}: ${r.n} forecasts${x.live.n && !live ? `, ${x.live.n} live so far` : ""}">
     <span class="${rv.cls}">${rp}%</span> <span class="muted">in range</span><br>
-    <span class="${dv.cls}">${dp ?? "—"}%</span> <span class="muted">lean right${r.called < 10 ? " (few calls)" : ""}</span></td>`;
+    <span class="${dv.cls}">${dp == null ? "—" : dp + "%"}</span> <span class="muted">lean right${r.called < 10 ? " (few calls)" : ""}</span></td>`;
 }
 
 function recentRow(g) {
