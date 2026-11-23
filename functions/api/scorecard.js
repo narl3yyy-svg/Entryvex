@@ -19,11 +19,12 @@ export const SCORE = {
   keep: 400,                               // graded forecasts kept in full (totals are kept forever)
   logEvery: { "1h": 4 * 3600e3, "1d": 20 * 3600e3 },
   backPoints: 60, backRefresh: 7 * 86400e3,
-  runEvery: 55 * 60e3,                     // live log + grading at most once an hour
+  fetchesPerTick: 4,                       // price fetches per 5-minute tick for saving/checking
+  retryAfter: 30 * 60e3,                   // a market/chart is looked at again after 30 minutes at most
 };
 const bySym = Object.fromEntries(MARKETS.map((m) => [m.sym, m]));
 const blank = () => ({ n: 0, in80: 0, in50: 0, called: 0, right: 0 });
-const fresh = (now) => ({ v: 1, started: now, pending: [], graded: [], live: {}, back: {}, lastLog: {}, lastRun: 0 });
+const fresh = (now) => ({ v: 1, started: now, pending: [], graded: [], live: {}, back: {}, lastLog: {}, tried: {} });
 
 export function callOf(pUp) {
   return pUp >= 0.5 + SCORE.lean ? "up" : pUp <= 0.5 - SCORE.lean ? "down" : null;
@@ -64,6 +65,13 @@ export function backtest(all, iv) {
   return st;
 }
 
+/** When a forecast's 20 candles should have closed (stocks only trade ~6.5 hours a day, 5 days a week). */
+function dueAt(e) {
+  const stock = e.sym.startsWith("S:");
+  if (e.iv === "1h") return e.at + (stock ? 4 * 86400e3 : SCORE.H * 3600e3);
+  return e.at + (stock ? 29 * 86400e3 : SCORE.H * 86400e3);
+}
+
 function usMarketOpen(now) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23" })
     .formatToParts(new Date(now)).map((x) => [x.type, x.value]));
@@ -93,20 +101,28 @@ export async function cronScore(env, now = Date.now()) {
     if (done) break;
   }
 
-  // 2) Hourly: save new forecasts and grade the ones whose 20 candles have closed.
-  if (now - s.lastRun >= SCORE.runEvery) {
-    s.lastRun = now; changed = true;
+  // 2) Save new forecasts and grade the ones whose 20 candles have closed. A few price fetches per
+  //    5-minute tick (Cloudflare limits outside requests per run, shared with the bot and alerts).
+  {
     const open = usMarketOpen(now);
+    s.tried ??= {};
+    let fetches = 0;
     for (const m of MARKETS) {
       for (const [iv, sec] of Object.entries(SCORE.ivs)) {
+        if (fetches >= SCORE.fetchesPerTick) break;
         const k = `${m.sym}|${iv}`;
-        const due = s.pending.filter((e) => e.sym === m.sym && e.iv === iv && now >= e.at + SCORE.H * sec * 1000);
+        if (now - (s.tried[k] || 0) < SCORE.retryAfter) continue;   // checked or failed recently
+        const due = s.pending.filter((e) => e.sym === m.sym && e.iv === iv && now >= dueAt(e));
         const last = s.lastLog[k];
         const wantLog = (!last || now - last.at >= SCORE.logEvery[iv]) && (!m.stock || open);
         if (!due.length && !wantLog) continue;
+        fetches++;
+        s.tried[k] = now;
         let c;
         try { c = await candles(m.sym, iv, 1000); } catch { continue; }
         if (!c?.length) continue;
+        changed = true;
+        let graded = 0;
         for (const e of due) {
           // Nearest candle, not an exact match: Yahoo stamps today's still-forming candle with the latest trade time.
           const i = c.findIndex((x) => Math.abs(x.time - e.t0) < sec / 2);
@@ -116,8 +132,10 @@ export async function cronScore(env, now = Date.now()) {
             s.graded.push(g);
             tally((s.live[k] ??= blank()), g);
             s.pending.splice(s.pending.indexOf(e), 1);
+            graded++;
           } else if (i < 0 && now - e.at > 120 * 86400e3) s.pending.splice(s.pending.indexOf(e), 1);   // can't be checked any more
         }
+        if (due.length && !graded && !wantLog) s.tried[k] = now + 2 * 3600e3;   // not closed yet: look again in ~2.5 hours
         if (wantLog) {
           const f = forecast(c, sec, SCORE.H);
           if (f && f.t0 !== last?.t0) { s.pending.push(record(f, m.sym, iv, now)); s.lastLog[k] = { at: now, t0: f.t0 }; }
@@ -154,7 +172,7 @@ export async function onRequestGet({ env }) {
     })),
     recent: s.graded.slice(-60).reverse().map((g) => ({ ...g, name: bySym[g.sym]?.name || g.sym })),
     waiting: s.pending.length,
-    nextCheck: s.pending.length ? Math.min(...s.pending.map((e) => e.at + SCORE.H * SCORE.ivs[e.iv] * 1000)) : null,
+    nextCheck: s.pending.length ? Math.min(...s.pending.map(dueAt)) : null,
   };
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "public, max-age=60" } });
 }

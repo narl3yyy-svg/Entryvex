@@ -63,7 +63,7 @@ test("saves forecasts, then checks them once 20 candles have closed", async () =
     assert.equal(writes, before, "no writes when nothing is due");
 
     nowSec += 22 * 3600;
-    await cronScore(env, nowSec * 1000);
+    for (let i = 0; i < 4; i++) await cronScore(env, nowSec * 1000);   // a few fetches per tick, so a few ticks
     s = JSON.parse(kv.get("score:v1"));
     const g = s.graded.filter((x) => x.iv === "1h");
     assert.equal(g.length, 5, "all five 1h forecasts checked");
