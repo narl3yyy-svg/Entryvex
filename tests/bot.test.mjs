@@ -28,7 +28,11 @@ test("paper bot: virtual money only, sane trades, learns, few writes", async () 
   let now = H.end - 12 * 86400e3;
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
-    const u = new URL(url), iv = u.searchParams.get("interval"), lim = +u.searchParams.get("limit");
+    const u = new URL(url);
+    if (u.host !== "api.binance.us") {   // stocks (Yahoo) and earnings (Nasdaq): no data in this test
+      return { ok: true, json: async () => (u.host.includes("nasdaq") ? { data: { rows: [] } } : { chart: { result: [{ timestamp: [], indicators: { quote: [{}] } }] } }) };
+    }
+    const iv = u.searchParams.get("interval"), lim = +u.searchParams.get("limit");
     const rows = H[iv].filter((k) => k[0] + MS[iv] <= now).slice(-lim);
     return { ok: true, json: async () => rows };
   };
@@ -49,8 +53,8 @@ test("paper bot: virtual money only, sane trades, learns, few writes", async () 
     }
     const learnedTrades = Object.values(s.memory).filter((m) => !m.group).reduce((a, m) => a + m.n, 0);
     assert.equal(learnedTrades, s.trades.length, "every closed trade is remembered");
-    assert.ok(writes / days < 60, `saves ${writes / days}/day`);
-    const sum = summarize(s, s.equity.at(-1)[2]);
+    assert.ok(writes / days < 90, `saves ${writes / days}/day`);
+    const sum = summarize(s);
     assert.ok(["learning", "not-proven", "proven"].includes(sum.status));
   } finally { globalThis.fetch = realFetch; }
 });

@@ -1073,6 +1073,39 @@ function onIntervalChanged() {
   clearTimeout(ivTimer);
   ivTimer = setTimeout(() => runOpportunities(), 600);
 }
+/* ---------- Simple / Pro mode ---------- */
+// Simple (default for everyone): click a coin or stock and get one big BUY / SELL / WAIT card with how
+// much and when to sell. Pro: every tool, table and number.
+const SIMPLE_TABS = new Set(["bot", "trades", "ai"]);
+function applyMode(mode) {
+  if (mode !== "pro") mode = "simple";
+  store.set("mode", mode);
+  document.body.classList.toggle("mode-simple", mode === "simple");
+  document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  if (mode === "simple") {
+    const cur = document.querySelector("#center-tabs button.on")?.dataset.tab;
+    if (cur && !SIMPLE_TABS.has(cur)) document.querySelector('#center-tabs button[data-tab="bot"]')?.click();
+  }
+}
+function initMode() {
+  applyMode(store.get("mode", "simple"));
+  $("mode-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-mode]"); if (b) applyMode(b.dataset.mode); });
+  $("simple-card").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.hasAttribute("data-mode-pro")) applyMode("pro");
+    if (b.hasAttribute("data-take-pro")) {   // the trade card (with "I took this trade") lives in Pro's Scanner tab
+      applyMode("pro");
+      document.querySelector('#center-tabs button[data-tab="scanner"]')?.click();
+      setTimeout(() => (document.querySelector(".take-row, #trade-card, #tab-scanner .card") || $("center-tabs")).scrollIntoView({ behavior: "smooth", block: "center" }), 200);
+    }
+    if (b.hasAttribute("data-open-bot")) { document.querySelector('#center-tabs button[data-tab="bot"]')?.click(); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
+    if (b.hasAttribute("data-goto-opps")) { applyMode("pro"); document.querySelector('#center-tabs button[data-tab="opps"]')?.click(); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
+    if (b.dataset.gotoIv) document.querySelector(`#intervals button[data-i="${b.dataset.gotoIv}"]`)?.click();
+    if (b.hasAttribute("data-open-alerts")) $("alerts-btn").click();
+  });
+}
+
 /** Top "Scan watchlist" button: refresh every price and re-check every market now, staying where you are. */
 function scanFromTop() {
   if (oppsRunning()) return;
@@ -1173,6 +1206,7 @@ async function boot() {
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
+  initMode();
   $("wl-sort").value = wlSort;
   $("wl-sort").addEventListener("change", (e) => { wlSort = SORTS.has(e.target.value) ? e.target.value : "mine"; store.set("wlSort", wlSort); renderWatchlist(); });
   setInterval(resortWatchlist, 5000);   // keep the sort right as prices and signals change
@@ -1254,7 +1288,7 @@ async function boot() {
   initBot({
     notify: pushAlert,
     onFollowChange: () => scheduleSync(500),   // tell the alert server (phone / closed-app alerts)
-    openBtc: () => { selectSymbol("BTCUSDT"); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
   });
   initPicks({ onPick: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

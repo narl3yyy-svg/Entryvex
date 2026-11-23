@@ -23,6 +23,9 @@
       <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="var(--accent)"/><path d="M10 21 L15 12 L18 17 L22 10" stroke="#08130c" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="brand-name">Entryvex<sup class="tm">™</sup></span>
       <button id="scan-top" class="btn scan-all-btn brand-scan" title="Re-check every coin and stock in your watchlist now (on the candle size shown on the chart) and refresh prices">⟳ <span>Scan watchlist</span></button>
+      <div class="seg mode-seg" id="mode-seg" title="Simple: one clear answer for each coin or stock. Pro: every tool and number.">
+        <button data-mode="simple">Simple</button><button data-mode="pro">Pro</button>
+      </div>
     </div>
     <div class="topbar-right">
       <span id="status" class="status" data-state="connecting"><i></i><span>Connecting…</span></span>
@@ -157,6 +160,7 @@
           <div><dt>24h volume</dt><dd id="sym-vol" class="mono">—</dd></div>
         </dl>
       </div>
+      <div id="simple-card" class="simple-card"></div>
       <div class="toolbar">
         <div class="seg" id="intervals" role="tablist" aria-label="Candle size">
           <button data-i="1m">1m</button><button data-i="5m">5m</button><button data-i="15m">15m</button><button data-i="1h">1h</button><button data-i="4h">4h</button><button data-i="1d">1D</button><span class="seg-gap"></span><button data-i="1y" title="The last year on daily candles">1Y</button><button data-i="5y" title="The last 5 years on weekly candles">5Y</button><button data-i="all" title="All available history on weekly candles">ALL</button>

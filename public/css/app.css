@@ -944,3 +944,28 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .bot-trades { display: flex; flex-direction: column; gap: 6px; }
 .bot-trade { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .bot-trade > div:first-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+
+/* ---------- Simple mode ---------- */
+.mode-seg { margin-left: 8px; }
+.mode-seg button { padding: 4px 10px; font-size: 12.5px; }
+.chart-panel > #simple-card { order: 2; }
+.simple-card:empty, body:not(.mode-simple) .simple-card { display: none; }
+.simple { margin: 4px 18px 8px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); display: flex; flex-direction: column; gap: 8px; }
+.simple.d-buy { border-color: rgba(34,197,94,.55); background: rgba(34,197,94,.08); }
+.simple.d-caution { border-color: rgba(232,185,49,.55); background: rgba(232,185,49,.07); }
+.simple.d-sell, .simple.d-no { border-color: rgba(240,80,110,.55); background: rgba(240,80,110,.07); }
+.simple.d-hold { border-color: rgba(122,162,255,.5); background: rgba(122,162,255,.07); }
+.simple-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.simple-label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.simple-word { font-size: 34px; font-weight: 800; letter-spacing: .02em; line-height: 1; }
+.d-buy .simple-word { color: var(--up); } .d-caution .simple-word { color: #f1cd5c; }
+.d-sell .simple-word, .d-no .simple-word { color: var(--down); } .d-hold .simple-word { color: #8dbbff; } .d-wait .simple-word { color: var(--text); }
+.simple-why { margin: 0; font-size: 15px; line-height: 1.5; }
+.simple .d-steps { margin: 0; }
+.simple-bot { margin: 0; padding-top: 6px; border-top: 1px solid var(--line); }
+/* What Simple mode hides (Pro shows everything) */
+body.mode-simple #decision, body.mode-simple #forecast-box, body.mode-simple #longterm, body.mode-simple #earnings-box,
+body.mode-simple .style-bar, body.mode-simple #patterns-toggle, body.mode-simple #ema-toggle, body.mode-simple #fc-caption { display: none !important; }
+body.mode-simple #center-tabs button:not([data-tab="bot"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
+@media (max-width: 640px) { .simple { margin: 4px 0 8px; } .simple-word { font-size: 28px; } .mode-seg button { padding: 4px 7px; } }
+.simple-actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -17,6 +17,7 @@ import { upcomingHighImpact, loadCalendar } from "./calendar.js";
 import { earningsCheck } from "./earnings.js";
 import { newsAiCheck } from "./newsai.js";
 import { trendingCheck } from "./trending.js";
+import { botViewCached } from "./bot.js";
 
 /** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
 async function eventRisk() {
@@ -135,6 +136,7 @@ export async function renderDecision(c) {
   if (!el || !c || !c.symbol) return;
   const my = ++token;
   el.innerHTML = html(c, null);
+  paintSimple(c);
   const checks = await outsideChecks(c).catch(() => []);
   if (my !== token) return;
   el.innerHTML = html(c, checks);
@@ -146,7 +148,9 @@ export function refreshDecision(c) {
   if (!el || !c || !c.symbol) return;
   const hit = ctxCache.get(`${c.symbol}:${c.interval}`);
   el.innerHTML = html(c, hit ? hit.v : null);
+  paintSimple(c);
 }
+function paintSimple(c) { const s = $("simple-card"); if (s) s.innerHTML = simpleHtml(c); }
 
 function html(c, checks) {
   const r = c.analysis;
@@ -366,4 +370,69 @@ function buySteps(c, r, unit) {
     <li><strong>If neither is hit by ${sellBy}</strong>, sell at the market price. That's the time limit the track record is based on.</li>
     <li>Click <strong>I took this trade</strong> on the trade card below. Entryvex will then tell you when to sell.</li>
   </ol>`;
+}
+
+/* ---------------- Simple mode: one big answer ---------------- */
+/**
+ * BUY / SELL / WAIT for a beginner, from the same measured evidence as the full card:
+ *   BUY  – a setup with a winning record is active on this chart (with how much, and when to sell);
+ *   SELL – you own it and the plan says sell, or the trend is down with a bearish sign (for owners);
+ *   WAIT – nothing with a winning record right now (and where to look instead).
+ * Plus what the Entryvex paper-trading bot is doing on this market.
+ */
+function simpleHtml(c) {
+  const r = c.analysis;
+  const stock = isStock(c.symbol);
+  const unit = stock ? "shares" : c.base;
+  const held = openTrades().filter((t) => t.symbol === c.symbol);
+  const f = c.forecast;
+  let word, cls, why, plan = "";
+  if (held.length) {
+    const adv = tradeAdvice(held[0], c.price);
+    word = adv.level === "sell" ? "SELL" : "HOLD"; cls = adv.level === "sell" ? "sell" : "hold"; why = adv.why;
+  } else if (!r) {
+    word = "CHECKING"; cls = "wait"; why = `Testing ${fmt.esc(c.base)}'s setups against its history…`;
+  } else if (r.liquidity && !r.liquidity.ok) {
+    word = "DON'T BUY"; cls = "no"; why = `${fmt.esc(c.base)} barely trades on this exchange at this candle size, so prices jump and a stop-loss can't protect you.`;
+  } else {
+    const best = r.best;
+    let lvl = r.overall.level;
+    if (lvl === "caution" && best?.verdict.level !== "weak") lvl = "thin";
+    const bearishPattern = (c.patterns || []).some((p) => p.dir < 0);
+    const falling = r.regime?.now === "down";
+    if (lvl === "go" || lvl === "caution") {
+      word = lvl === "go" ? "BUY" : "SMALL BUY"; cls = lvl === "go" ? "buy" : "caution";
+      const s = best.stats;
+      why = `${best.model ? "Entryvex's prediction model" : `The “${fmt.esc(best.name)}” setup`} just signalled a buy. On ${fmt.esc(c.base)} it ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after fees${lvl === "go" ? "" : " (only slightly profitable, so use a smaller amount)"}.`;
+      plan = buySteps(c, r, unit) + `<div class="simple-actions"><button class="btn" data-take-pro>I took this trade: track it for me</button></div>`;
+    } else if (falling && (bearishPattern || (f && f.pUp < 0.45))) {
+      word = "SELL"; cls = "sell";
+      why = `The trend is down (price is below its 200-candle average)${bearishPattern ? " and a bearish candle pattern just formed" : ""}${f && f.pUp < 0.45 ? `, and only ${Math.round(f.pUp * 100)}% of similar moments ended higher` : ""}. <strong>Don't buy.</strong> If you own ${fmt.esc(c.base)}, Entryvex would sell or keep a tight stop-loss.`;
+    } else {
+      word = "WAIT"; cls = "wait";
+      const watch = topWatch(1)[0];
+      why = `No setup with a winning record is happening on ${fmt.esc(c.base)} right now, so buying would be a guess.${watch ? ` Best opportunity to watch: <button class="link-btn" data-goto-opps>${fmt.esc(watch.base)} · ${fmt.esc(watch.s.name)} (${watch.iv})</button>.` : ""}`;
+    }
+    const otherIv = cls !== "buy" && cls !== "caution" ? currentBuys().find((b) => b.sym === c.symbol && b.iv !== c.interval) : null;
+    if (otherIv) plan += `<div class="d-other-iv"><span>📈 <strong>${otherIv.label === "GO" ? "BUY" : "SMALL BUY"} on ${fmt.esc(IV_WORD[otherIv.iv] || otherIv.iv)} candles</strong> right now.</span><button class="btn" data-goto-iv="${fmt.esc(otherIv.iv)}">Show it</button></div>`;
+  }
+  const bot = botLine(c.symbol);
+  return `<div class="simple d-${cls}">
+    <div class="simple-top"><span class="simple-label">Entryvex says</span><strong class="simple-word">${word}</strong></div>
+    <p class="simple-why">${why}</p>
+    ${plan}
+    ${f ? `<p class="small muted">Next ~${(f.H * f.intervalSec) / 3600 < 48 ? Math.round((f.H * f.intervalSec) / 3600) + " hours" : Math.round((f.H * f.intervalSec) / 86400) + " days"}: most likely between <strong class="down">${fmt.price(f.range80[0])}</strong> and <strong class="up">${fmt.price(f.range80[1])}</strong> (right ${Math.round(f.accuracy80 * 100)}% of the time in tests).</p>` : ""}
+    ${bot}
+    <p class="tiny muted">Not financial advice: every number is measured from past prices, and markets can do anything. Only trade money you can afford to lose. Switch to <button class="link-btn tiny" data-mode-pro>Pro</button> for all the details.</p>
+  </div>`;
+}
+function botLine(sym) {
+  const v = botViewCached(sym);
+  if (!v) return "";
+  if (v.holding) {
+    const p = v.holding, pnl = ((p.last || p.entry) / p.entry - 1) * 100;
+    return `<p class="small simple-bot">🤖 <strong>The Entryvex bot owns ${fmt.esc(p.market)}</strong> (bought at ${fmt.price(p.entry)}, now ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%; selling at ${fmt.price(p.target)} or ${fmt.price(p.stop)}). <button class="link-btn" data-open-bot>See its trades</button></p>`;
+  }
+  if (v.trades) return `<p class="small simple-bot">🤖 The Entryvex bot has traded this ${v.trades} time${v.trades === 1 ? "" : "s"} (${v.wins} won) and doesn't own it now. <button class="link-btn" data-open-bot>See why</button></p>`;
+  return "";
 }

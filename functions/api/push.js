@@ -124,7 +124,8 @@ export async function candles(sym, interval, limit) {
       if (Array.isArray(k) && k.length) return k.map((x) => ({ time: x[0] / 1000, open: +x[1], high: +x[2], low: +x[3], close: +x[4], volume: +x[5] }));
     } catch { /* fall back to Yahoo */ }
   }
-  const map = { "5m": ["5m", "5d"], "15m": ["15m", "1mo"], "1h": ["60m", "3mo"], "4h": ["60m", "1y"] }[interval];
+  // Longer history when a lot is asked for (the paper bot re-tests setups on up to 1000 candles).
+  const map = { "5m": ["5m", "5d"], "15m": ["15m", "1mo"], "1h": ["60m", limit > 400 ? "1y" : "3mo"], "4h": ["60m", "1y"], "1d": ["1d", "5y"] }[interval];
   const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker(sym))}?interval=${map[0]}&range=${map[1]}&includePrePost=false`);
   const r = j?.chart?.result?.[0];
   const q = r?.indicators?.quote?.[0] || {};
