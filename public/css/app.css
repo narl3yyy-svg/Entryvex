@@ -919,3 +919,11 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .wl-sortbar { display: flex; align-items: center; gap: 8px; padding: 0 14px 6px; }
 .wl-sortbar select { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: 12.5px var(--font); }
 .watchlist.sorted .wl-grip { visibility: hidden; }
+
+/* Watchlist rows never change layout on hover: the remove (×) button appears in the empty left
+   margin under the ⋮⋮ handle instead of squeezing the row (which pushed the pill to a new line). */
+@media (min-width: 761px) {
+  .watchlist:not(.browse-list) li:hover { padding-right: 10px; }
+  .watchlist:not(.browse-list) li .wl-grip { top: 8px; transform: none; }
+  .watchlist:not(.browse-list) .wl-remove { top: auto; bottom: 6px; left: 2px; right: auto; transform: none; width: 17px; height: 17px; font-size: 12px; line-height: 17px; padding: 0; }
+}
