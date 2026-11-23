@@ -966,7 +966,7 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 /* What Simple mode hides (Pro shows everything) */
 body.mode-simple #decision, body.mode-simple #forecast-box, body.mode-simple #longterm, body.mode-simple #earnings-box,
 body.mode-simple .style-bar, body.mode-simple #patterns-toggle, body.mode-simple #ema-toggle, body.mode-simple #fc-caption { display: none !important; }
-body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="bot"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
+body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="bot"]):not([data-tab="score"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
 @media (max-width: 640px) { .simple { margin: 4px 0 8px; } .simple-word { font-size: 28px; } .mode-seg button { padding: 4px 7px; } }
 .simple-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .wl-sig.wl-bot { background: rgba(122,162,255,.16); padding: 1px 5px; }
@@ -993,3 +993,20 @@ body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="b
 .hold-call.d-hold strong { color: #8dbbff; }
 .hold-why { margin: 0; padding-left: 18px; }
 @media (max-width: 640px) { .hold-form { grid-template-columns: 1fr 1fr; } .hold-call { flex-direction: column; gap: 4px; } }
+
+/* Forecast scorecard */
+.score-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 8px 0; }
+.score-tile { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.score-tile-h { margin-bottom: 6px; }
+.score-tile p { margin: 4px 0 0; }
+.score-table-wrap { overflow-x: auto; }
+.score-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.score-table th, .score-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.score-table th { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.score-table td:not(:first-child) { font-family: var(--mono); }
+.score-list { display: flex; flex-direction: column; gap: 6px; }
+.score-row { display: grid; grid-template-columns: minmax(110px, auto) auto 1fr auto; gap: 4px 12px; align-items: baseline; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); }
+@media (max-width: 640px) { .score-row { grid-template-columns: 1fr auto; } }
+
+/* Narrow phones: let the top bar wrap instead of pushing the alert/help buttons off screen */
+@media (max-width: 440px) { .topbar { flex-wrap: wrap; row-gap: 6px; } .topbar-right { margin-left: auto; } }

@@ -28,6 +28,7 @@ import { onFx, fxRate } from "./fx.js";
 import { initBrowse } from "./browse.js";
 import { initBot, botVisible, followBot, botViewCached } from "./bot.js";
 import { initHoldings, holdingsVisible } from "./holdings.js";
+import { initScorecard, scorecardVisible } from "./scorecard.js";
 import { addPriceAlert } from "./alerts.js";
 import { sizePosition } from "./sizing.js";
 import { settings as moneySettings } from "./money.js";
@@ -1111,7 +1112,7 @@ function copyBotTrade() {
 /* ---------- Simple / Pro mode ---------- */
 // Simple (default for everyone): click a coin or stock and get one big BUY / SELL / WAIT card with how
 // much and when to sell. Pro: every tool, table and number.
-const SIMPLE_TABS = new Set(["holdings", "bot", "trades", "ai"]);
+const SIMPLE_TABS = new Set(["holdings", "bot", "score", "trades", "ai"]);
 function applyMode(mode) {
   if (mode !== "pro") mode = "simple";
   store.set("mode", mode);
@@ -1308,9 +1309,10 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "movers", "holdings", "bot", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "movers", "holdings", "bot", "score", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
     botVisible(tab === "bot");
     holdingsVisible(tab === "holdings");
+    scorecardVisible(tab === "score");
     moversVisible(tab === "movers");
     picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
@@ -1358,6 +1360,13 @@ async function boot() {
     notify: pushAlert,
     onFollowChange: () => scheduleSync(500),   // tell the alert server (phone / closed-app alerts)
     openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
+  });
+  initScorecard({ openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); } });
+  // "See every check" links in the forecast box and the answer card open the Scorecard tab.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-open-score]")) return;
+    showTab("score");
+    $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   initPicks({ onPick: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

@@ -19,6 +19,7 @@ import { newsAiCheck } from "./newsai.js";
 import { trendingCheck } from "./trending.js";
 import { botViewCached } from "./bot.js";
 import { holdingOf } from "./holdings.js";
+import { scoreLine } from "./scorecard.js";
 
 /** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
 async function eventRisk() {
@@ -340,7 +341,8 @@ function predicts(c) {
   return `<div class="d-when"><div class="d-when-title">What Entryvex predicts (next ~${h})</div>
     <p class="small">Most likely between <strong class="down">${fmt.price(f.range80[0])}</strong> and <strong class="up">${fmt.price(f.range80[1])}</strong> (80% range), middle ${fmt.price(f.mid)}.
     Chance it's higher by then: <strong>${Math.round(f.pUp * 100)}%</strong>, ${describeOdds(f.pUp)}.
-    <span class="muted">This forecast has been ${rel.label} (${Math.round(f.accuracy80 * 100)}% of past tests landed inside the range).</span></p></div>`;
+    <span class="muted">This forecast has been ${rel.label} (${Math.round(f.accuracy80 * 100)}% of past tests landed inside the range).</span></p>
+    ${(() => { const s = scoreLine(c.symbol, f.interval || c.interval); return s ? `<p class="small">${s}</p>` : ""; })()}</div>`;
 }
 
 function confidenceMeter(p, lo, hi, be, n) {
@@ -422,7 +424,7 @@ function simpleHtml(c) {
     <div class="simple-top"><span class="simple-label">Entryvex says</span><strong class="simple-word">${word}</strong></div>
     <p class="simple-why">${why}</p>
     ${plan}
-    ${f ? `<p class="small muted">Next ~${(f.H * f.intervalSec) / 3600 < 48 ? Math.round((f.H * f.intervalSec) / 3600) + " hours" : Math.round((f.H * f.intervalSec) / 86400) + " days"}: most likely between <strong class="down">${fmt.price(f.range80[0])}</strong> and <strong class="up">${fmt.price(f.range80[1])}</strong> (right ${Math.round(f.accuracy80 * 100)}% of the time in tests).</p>` : ""}
+    ${f ? `<p class="small muted">Next ~${(f.H * f.intervalSec) / 3600 < 48 ? Math.round((f.H * f.intervalSec) / 3600) + " hours" : Math.round((f.H * f.intervalSec) / 86400) + " days"}: most likely between <strong class="down">${fmt.price(f.range80[0])}</strong> and <strong class="up">${fmt.price(f.range80[1])}</strong> (right ${Math.round(f.accuracy80 * 100)}% of the time in tests).</p>${(() => { const s = scoreLine(c.symbol, f.interval || c.interval); return s ? `<p class="small muted">${s}</p>` : ""; })()}` : ""}
     ${bot}
     <p class="tiny muted">Not financial advice: every number is measured from past prices, and markets can do anything. Only trade money you can afford to lose. Switch to <button class="link-btn tiny" data-mode-pro>Pro</button> for all the details.</p>
   </div>`;

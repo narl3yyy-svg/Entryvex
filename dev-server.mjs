@@ -17,6 +17,7 @@ const api = {
   "/api/briefing": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/briefing.js", import.meta.url))).href),
   "/api/ask": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/ask.js", import.meta.url))).href),
   "/api/bot": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/bot.js", import.meta.url))).href),
+  "/api/scorecard": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/scorecard.js", import.meta.url))).href),
   "/api/newsai": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/newsai.js", import.meta.url))).href),
 };
 
