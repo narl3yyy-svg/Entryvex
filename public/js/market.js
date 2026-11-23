@@ -73,6 +73,15 @@ function groupCandles(c, n) {
   return out;
 }
 
+/** When the next regular session starts (ms), if that's still ahead. */
+function nextOpen(meta) {
+  const s = meta?.currentTradingPeriod?.regular?.start;
+  return s && s * 1000 > Date.now() ? s * 1000 : null;
+}
+/** How long to wait while a market is closed: 5 minutes, or until just after the opening bell if that's sooner. */
+function closedDelay(next) {
+  return next ? Math.max(5_000, Math.min(5 * 60_000, next - Date.now() + 5_000)) : 5 * 60_000;
+}
 function marketOpen(meta) {
   const p = meta?.currentTradingPeriod?.regular;
   if (!p) return null;
@@ -160,7 +169,7 @@ async function stockQuote(sym) {
     changePct: prev ? ((last - prev) / prev) * 100 : 0,
     high: dayHigh, low: dayLow,
     quoteVolume: dayVol || (meta.regularMarketVolume || 0) * last,
-    marketOpen: marketOpen(meta), hi52: meta.fiftyTwoWeekHigh, lo52: meta.fiftyTwoWeekLow,
+    marketOpen: marketOpen(meta), nextOpen: nextOpen(meta), hi52: meta.fiftyTwoWeekHigh, lo52: meta.fiftyTwoWeekLow,
   };
 }
 
@@ -191,11 +200,11 @@ export function createTickerFeed(symbols, { onTick, onStatus }) {
     const poll = async () => {
       if (closed) return;
       const now = Date.now();
-      const due = stocks.filter((s) => { const l = last.get(s); return !l || l.open !== false || now - l.t > 5 * 60_000; });
+      const due = stocks.filter((s) => { const l = last.get(s); return !l || l.open !== false || now - l.t > 5 * 60_000 || (l.next && now >= l.next); });
       const res = await Promise.allSettled(due.map(stockQuote));
       let ok = 0;
       res.forEach((r, k) => {
-        if (r.status === "fulfilled" && r.value) { ok++; onTick(r.value); last.set(due[k], { t: now, open: r.value.marketOpen }); }
+        if (r.status === "fulfilled" && r.value) { ok++; onTick(r.value); last.set(due[k], { t: now, open: r.value.marketOpen, next: r.value.nextOpen }); }
       });
       if (due.length) { status.s = ok ? "live" : "down"; report(); }
       timer = setTimeout(poll, document.visibilityState === "visible" ? 10_000 : 30_000);
@@ -214,12 +223,13 @@ export function createKlineFeed(sym, interval, { onCandle, onStatus }) {
   }
   let closed = false, timer = null, lastTime = 0;
   const every = interval === "1m" || interval === "5m" ? 10_000 : 30_000;
-  let isOpen = null;
+  let isOpen = null, opensAt = null;
   const poll = async () => {
     if (closed) return;
     try {
       const { candles, meta } = await stockChart(sym, interval, "recent");
       isOpen = marketOpen(meta);
+      opensAt = nextOpen(meta);
       const recent = candles.slice(-3);
       recent.forEach((c, i) => {
         if (c.time < lastTime) return;
@@ -229,7 +239,7 @@ export function createKlineFeed(sym, interval, { onCandle, onStatus }) {
       onStatus("live");
     } catch { onStatus("down"); }
     // Closed market: the candles can't change, so check again in 5 minutes instead.
-    timer = setTimeout(poll, isOpen === false ? 5 * 60_000 : document.visibilityState === "visible" ? every : every * 3);
+    timer = setTimeout(poll, isOpen === false ? closedDelay(opensAt) : document.visibilityState === "visible" ? every : every * 3);
   };
   onStatus("connecting");
   poll();
