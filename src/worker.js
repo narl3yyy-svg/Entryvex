@@ -8,8 +8,9 @@ import { onRequestPost as briefingHandler } from "../functions/api/briefing.js";
 import { onRequestGet as marketHandler } from "../functions/api/market.js";
 import { onRequest as pushHandler, runAlerts } from "../functions/api/push.js";
 import { onRequestGet as newsAiHandler, cronNews, cronTrending } from "../functions/api/newsai.js";
+import { onRequestGet as botHandler, cronBot } from "../functions/api/bot.js";
 
-const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler, "/api/newsai": newsAiHandler };
+const GET = { "/api/news": newsHandler, "/api/summary": summaryHandler, "/api/market": marketHandler, "/api/newsai": newsAiHandler, "/api/bot": botHandler };
 const POST = { "/api/ask": askHandler, "/api/briefing": briefingHandler };
 
 export default {
@@ -30,5 +31,6 @@ export default {
     ctx.waitUntil(runAlerts(env, event.scheduledTime));
     ctx.waitUntil(cronNews(env, event.scheduledTime));
     ctx.waitUntil(cronTrending(env, event.scheduledTime));
+    ctx.waitUntil(cronBot(env, event.scheduledTime));   // paper-trading bot (virtual money)
   },
 };

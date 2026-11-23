@@ -1,7 +1,8 @@
 // Local preview server (no dependencies): node dev-server.mjs
 // Serves ./public and runs functions/api/news.js the same way Cloudflare Pages does.
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -15,8 +16,17 @@ const api = {
   "/api/market": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/market.js", import.meta.url))).href),
   "/api/briefing": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/briefing.js", import.meta.url))).href),
   "/api/ask": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/ask.js", import.meta.url))).href),
+  "/api/bot": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/bot.js", import.meta.url))).href),
   "/api/newsai": await import(pathToFileURL(fileURLToPath(new URL("./functions/api/newsai.js", import.meta.url))).href),
 };
+
+// Local stand-in for the Cloudflare KV store (a JSON file in the system temp folder, never in the repo).
+const kvFile = join(tmpdir(), "entryvex-dev-kv.json");
+const devKV = {
+  async get(k, type) { try { const all = JSON.parse(await readFile(kvFile, "utf8")); const v = all[k]; return v == null ? null : type === "json" ? JSON.parse(v) : v; } catch { return null; } },
+  async put(k, v) { let all = {}; try { all = JSON.parse(await readFile(kvFile, "utf8")); } catch {} all[k] = v; await writeFile(kvFile, JSON.stringify(all)); },
+};
+const env = { PUSH: devKV };
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
@@ -26,9 +36,9 @@ createServer(async (req, res) => {
       let r;
       if (req.method === "POST" && mod.onRequestPost) {
         const chunks = []; for await (const ch of req) chunks.push(ch);
-        r = await mod.onRequestPost({ request: new Request(url, { method: "POST", headers: req.headers, body: Buffer.concat(chunks) }), env: {}, waitUntil: () => {} });
+        r = await mod.onRequestPost({ request: new Request(url, { method: "POST", headers: req.headers, body: Buffer.concat(chunks) }), env, waitUntil: () => {} });
       } else if (mod.onRequestGet) {
-        r = await mod.onRequestGet({ request: new Request(url), env: {}, waitUntil: () => {} });
+        r = await mod.onRequestGet({ request: new Request(url), env, waitUntil: () => {} });
       } else { res.writeHead(405); res.end(); return; }
       res.writeHead(r.status, Object.fromEntries(r.headers));
       res.end(Buffer.from(await r.arrayBuffer()));

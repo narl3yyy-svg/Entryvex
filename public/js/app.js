@@ -26,6 +26,7 @@ import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx, fxRate } from "./fx.js";
 import { initBrowse } from "./browse.js";
+import { initBot, botVisible, followBot } from "./bot.js";
 import { renderEarnings } from "./earnings.js";
 import { renderNewsAi } from "./newsai.js";
 
@@ -1236,7 +1237,8 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "movers", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "movers", "bot", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    botVisible(tab === "bot");
     moversVisible(tab === "movers");
     picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
@@ -1249,9 +1251,17 @@ async function boot() {
     onOpen: (sym, meta) => { registerFromBrowse(sym, meta); selectSymbol(sym); if (innerWidth < 900) $("chart").scrollIntoView({ behavior: "smooth", block: "start" }); },
     onAdd: (sym, meta) => { registerFromBrowse(sym, meta); addToWatchlist(sym); },
   });
+  initBot({
+    notify: pushAlert,
+    onFollowChange: () => scheduleSync(500),   // tell the alert server (phone / closed-app alerts)
+    openBtc: () => { selectSymbol("BTCUSDT"); window.scrollTo({ top: 0, behavior: "smooth" }); },
+  });
   initPicks({ onPick: (sym) => { state.bySymbol.set(sym, stockInfo(sym)); pick(sym); } });
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-  showTab(store.get("centerTab", "scanner"));
+  // Links from bot notifications (/?tab=bot) open the Bot tab.
+  const urlTab = new URLSearchParams(location.search).get("tab");
+  showTab(urlTab === "bot" ? "bot" : store.get("centerTab", "scanner"));
+  if (urlTab === "bot") setTimeout(() => $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }), 800);
 
   const pick = (sym) => { if (!state.watchlist.includes(sym)) addToWatchlist(sym); else selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); };
   initJournal({
@@ -1294,6 +1304,7 @@ async function boot() {
         priceAlerts: a.priceAlerts, move: a.move,
         trades: openTrades().map((t) => ({ id: t.id, symbol: t.symbol, base: state.bySymbol.get(t.symbol)?.base, stop: t.stop, target: t.target, sellBy: t.sellBy })),
         setups: a.setupOn ? setupMarkets(a.setupMin) : [],
+        followBot: followBot(),
       };
     },
   });

@@ -8,6 +8,7 @@
 // Storage (Cloudflare KV): only an anonymous browser push address + alert settings. No names/emails.
 import { vapidKeys, sendPush } from "./webpush.js";
 import { SETUPS, RULES } from "../../public/js/engine.js";
+import { botEventsSince } from "./bot.js";
 import { computeAll } from "../../public/js/indicators.js";
 
 const ALLOWED = [/^https:\/\/(www\.)?entryvex\.trade$/, /^http:\/\/localhost(:\d+)?$/];
@@ -103,6 +104,7 @@ function cleanPrefs(p) {
     setups: (Array.isArray(p.setups) ? p.setups : []).slice(0, 25)
       .filter((m) => SYM.test(m.symbol) && IVS.has(m.interval) && Array.isArray(m.setupIds))
       .map((m) => ({ symbol: m.symbol, base: String(m.base || "").slice(0, 12), interval: m.interval, setupIds: m.setupIds.filter((x) => SETUPS.some((s) => s.id === x)).slice(0, 4), labels: m.labels || {} })),
+    followBot: !!p.followBot,
   };
 }
 
@@ -157,6 +159,10 @@ export async function runAlerts(env, now = Date.now()) {
     return cache.get(k);
   };
 
+  // Paper-trading bot trades from the last 30 minutes (for people who follow it).
+  let botEvents = null;
+  const getBotEvents = async () => (botEvents ??= await botEventsSince(env, now - 30 * 60e3).catch(() => []));
+
   for (const { name } of list.keys) {
     const rec = await env.PUSH.get(name, "json");
     if (!rec) continue;
@@ -171,6 +177,7 @@ export async function runAlerts(env, now = Date.now()) {
     for (const s of syms) { const c = await get(s, "5m", 13); if (c?.length) recent[s] = c; }
     const price = (s) => recent[s]?.at(-1)?.close;
     const label = (s, base) => base || (isStock(s) ? s.slice(2) : s.replace(/(USDT|USDC|USD)$/, ""));
+    if (p.followBot) for (const e of await getBotEvents()) fire(`bot:${e.t}:${e.kind}`, { title: `🤖 ${e.title}`, body: e.body, url: "/?tab=bot" });
 
     for (const a of p.priceAlerts || []) {
       const px = price(a.symbol);

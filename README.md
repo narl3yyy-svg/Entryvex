@@ -26,6 +26,7 @@ Most trading tools tell you what *might* happen. Entryvex tells you **what actua
 | 🎯 **One clear answer** | *Entryvex says*: **BUY**, **WAIT**, **DON'T BUY**, **HOLD** or **SELL NOW**, in plain English. |
 | 📏 **Measured, not guessed** | Confidence comes from replaying every past occurrence of a setup, with a statistical test so luck doesn't count as skill. |
 | 💵 **Sized to your money** | Exactly how much to buy, where to take profit, where to cut the loss, and when to sell by. |
+| 🤖 **Paper-trading bot** | Trades a virtual $100 of BTC 24/7 at live prices with fees, stops and targets; learns from every trade (benches what loses, promotes what wins) and publishes its full record. Follow it to get its trades as alerts. No real money. |
 | ⭐ **Stock picks** | Entryvex Stock Rank: a monthly momentum, trend and low-volatility ranking of 100 large US stocks, with an 18-year after-cost track record vs the S&P 500. |
 | 🌍 **Global** | World indices, gold, oil, currencies, yields and the economic calendar; stocks from the US, Europe, Asia and the Americas. |
 | 🔔 **Alerts, even when closed** | Price, big-move, buy-setup and SELL alerts on your phone or computer. |

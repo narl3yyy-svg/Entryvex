@@ -927,3 +927,20 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
   .watchlist:not(.browse-list) li .wl-grip { top: 8px; transform: none; }
   .watchlist:not(.browse-list) .wl-remove { top: auto; bottom: 6px; left: 2px; right: auto; transform: none; width: 17px; height: 17px; font-size: 12px; line-height: 17px; padding: 0; }
 }
+
+/* Paper-trading bot tab */
+.bot-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.bot-head h3 { margin: 0 0 4px; }
+.bot-status { margin: 4px 0 10px; }
+.bot-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.bot-tiles > div { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.bot-tiles span { font-size: 11px; color: var(--muted); }
+.bot-tiles strong { font: 700 19px var(--mono); }
+.bot-tiles small { font-size: 11.5px; color: var(--muted); }
+.bot-chart { width: 100%; height: 200px; }
+.bot-pos { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.bot-mem { display: flex; flex-direction: column; gap: 4px; }
+.bot-mem-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 5px 8px; border-radius: 8px; background: var(--panel-2); }
+.bot-trades { display: flex; flex-direction: column; gap: 6px; }
+.bot-trade { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.bot-trade > div:first-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
