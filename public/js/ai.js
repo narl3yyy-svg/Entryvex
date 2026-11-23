@@ -12,6 +12,7 @@ import { rankFor, picksSnapshot } from "./picks.js";
 import { earningsSnapshot, upcomingList } from "./earnings.js";
 import { newsAiSnapshot } from "./newsai.js";
 import { trendingSnapshot } from "./trending.js";
+import { holdingsSnapshot } from "./holdings.js";
 
 const $ = (id) => document.getElementById(id);
 let live = {};
@@ -181,6 +182,7 @@ async function snapshot() {
     stockRank: { thisStock: rankFor(live.symbol), model: picksSnapshot() },
     newsReadByAI: newsAiSnapshot(live.symbol),
     cryptoCrowdAttention: live.isStock ? null : trendingSnapshot(),
+    myHoldings: holdingsSnapshot(),
     candlePatternsJustFormed: (live.patterns || []).map((p) => `${p.dir > 0 ? "bullish" : "bearish"} ${p.name}, ${p.candlesAgo} candles ago`),
     earnings: { thisStock: earningsSnapshot(live.symbol), watchlistReportsComing: upcomingList((hooks.getWatchlistInfo?.() || []).map((w) => w.sym), 21).mine.slice(0, 12).map((e) => `${e.s} on ${e.date}${e.t === "pre" ? " before open" : e.t === "post" ? " after close" : ""}`) },
     highImpactEventsNext24h: upcomingHighImpact(24).slice(0, 10).map((e) => `${e.country} ${e.title} at ${new Date(e.t).toISOString()}${e.forecast ? ` (expected ${e.forecast}, last ${e.previous})` : ""}`),

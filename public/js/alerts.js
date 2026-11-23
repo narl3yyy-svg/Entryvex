@@ -298,6 +298,16 @@ export function initAlerts(h) {
 }
 
 /** Pre-fill the price alert form for a coin (e.g. from the chart header). */
+/** Create a price alert from elsewhere in the app (e.g. "alert me to buy more at $X" in My holdings). */
+export function addPriceAlert(symbol, dir, price) {
+  if (!symbol || !(price > 0) || (dir !== "above" && dir !== "below")) return false;
+  priceAlerts = priceAlerts.filter((a) => !(a.symbol === symbol && a.dir === dir && !a.done && Math.abs(a.price / price - 1) < 0.001));
+  priceAlerts.push({ id: Math.random().toString(36).slice(2, 9), symbol, dir, price, created: Date.now(), done: null });
+  savePrice();
+  renderDrawer();
+  return true;
+}
+
 export function openPriceAlert(symbol) {
   toggleDrawer(true);
   $("al-p-sym").value = symbol;

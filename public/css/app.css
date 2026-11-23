@@ -966,7 +966,30 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 /* What Simple mode hides (Pro shows everything) */
 body.mode-simple #decision, body.mode-simple #forecast-box, body.mode-simple #longterm, body.mode-simple #earnings-box,
 body.mode-simple .style-bar, body.mode-simple #patterns-toggle, body.mode-simple #ema-toggle, body.mode-simple #fc-caption { display: none !important; }
-body.mode-simple #center-tabs button:not([data-tab="bot"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
+body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="bot"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
 @media (max-width: 640px) { .simple { margin: 4px 0 8px; } .simple-word { font-size: 28px; } .mode-seg button { padding: 4px 7px; } }
 .simple-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .wl-sig.wl-bot { background: rgba(122,162,255,.16); padding: 1px 5px; }
+
+/* My holdings */
+.hold-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.hold-head h3 { margin: 0 0 4px; }
+.hold-total { display: flex; flex-direction: column; align-items: flex-end; }
+.hold-total span { font-size: 11px; color: var(--muted); } .hold-total strong { font: 700 20px var(--mono); }
+.hold-form { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(100px, 1fr) minmax(120px, 1fr) auto; gap: 8px; align-items: end; margin: 10px 0; }
+.hold-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.hold-form input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 7px 9px; font: 13px var(--mono); }
+.hold-form-btns { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.hold-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.hold-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.hold-top { display: flex; justify-content: space-between; gap: 10px; }
+.hold-name { font-size: 15px; font-weight: 700; color: var(--text); text-decoration: none; }
+.hold-pl { display: flex; flex-direction: column; align-items: flex-end; font-family: var(--mono); }
+.hold-pl strong { font-size: 18px; }
+.hold-call { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; }
+.hold-call strong { font-size: 15px; white-space: nowrap; }
+.hold-call.d-buy { border-color: rgba(34,197,94,.5); } .hold-call.d-buy strong { color: var(--up); }
+.hold-call.d-sell { border-color: rgba(240,80,110,.5); } .hold-call.d-sell strong { color: var(--down); }
+.hold-call.d-hold strong { color: #8dbbff; }
+.hold-why { margin: 0; padding-left: 18px; }
+@media (max-width: 640px) { .hold-form { grid-template-columns: 1fr 1fr; } .hold-call { flex-direction: column; gap: 4px; } }

@@ -18,6 +18,7 @@ import { earningsCheck } from "./earnings.js";
 import { newsAiCheck } from "./newsai.js";
 import { trendingCheck } from "./trending.js";
 import { botViewCached } from "./bot.js";
+import { holdingOf } from "./holdings.js";
 
 /** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
 async function eventRisk() {
@@ -416,7 +417,7 @@ function simpleHtml(c) {
     const otherIv = cls !== "buy" && cls !== "caution" ? currentBuys().find((b) => b.sym === c.symbol && b.iv !== c.interval) : null;
     if (otherIv) plan += `<div class="d-other-iv"><span>📈 <strong>${otherIv.label === "GO" ? "BUY" : "SMALL BUY"} on ${fmt.esc(IV_WORD[otherIv.iv] || otherIv.iv)} candles</strong> right now.</span><button class="btn" data-goto-iv="${fmt.esc(otherIv.iv)}">Show it</button></div>`;
   }
-  const bot = botLine(c.symbol);
+  const bot = botLine(c.symbol) + ownLine(c);
   return `<div class="simple d-${cls}">
     <div class="simple-top"><span class="simple-label">Entryvex says</span><strong class="simple-word">${word}</strong></div>
     <p class="simple-why">${why}</p>
@@ -425,6 +426,12 @@ function simpleHtml(c) {
     ${bot}
     <p class="tiny muted">Not financial advice: every number is measured from past prices, and markets can do anything. Only trade money you can afford to lose. Switch to <button class="link-btn tiny" data-mode-pro>Pro</button> for all the details.</p>
   </div>`;
+}
+function ownLine(c) {
+  const h = holdingOf(c.symbol);
+  if (!h || !(c.price > 0)) return "";
+  const pl = (c.price / h.cost - 1) * 100;
+  return `<p class="small simple-bot">💼 <strong>You own ${+h.qty.toFixed(8)}</strong> at ${fmt.price(h.cost)} (<span class="${pl >= 0 ? "up" : "down"}">${pl >= 0 ? "+" : ""}${pl.toFixed(2)}%</span>). <button class="link-btn" data-open-holdings>Buy more, hold or trim?</button></p>`;
 }
 function botLine(sym) {
   const v = botViewCached(sym);

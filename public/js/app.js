@@ -27,6 +27,8 @@ import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
 import { onFx, fxRate } from "./fx.js";
 import { initBrowse } from "./browse.js";
 import { initBot, botVisible, followBot, botViewCached } from "./bot.js";
+import { initHoldings, holdingsVisible } from "./holdings.js";
+import { addPriceAlert } from "./alerts.js";
 import { sizePosition } from "./sizing.js";
 import { settings as moneySettings } from "./money.js";
 import { addTrade } from "./journal.js";
@@ -1109,7 +1111,7 @@ function copyBotTrade() {
 /* ---------- Simple / Pro mode ---------- */
 // Simple (default for everyone): click a coin or stock and get one big BUY / SELL / WAIT card with how
 // much and when to sell. Pro: every tool, table and number.
-const SIMPLE_TABS = new Set(["bot", "trades", "ai"]);
+const SIMPLE_TABS = new Set(["holdings", "bot", "trades", "ai"]);
 function applyMode(mode) {
   if (mode !== "pro") mode = "simple";
   store.set("mode", mode);
@@ -1128,6 +1130,7 @@ function initMode() {
     if (!b) return;
     if (b.hasAttribute("data-mode-pro")) applyMode("pro");
     if (b.hasAttribute("data-copy-bot")) copyBotTrade();
+    if (b.hasAttribute("data-open-holdings")) { document.querySelector('#center-tabs button[data-tab="holdings"]')?.click(); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
     if (b.hasAttribute("data-take-pro")) {   // the trade card (with "I took this trade") lives in Pro's Scanner tab
       applyMode("pro");
       document.querySelector('#center-tabs button[data-tab="scanner"]')?.click();
@@ -1305,8 +1308,9 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "movers", "bot", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["scanner", "movers", "holdings", "bot", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
     botVisible(tab === "bot");
+    holdingsVisible(tab === "holdings");
     moversVisible(tab === "movers");
     picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
@@ -1318,6 +1322,37 @@ async function boot() {
     isWatched: (sym) => state.watchlist.includes(sym),
     onOpen: (sym, meta) => { registerFromBrowse(sym, meta); selectSymbol(sym); if (innerWidth < 900) $("chart").scrollIntoView({ behavior: "smooth", block: "start" }); },
     onAdd: (sym, meta) => { registerFromBrowse(sym, meta); addToWatchlist(sym); },
+  });
+  initHoldings({
+    // "BTC" → the Binance.US pair; anything else → the best stock/ETF/index match.
+    resolveSymbol: async (raw) => {
+      const t = raw.trim().toUpperCase().replace(/\s+/g, "");
+      if (t.startsWith("S:")) { registerStock(t, {}); return t; }
+      const pair = cryptoPair(t.replace(/(USDT|USDC|USD)$/, ""));
+      if (pair) return pair.symbol;
+      const found = await searchStocks(raw).catch(() => []);
+      const hit = found.find((x) => x.ticker.toUpperCase() === t) || found[0];
+      if (!hit) return null;
+      registerStock(hit.symbol, { name: hit.name, exchange: hit.exchange, kind: hit.kind });
+      state.bySymbol.set(hit.symbol, stockInfo(hit.symbol));
+      return hit.symbol;
+    },
+    currentSymbol: () => state.selected,
+    nameFor,
+    getPrice: (sym) => state.stats.get(sym)?.last ?? null,
+    onOpen: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    ensureWatched: (sym) => {
+      if (state.watchlist.includes(sym)) return;
+      state.watchlist.push(sym); store.set("watchlist", state.watchlist); scheduleSync(); refreshTickers();
+      setTimeout(() => runOpportunities([sym]), 1500);
+    },
+    addAlert: (sym, dir, price) => addPriceAlert(sym, dir, price),
+    notify: pushAlert,
+    askAI: (q) => {
+      document.querySelector('#center-tabs button[data-tab="ai"]')?.click();
+      $("ai-input").value = q;
+      $("ai-form").requestSubmit();
+    },
   });
   initBot({
     notify: pushAlert,
