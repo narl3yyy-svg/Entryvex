@@ -915,3 +915,7 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 .al-list li.al-open { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-radius: 8px; }
 .al-list li.al-open:hover { background: var(--panel-2); }
 .al-go { color: var(--accent); font-size: 12px; white-space: nowrap; }
+/* Watchlist sort */
+.wl-sortbar { display: flex; align-items: center; gap: 8px; padding: 0 14px 6px; }
+.wl-sortbar select { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: 12.5px var(--font); }
+.watchlist.sorted .wl-grip { visibility: hidden; }

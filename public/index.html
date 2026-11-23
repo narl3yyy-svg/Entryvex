@@ -106,6 +106,17 @@
           <input id="search" type="search" placeholder="Add a coin, stock, ETF or index (SOL, Apple, SPY, Dow)…" autocomplete="off" spellcheck="false" />
           <div id="search-results" class="search-results" hidden></div>
         </div>
+        <div class="wl-sortbar">
+          <label for="wl-sort" class="muted small">Sort</label>
+          <select id="wl-sort" title="Sort your watchlist. “My order” keeps your own order (drag ⋮⋮ to rearrange).">
+            <option value="mine">My order</option>
+            <option value="price-desc">Price: high → low</option>
+            <option value="price-asc">Price: low → high</option>
+            <option value="chg-desc">Today's change: best first</option>
+            <option value="chg-asc">Today's change: worst first</option>
+            <option value="signal">Signal: BUY first</option>
+          </select>
+        </div>
         <div id="wl-summary" class="wl-summary" aria-live="polite"></div>
         <ul id="watchlist" class="watchlist"></ul>
       </div>

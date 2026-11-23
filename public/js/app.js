@@ -24,7 +24,7 @@ import { onMoneyChange } from "./money.js";
 import { onJournalChange } from "./journal.js";
 import { recentMove } from "./move.js";
 import { initPicks, picksVisible, rankFor, run as runPicks } from "./picks.js";
-import { onFx } from "./fx.js";
+import { onFx, fxRate } from "./fx.js";
 import { initBrowse } from "./browse.js";
 import { renderEarnings } from "./earnings.js";
 import { renderNewsAi } from "./newsai.js";
@@ -298,10 +298,49 @@ function tickClock() {
 }
 
 /* ---------- Watchlist ---------- */
+/* Watchlist sorting. "mine" = your own order (drag to rearrange); the others only change how it's shown. */
+const SORTS = new Set(["mine", "price-desc", "price-asc", "chg-desc", "chg-asc", "signal"]);
+let wlSort = SORTS.has(store.get("wlSort", "mine")) ? store.get("wlSort", "mine") : "mine";
+/** Price in US dollars (so yen, euro or pence prices sort in the right place). */
+function usdPrice(sym) {
+  const p = state.stats.get(sym)?.last;
+  if (!(p > 0)) return null;
+  if (!isStock(sym)) return p;
+  const cur = stockInfo(sym).currency || "USD";
+  const r = cur === "USD" ? 1 : fxRate(cur);
+  return r ? p / r : p;
+}
+const SIGNAL_RANK = { buy: 0, watch: 1, wait: 2, unknown: 3, checking: 4 };
+function displayOrder() {
+  if (wlSort === "mine") return state.watchlist.slice();
+  const list = state.watchlist.slice();
+  const pos = new Map(list.map((s, i) => [s, i]));
+  const num = (v, missingLast) => (v == null || !isFinite(v) ? missingLast : v);
+  const key = {
+    "price-desc": (s) => -num(usdPrice(s), -Infinity),
+    "price-asc": (s) => num(usdPrice(s), Infinity),
+    "chg-desc": (s) => -num(state.stats.get(s)?.changePct, -Infinity),
+    "chg-asc": (s) => num(state.stats.get(s)?.changePct, Infinity),
+    signal: (s) => SIGNAL_RANK[rowVerdict(s)?.level] ?? 5,
+  }[wlSort];
+  return list.sort((a, b) => (key(a) - key(b)) || (pos.get(a) - pos.get(b)));
+}
+/** Re-order the existing rows without rebuilding them (cheap; used as prices move). */
+function resortWatchlist() {
+  if (wlSort === "mine") return;
+  const ul = $("watchlist");
+  if (wlDrag.li) return;
+  const order = displayOrder();
+  const now = [...ul.children].map((li) => li.dataset.sym);
+  if (order.join() === now.join()) return;
+  for (const sym of order) { const li = ul.querySelector(`li[data-sym="${CSS.escape(sym)}"]`); if (li) ul.appendChild(li); }
+}
+
 function renderWatchlist() {
   const ul = $("watchlist");
   ul.innerHTML = "";
-  for (const sym of state.watchlist) {
+  ul.classList.toggle("sorted", wlSort !== "mine");
+  for (const sym of displayOrder()) {
     const info = state.bySymbol.get(sym);
     const base = info?.base ?? sym;
     const li = document.createElement("li");
@@ -337,7 +376,7 @@ function initWatchlistDrag() {
   const ul = $("watchlist");
   ul.addEventListener("pointerdown", (e) => {
     const grip = e.target.closest(".wl-grip");
-    if (!grip) return;
+    if (!grip || wlSort !== "mine") return;   // dragging only rearranges "My order"
     e.preventDefault();
     wlDrag.li = grip.closest("li");
     wlDrag.pointerId = e.pointerId;
@@ -459,6 +498,7 @@ async function refreshTickers() {
     const rows = await get24h(state.watchlist);
     for (const r of rows) state.stats.set(r.symbol, r);
     state.watchlist.forEach((s) => paintRow(s));
+    resortWatchlist();   // prices just arrived: put rows in the chosen sort order
     paintHeader();
   } catch (e) { console.warn(e); }
 
@@ -1132,6 +1172,9 @@ async function boot() {
   });
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
+  $("wl-sort").value = wlSort;
+  $("wl-sort").addEventListener("change", (e) => { wlSort = SORTS.has(e.target.value) ? e.target.value : "mine"; store.set("wlSort", wlSort); renderWatchlist(); });
+  setInterval(resortWatchlist, 5000);   // keep the sort right as prices and signals change
   $("wl-summary").addEventListener("change", (e) => { if (e.target.id === "wl-auto") setScanEvery(+e.target.value); });
   $("sym-pair").addEventListener("click", (e) => {
     if (!e.target.closest("[data-open-picks]")) return;
