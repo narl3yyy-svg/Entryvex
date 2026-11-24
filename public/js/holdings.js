@@ -136,7 +136,37 @@ async function adviseOne(h) {
       : regime === "down" ? `The daily trend is falling, so <strong>don't add yet</strong>: buying more just to lower your average price in a downtrend is a common, costly mistake. Keep what you have, set an alert at <strong>${fmt.price(dip)}</strong> to re-check, and add only when Entryvex shows a BUY signal${addUsd ? ` (about <strong>$${addUsd.toFixed(0)}</strong>)` : ""}.`
       : `Nothing strong either way right now. To add on a dip, set an alert at <strong>${fmt.price(dip)}</strong>${addUsd ? ` and add about <strong>$${addUsd.toFixed(0)}</strong> there` : ""}. If it falls below ${fmt.price(deep)} (it ended that low only about 1 in 10 times), re-check before doing anything.`;
   }
-  return { price, call, cls, text, reasons, dip, deep, addUsd, regime, pUp, earn };
+  // A bad month for this market: the 1-in-20 worst one-month change in its own daily history.
+  const span = stock ? 21 : 30, monthly = [];
+  for (let i = span; i < daily.length; i++) monthly.push(daily[i].close / daily[i - span].close - 1);
+  monthly.sort((x, y) => x - y);
+  const badMonth = monthly.length >= 40 ? monthly[Math.floor(monthly.length * 0.05)] : null;
+  return { price, call, cls, text, reasons, dip, deep, addUsd, regime, pUp, earn, badMonth };
+}
+
+/** Whole-portfolio check: too much in one place, how much is crypto, and what a bad month could cost. */
+function portfolioCheck() {
+  const rows = holdings.map((h) => {
+    const a = advice.get(h.symbol)?.a;
+    const price = a?.price || hooks.getPrice(h.symbol);
+    const usd = !isStock(h.symbol) || stockInfo(h.symbol).currency === "USD";
+    return { h, a, val: price && usd ? price * h.qty : null };
+  }).filter((r) => r.val > 0);
+  if (!rows.length) return "";
+  const total = rows.reduce((t, r) => t + r.val, 0);
+  const top = rows.reduce((m, r) => (r.val > m.val ? r : m));
+  const topShare = top.val / total;
+  const crypto = rows.filter((r) => !isStock(r.h.symbol)).reduce((t, r) => t + r.val, 0) / total;
+  const known = rows.filter((r) => r.a?.badMonth != null);
+  const bad = known.length === rows.length ? known.reduce((t, r) => t + r.val * r.a.badMonth, 0) : null;
+  const notes = [];
+  if (rows.length === 1) notes.push(`<li><strong>Everything is in one market</strong> (${fmt.esc(hooks.nameFor(top.h.symbol))}). If it has a bad stretch, so does all of your money. Spreading across a few unrelated markets (or a broad fund like SPY) lowers that risk.</li>`);
+  else if (topShare > 0.4) notes.push(`<li><strong>${Math.round(topShare * 100)}% is in ${fmt.esc(hooks.nameFor(top.h.symbol).replace(/\.$/, ""))}.</strong> That one market drives most of your result. Many investors keep any single holding under about a quarter.</li>`);
+  else notes.push(`<li>Your largest holding is ${Math.round(topShare * 100)}% (${fmt.esc(hooks.nameFor(top.h.symbol))}), so no single market dominates.</li>`);
+  if (crypto > 0.5 && rows.length > 1) notes.push(`<li><strong>${Math.round(crypto * 100)}% is crypto.</strong> Coins tend to fall together, so a crypto slump hits most of your holdings at once.</li>`);
+  else if (crypto > 0) notes.push(`<li>${Math.round(crypto * 100)}% is crypto, ${Math.round((1 - crypto) * 100)}% stocks and funds.</li>`);
+  if (bad != null) notes.push(`<li><strong>In a bad month</strong> (the worst 1 in 20, measured from each market's own history), these holdings could be down about <strong class="down">$${Math.abs(bad).toFixed(0)} (−${Math.abs((bad / total) * 100).toFixed(0)}%)</strong> if they all fell together. Only hold an amount you could live with seeing that happen.</li>`);
+  return `<div class="hold-portfolio"><div class="d-when-title">Portfolio check</div><ul class="small">${notes.join("")}</ul></div>`;
 }
 
 /** For the AI analyst. */
@@ -193,7 +223,7 @@ function render() {
       <div class="hold-form-btns"><button class="btn" type="submit">Add holding</button><button class="link-btn small" type="button" id="hold-use-current">Use the chart's market</button></div>
     </form>
     ${msg ? `<p class="small note">${msg}</p>` : ""}
-    ${holdings.length ? `<div class="hold-list">${cards}</div>
+    ${holdings.length ? `${portfolioCheck()}<div class="hold-list">${cards}</div>
       <div class="simple-actions"><button class="btn" id="hold-ask-ai">🤖 Ask the AI about my holdings</button><button class="link-btn small" id="hold-refresh">Re-check all</button></div>
       <p class="tiny muted">Calls use each market's daily chart: Entryvex's setups and their record, the trend, the measured 20-day price range, 3-month history, signals on other candle sizes and (stocks) earnings dates. They describe measured odds, not certainties. Not financial advice.</p>`
       : `<p class="muted small">Nothing added yet. Enter something you own above.</p>`}`;
