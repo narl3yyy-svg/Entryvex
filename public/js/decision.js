@@ -19,7 +19,7 @@ import { newsAiCheck } from "./newsai.js";
 import { trendingCheck } from "./trending.js";
 import { botViewCached } from "./bot.js";
 import { holdingOf } from "./holdings.js";
-import { scoreLine } from "./scorecard.js";
+import { scoreLine, scoreFor } from "./scorecard.js";
 
 /** Scheduled high-impact economic events soon (central banks, inflation, jobs…) mean sudden swings. */
 async function eventRisk() {
@@ -107,13 +107,18 @@ async function newsMood(sym, base, name) {
   };
 }
 
-function forecastOdds(f) {
+function forecastOdds(f, sym, iv) {
   if (!f) return null;
   const p = f.pUp;
+  // The scorecard checks this lean against what really happened. Where it has been no better than a
+  // coin flip on this market, it's shown but not counted for or against a trade.
+  const sc = scoreFor(sym, iv);
+  const weak = sc && sc.called >= 20 && sc.dir < 55;
   return {
     label: "Measured odds of being higher",
-    effect: p >= 0.55 ? 1 : p <= 0.45 ? -1 : 0,
-    text: `${Math.round(p * 100)}% of the time, price was higher ${f.H} candles later${Math.abs(p - 0.5) < 0.03 ? " (basically a coin flip)" : ""}.`,
+    effect: weak ? 0 : p >= 0.55 ? 1 : p <= 0.45 ? -1 : 0,
+    text: `${Math.round(p * 100)}% of the time, price was higher ${f.H} candles later${Math.abs(p - 0.5) < 0.03 ? " (basically a coin flip)" : ""}.`
+      + (weak ? ` Not counted: on this market the lean has been right only ${sc.dir}% of the time (${sc.live ? "live" : "past-data"} scorecard).` : sc && sc.called >= 20 ? ` Its lean has been right ${sc.dir}% of the time here.` : ""),
   };
 }
 
@@ -160,7 +165,7 @@ function html(c, checks) {
   const unit = stock ? "shares" : c.base;
   const held = openTrades().filter((t) => t.symbol === c.symbol);
   const f = c.forecast;
-  const all = checks ? [...checks, forecastOdds(f)].filter(Boolean) : null;
+  const all = checks ? [...checks, forecastOdds(f, c.symbol, f?.interval || c.interval)].filter(Boolean) : null;
   const tail = all ? all.filter((x) => x.effect > 0).length : 0;
   const head = all ? all.filter((x) => x.effect < 0).length : 0;
 

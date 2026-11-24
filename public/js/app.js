@@ -1361,7 +1361,7 @@ async function boot() {
     onFollowChange: () => scheduleSync(500),   // tell the alert server (phone / closed-app alerts)
     openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); },
   });
-  initScorecard({ openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); } });
+  initScorecard({ onLoad: () => refreshDecision(decisionCtx()), openMarket: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); } });
   // "See every check" links in the forecast box and the answer card open the Scorecard tab.
   document.addEventListener("click", (e) => {
     if (!e.target.closest("[data-open-score]")) return;

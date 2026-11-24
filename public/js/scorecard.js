@@ -4,7 +4,7 @@
 import * as fmt from "./format.js";
 
 const $ = (id) => document.getElementById(id);
-let data = null, visible = false, loadedAt = 0, hooks = { openMarket: () => {} };
+let data = null, visible = false, loadedAt = 0, hooks = { openMarket: () => {}, onLoad: () => {} };
 const LIVE_MIN = 20;   // use the live record for a market once it has this many checks
 
 const when = (t) => new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -25,7 +25,8 @@ export function scorecardVisible(on) { visible = on; if (on) load(true).then(ren
 
 async function load(force) {
   if (!force && data && Date.now() - loadedAt < 10 * 60e3) return data;
-  try { const r = await fetch("/api/scorecard"); if (r.ok) { data = await r.json(); loadedAt = Date.now(); } } catch {}
+  const first = !data;
+  try { const r = await fetch("/api/scorecard"); if (r.ok) { data = await r.json(); loadedAt = Date.now(); if (first) hooks.onLoad(); } } catch {}
   return data;
 }
 
