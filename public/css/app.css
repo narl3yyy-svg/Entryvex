@@ -1030,3 +1030,8 @@ button.today-row { cursor: pointer; } button.today-row:hover { border-color: var
 .j-practice-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
 .j-practice-h .link-btn { margin-left: auto; }
 .simple-actions .ghost-btn { margin-left: 8px; }
+
+/* Glossary: trading words that explain themselves */
+abbr.term { text-decoration: underline dotted rgba(141,187,255,.7); text-underline-offset: 3px; cursor: help; }
+abbr.term:focus-visible { outline: 2px solid rgba(141,187,255,.6); outline-offset: 2px; border-radius: 3px; }
+.term-bubble { position: absolute; z-index: 1000; background: var(--panel-2, #1b2230); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 13px; line-height: 1.45; box-shadow: 0 8px 24px rgba(0,0,0,.35); }

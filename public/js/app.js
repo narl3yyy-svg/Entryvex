@@ -30,6 +30,7 @@ import { initBot, botVisible, followBot, botViewCached } from "./bot.js";
 import { initHoldings, holdingsVisible } from "./holdings.js";
 import { initScorecard, scorecardVisible } from "./scorecard.js";
 import { initToday, todayVisible, todayRefresh } from "./today.js";
+import { watchGlossary } from "./glossary.js";
 import { addPriceAlert } from "./alerts.js";
 import { sizePosition } from "./sizing.js";
 import { settings as moneySettings } from "./money.js";
@@ -1246,6 +1247,8 @@ async function boot() {
   $("center-live").addEventListener("click", () => centerLive());
   $("scan-top").addEventListener("click", scanFromTop);
   initMode();
+  // Dotted-underlined trading words explain themselves on hover or tap.
+  watchGlossary(["simple-card", "decision", "forecast-box", "tab-today", "tab-holdings", "tab-score", "tab-trades", "tab-bot"]);
   $("wl-sort").value = wlSort;
   $("wl-sort").addEventListener("change", (e) => { wlSort = SORTS.has(e.target.value) ? e.target.value : "mine"; store.set("wlSort", wlSort); renderWatchlist(); });
   setInterval(resortWatchlist, 5000);   // keep the sort right as prices and signals change

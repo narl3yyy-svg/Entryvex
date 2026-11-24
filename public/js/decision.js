@@ -177,7 +177,7 @@ function html(c, checks) {
     const adv = tradeAdvice(t, c.price);
     verdict = adv.action; cls = adv.level === "sell" ? "sell" : "hold";
     const pnl = c.price ? (c.price - t.entry) * t.qty - t.fee * (t.entry * t.qty + c.price * t.qty) : null;
-    headline = `You own ${+t.qty.toFixed(8)} ${unit}${pnl != null ? `, now <strong class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : "−"}$${Math.abs(pnl).toFixed(2)}</strong> after fees` : ""}. ${adv.why}`;
+    headline = `${t.practice ? "🎮 Practice trade (pretend money): " : ""}You own ${+t.qty.toFixed(8)} ${unit}${pnl != null ? `, now <strong class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : "−"}$${Math.abs(pnl).toFixed(2)}</strong> after fees` : ""}. ${adv.why}`;
   } else if (!r) {
     verdict = "CHECKING…"; cls = "wait"; headline = "Testing this market's setups against its history…";
   } else if (r.liquidity && !r.liquidity.ok) {
