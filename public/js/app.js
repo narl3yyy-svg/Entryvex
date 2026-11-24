@@ -1424,7 +1424,7 @@ async function boot() {
       const a = getAlertPrefs();
       return {
         priceAlerts: a.priceAlerts, move: a.move,
-        trades: openTrades().map((t) => ({ id: t.id, symbol: t.symbol, base: state.bySymbol.get(t.symbol)?.base, stop: t.stop, target: t.target, sellBy: t.sellBy })),
+        trades: openTrades().filter((t) => !t.practice).map((t) => ({ id: t.id, symbol: t.symbol, base: state.bySymbol.get(t.symbol)?.base, stop: t.stop, target: t.target, sellBy: t.sellBy })),
         setups: a.setupOn ? setupMarkets(a.setupMin) : [],
         followBot: followBot(),
       };

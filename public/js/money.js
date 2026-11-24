@@ -1,7 +1,7 @@
 // "Your money": balance, risk settings, the daily loss guard, the dollar trade card
 // and a manual trade calculator. Everything is stored only in this browser.
 import { sizePosition, roundTick } from "./sizing.js";
-import { todayStats, onJournalChange } from "./journal.js";
+import { todayStats, onJournalChange, practiceBalance, PRACTICE_START } from "./journal.js";
 import { isStock, stockInfo } from "./market.js";
 import * as fmt from "./format.js";
 import { fxRate, loadFx, money as fxMoney } from "./fx.js";
@@ -178,11 +178,22 @@ export function renderTradeCard(c) {
     </details>`}
     <div class="take-row">${takeButton({ symbol: c.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval, source: "entryvex" })}
       <span class="muted small">Only after you've actually placed the order.</span></div>` : ""}
+    ${account(c.symbol).foreign ? "" : `<div class="take-row">${practiceButton({ symbol: c.symbol, entry: c.plan.entry, stop: c.plan.stop, target: c.plan.target, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval }, c.costPerSide, c.rules)}
+      <span class="muted small">Not ready to use real money? Try it with pretend money first.</span></div>`}
   </div>`;
 }
 
 function takeButton(d) {
   return `<button class="btn take-trade" data-take='${fmt.esc(JSON.stringify(d))}'>✓ I took this trade</button>`;
+}
+/** "Practice this trade": the same plan, sized for the $1,000 practice account (see journal.js). */
+export function practiceButton(d, costPerSide, rules) {
+  const bal = practiceBalance();
+  // Fractional units are fine with pretend money (and many brokers sell fractional shares).
+  const r = { ...(rules || {}), stepSize: 1e-8, minQty: 0, minNotional: 1, tickSize: rules?.tickSize || 1e-8 };
+  const sz = bal > 0 ? sizePosition({ balance: bal, riskPct: settings.riskPct || 1, entry: d.entry, stop: d.stop, target: d.target, costPerSide, rules: r }) : null;
+  if (!sz?.ok) return "";
+  return `<button class="ghost-btn take-trade" data-take='${fmt.esc(JSON.stringify({ ...d, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, practice: true, source: "practice" }))}' title="Buy it with pretend money in your $${PRACTICE_START} practice account">🎮 Practice this trade</button>`;
 }
 
 function copyable(v) { return `<button class="copy mono" data-copy="${fmt.esc(v)}" title="Copy">${fmt.esc(v)}</button>`; }

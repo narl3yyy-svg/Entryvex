@@ -6,7 +6,7 @@
 import { getKlineHistory, get24h, isStock, stockInfo } from "./market.js";
 import { ema } from "./indicators.js";
 import { sizePosition } from "./sizing.js";
-import { settings, guard } from "./money.js";
+import { settings, guard, practiceButton } from "./money.js";
 import { openTrades, tradeAdvice } from "./journal.js";
 import { RULES } from "./engine.js";
 import * as fmt from "./format.js";
@@ -397,7 +397,8 @@ function simpleHtml(c) {
   let word, cls, why, plan = "";
   if (held.length) {
     const adv = tradeAdvice(held[0], c.price);
-    word = adv.level === "sell" ? "SELL" : "HOLD"; cls = adv.level === "sell" ? "sell" : "hold"; why = adv.why;
+    word = adv.level === "sell" ? "SELL" : "HOLD"; cls = adv.level === "sell" ? "sell" : "hold";
+    why = (held[0].practice ? "<strong>Your practice trade</strong> (pretend money). " : "") + adv.why;
   } else if (!r) {
     word = "CHECKING"; cls = "wait"; why = `Testing ${fmt.esc(c.base)}'s setups against its history…`;
   } else if (r.liquidity && !r.liquidity.ok) {
@@ -412,7 +413,9 @@ function simpleHtml(c) {
       word = lvl === "go" ? "BUY" : "SMALL BUY"; cls = lvl === "go" ? "buy" : "caution";
       const s = best.stats;
       why = `${best.model ? "Entryvex's prediction model" : `The “${fmt.esc(best.name)}” setup`} just signalled a buy. On ${fmt.esc(c.base)} it ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after fees${lvl === "go" ? "" : " (only slightly profitable, so use a smaller amount)"}.`;
-      plan = buySteps(c, r, unit) + `<div class="simple-actions"><button class="btn" data-take-pro>I took this trade: track it for me</button></div>`;
+      const usd = !stock || stockInfo(c.symbol).currency === "USD";
+      const practice = usd && r.plan ? practiceButton({ symbol: c.symbol, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, setup: best.name, verdict: lvl, interval: c.interval }, r.costPerSide, c.rules) : "";
+      plan = buySteps(c, r, unit) + `<div class="simple-actions"><button class="btn" data-take-pro>I took this trade: track it for me</button>${practice}</div>`;
     } else if (falling && (bearishPattern || (f && f.pUp < 0.45))) {
       word = "SELL"; cls = "sell";
       why = `The trend is down (price is below its 200-candle average)${bearishPattern ? " and a bearish candle pattern just formed" : ""}${f && f.pUp < 0.45 ? `, and only ${Math.round(f.pUp * 100)}% of similar moments ended higher` : ""}. <strong>Don't buy.</strong> If you own ${fmt.esc(c.base)}, Entryvex would sell or keep a tight stop-loss.`;

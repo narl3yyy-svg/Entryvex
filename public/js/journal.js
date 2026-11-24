@@ -20,6 +20,16 @@ const baseOf = (s) => hooks.getInfo(s)?.base ?? s.replace(/(USDT|USDC|USD)$/, ""
 
 export function openTrades() { return trades.filter((t) => t.status === "open"); }
 
+/* ---------- Practice account: pretend money, real prices ---------- */
+// "Practice this trade" puts a BUY signal into a virtual $1,000 account, so a new user can see how
+// following Entryvex would have gone before risking anything. Practice trades never count toward
+// the daily loss guard or the real results.
+export const PRACTICE_START = 1000;
+export function practiceBalance() {
+  const since = +store.get("practiceFrom", 0);
+  return PRACTICE_START + trades.filter((t) => t.practice && t.status === "closed" && t.openedAt >= since).reduce((s, t) => s + t.pnl, 0);
+}
+
 /** P&L after fees for a closed trade (or an open one at `price`). */
 function pnl(t, exit) {
   const gross = (exit - t.entry) * t.qty;
@@ -31,8 +41,8 @@ function pnl(t, exit) {
 function sameDay(a, b) { const x = new Date(a), y = new Date(b); return x.toDateString() === y.toDateString(); }
 export function todayStats() {
   const now = Date.now();
-  const closed = trades.filter((t) => t.status === "closed" && sameDay(t.closedAt, now));
-  return { pnl: closed.reduce((s, t) => s + t.pnl, 0), trades: closed.length, open: openTrades().length, losses: closed.filter((t) => t.pnl < 0).length };
+  const closed = trades.filter((t) => !t.practice && t.status === "closed" && sameDay(t.closedAt, now));
+  return { pnl: closed.reduce((s, t) => s + t.pnl, 0), trades: closed.length, open: openTrades().filter((t) => !t.practice).length, losses: closed.filter((t) => t.pnl < 0).length };
 }
 
 /* ---------- Adding / closing ---------- */
@@ -42,7 +52,7 @@ export function addTrade(t) {
     symbol: t.symbol, entry: +t.entry, qty: +t.qty,
     stop: t.stop ? +t.stop : null, target: t.target ? +t.target : null,
     setup: t.setup || null, verdict: t.verdict || null, interval: t.interval || null,
-    source: t.source || "manual", fee: feeRate(),
+    source: t.source || "manual", fee: feeRate(), practice: !!t.practice,
     openedAt: Date.now(), status: "open",
   };
   // Entryvex's plan has a time limit: if neither level is hit within 24 candles, sell at market.
@@ -70,12 +80,13 @@ export function onTicker(symbol, price) {
     if (t.status !== "open" || t.symbol !== symbol) continue;
     t.last = price;
     if (t.stop && price <= t.stop) {
-      closeQuiet(t, t.stop, "stop");
-      hooks.notify({ kind: "down", symbol, title: `${baseOf(symbol)} stop-loss hit`, body: `My Trades recorded −$${Math.abs(t.pnl).toFixed(2)} after fees. The daily loss guard is updated.` });
+      // Practice fills at the worse of the stop and the price (a gap can jump past a stop-loss).
+      closeQuiet(t, t.practice ? Math.min(price, t.stop) : t.stop, "stop");
+      hooks.notify({ kind: "down", symbol, title: `${baseOf(symbol)} stop-loss hit${t.practice ? " (practice)" : ""}`, body: t.practice ? `Practice account: −$${Math.abs(t.pnl).toFixed(2)} after fees. Losses are part of every strategy; what matters is the total over many trades.` : `My Trades recorded −$${Math.abs(t.pnl).toFixed(2)} after fees. The daily loss guard is updated.` });
       changed = true;
     } else if (t.target && price >= t.target) {
       closeQuiet(t, t.target, "target");
-      hooks.notify({ kind: "up", symbol, title: `${baseOf(symbol)} take-profit hit 🎯`, body: `My Trades recorded ${t.pnl >= 0 ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.` });
+      hooks.notify({ kind: "up", symbol, title: `${baseOf(symbol)} take-profit hit 🎯${t.practice ? " (practice)" : ""}`, body: `${t.practice ? "Practice account" : "My Trades recorded"} ${t.pnl >= 0 ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.` });
       changed = true;
     }
   }
@@ -88,6 +99,13 @@ function checkTimeLimits() {
   let changed = false;
   for (const t of openTrades()) {
     if (!t.sellBy || t.timeAlerted || Date.now() < t.sellBy) continue;
+    if (t.practice) {   // practice trades sell themselves at the time limit, like the plan says
+      const px = t.last ?? hooks.getPrice(t.symbol);
+      if (!(px > 0)) continue;
+      closeQuiet(t, px, "time"); changed = true;
+      hooks.notify({ kind: "info", symbol: t.symbol, title: `${baseOf(t.symbol)} practice trade sold at the time limit`, body: `Practice account: ${t.pnl >= 0 ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.` });
+      continue;
+    }
     t.timeAlerted = true; changed = true;
     hooks.notify({ kind: "caution", symbol: t.symbol, title: `SELL NOW: ${baseOf(t.symbol)} time limit reached`,
       body: "Neither the take-profit nor the stop-loss was hit in time. Entryvex's plan is to sell at the market price now. Then record the sale in My trades." });
@@ -123,6 +141,7 @@ export function initJournal(h) {
     }
     if (b.dataset.act === "delete") { trades = trades.filter((t) => t.id !== id); save(); }
     if (b.dataset.act === "pick") hooks.onPick(b.dataset.sym);
+    if (b.id === "j-practice-reset" && confirm("Start the practice account again at $1,000? Past practice trades stay in the history.")) { store.set("practiceFrom", Date.now()); render(); }
     if (b.id === "j-clear" && confirm("Delete your whole trade history from this browser? This can't be undone.")) { trades = []; save(); }
   });
   root.addEventListener("change", (e) => {
@@ -151,8 +170,16 @@ export function initJournal(h) {
     const b = e.target.closest("button.take-trade");
     if (!b) return;
     const d = JSON.parse(b.dataset.take);
+    if (d.practice && openTrades().some((t) => t.practice && t.symbol === d.symbol)) {
+      hooks.notify({ kind: "info", symbol: d.symbol, title: `Already practising ${baseOf(d.symbol)}`, body: "One practice trade per market at a time. See it in My trades." });
+      hooks.showTab?.("trades");
+      return;
+    }
+    if (d.practice) { const px = hooks.getPrice(d.symbol); if (px > 0 && d.entry > 0 && px > d.entry) { d.qty = d.qty * d.entry / px; d.entry = px; } }   // buys at the live price, never better
     addTrade(d);
-    hooks.notify({ kind: "info", symbol: d.symbol, title: `Added to My Trades: ${baseOf(d.symbol)}`, body: "Entryvex will follow the price and record the result when your target or stop is hit. Edit the fill price if yours was different." });
+    hooks.notify(d.practice
+      ? { kind: "info", symbol: d.symbol, title: `Practice trade: ${baseOf(d.symbol)}`, body: "Bought with pretend money at the live price. Entryvex sells it at the take-profit, the stop-loss or the time limit, and adds the result to your practice account." }
+      : { kind: "info", symbol: d.symbol, title: `Added to My Trades: ${baseOf(d.symbol)}`, body: "Entryvex will follow the price and record the result when your target or stop is hit. Edit the fill price if yours was different." });
     hooks.showTab?.("trades");
   });
   render();
@@ -160,8 +187,9 @@ export function initJournal(h) {
   setInterval(checkTimeLimits, 30_000);
 }
 
-function stats() {
-  const closed = trades.filter((t) => t.status === "closed");
+function stats(practice = false) {
+  const since = practice ? +store.get("practiceFrom", 0) : 0;
+  const closed = trades.filter((t) => t.status === "closed" && !!t.practice === practice && t.openedAt >= since);
   const wins = closed.filter((t) => t.pnl > 0);
   const losses = closed.filter((t) => t.pnl <= 0);
   const sum = (a) => a.reduce((s, t) => s + t.pnl, 0);
@@ -185,7 +213,19 @@ function render() {
   const closed = trades.filter((t) => t.status === "closed").sort((a, b) => b.closedAt - a.closedAt);
   const wl = hooks.getWatchlist();
   const ev = s.fromEntryvex;
+  const ps = stats(true), pBal = practiceBalance(), pOpen = open.filter((t) => t.practice).length;
+  const practiceBox = ps.n || pOpen ? `<div class="j-practice">
+      <div class="j-practice-h"><strong>🎮 Practice account</strong> <span class="muted small">pretend money, real prices</span> <button class="link-btn" id="j-practice-reset">Start again</button></div>
+      <div class="j-stats">
+        <div><span>Balance</span><strong class="mono ${pBal >= PRACTICE_START ? "up" : "down"}">$${pBal.toFixed(2)}</strong></div>
+        <div><span>Return</span><strong class="mono ${pBal >= PRACTICE_START ? "up" : "down"}">${((pBal / PRACTICE_START - 1) * 100).toFixed(2)}%</strong></div>
+        <div><span>Closed / open</span><strong class="mono">${ps.n} / ${pOpen}</strong></div>
+        <div><span>Win rate</span><strong class="mono">${isFinite(ps.winRate) ? Math.round(ps.winRate * 100) + "%" : "—"}</strong></div>
+      </div>
+      <p class="muted small">${ps.n < 20 ? `A real verdict needs about 20 closed practice trades (${ps.n} so far). Many small wins and a few losses is normal.` : pBal >= PRACTICE_START ? "Following Entryvex's signals has made money in practice. If you go real, start small and keep the same rules." : "Following the signals has lost money in practice so far. Keep practising before using real money."}</p>
+    </div>` : `<p class="muted small">🎮 <strong>New to trading?</strong> Press <strong>Practice this trade</strong> on any BUY signal. Entryvex buys it with pretend money (a $${PRACTICE_START} practice account) and sells it by the plan, so you can see how following the signals goes before risking real money.</p>`;
   root.innerHTML = `
+    ${practiceBox}
     <p class="muted small explain">Track the trades <strong>you</strong> place on Binance.US (or anywhere). Click <strong>"I took this trade"</strong> on a trade card, or add one below.
       Entryvex follows the live price and records the result automatically when your take-profit or stop-loss is hit, just like an OCO order would. Results feed the daily loss guard.</p>
 
@@ -217,10 +257,10 @@ function render() {
       ${closed.slice(0, 100).map((t) => `<tr>
         <td class="muted">${new Date(t.closedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}</td>
         <td><button class="link-btn" data-act="pick" data-sym="${t.symbol}">${fmt.esc(baseOf(t.symbol))}</button></td>
-        <td class="muted small">${t.setup ? fmt.esc(t.setup) : "manual"}</td>
+        <td class="muted small">${t.practice ? "🎮 practice · " : ""}${t.setup ? fmt.esc(t.setup) : "manual"}</td>
         <td class="num mono">${fmt.price(t.entry)} → ${fmt.price(t.exit)}</td>
         <td class="num mono ${t.pnl >= 0 ? "up" : "down"}">${money(t.pnl)}</td>
-        <td class="muted small">${{ target: "🎯 target", stop: "stop-loss", manual: "you closed" }[t.reason] || t.reason}</td>
+        <td class="muted small">${{ target: "🎯 target", stop: "stop-loss", manual: "you closed", time: "time limit" }[t.reason] || t.reason}</td>
         <td><button class="link-btn" data-act="delete" data-id="${t.id}" title="Delete">✕</button></td></tr>`).join("")}
       </tbody></table></div>` : `<p class="muted small">No closed trades yet.</p>`}`;
 }
@@ -239,7 +279,7 @@ function openCard(t) {
     <div class="j-advice adv-${adv.level}"><strong>${adv.action}</strong><span>${adv.why}</span></div>
     <div class="j-card-top">
       <button class="link-btn j-coin" data-act="pick" data-sym="${t.symbol}">${fmt.esc(baseOf(t.symbol))}</button>
-      <span class="muted small">${t.setup ? fmt.esc(t.setup) + " · " : ""}opened ${fmt.ago(t.openedAt)}</span>
+      <span class="muted small">${t.practice ? `<span class="pill pill-thin">PRACTICE</span> ` : ""}${t.setup ? fmt.esc(t.setup) + " · " : ""}opened ${fmt.ago(t.openedAt)}</span>
       <strong class="mono j-live ${live == null ? "" : live >= 0 ? "up" : "down"}" data-live="${t.id}">${live == null ? "—" : money(live)}</strong>
     </div>
     ${progress}

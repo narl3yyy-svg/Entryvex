@@ -1024,3 +1024,9 @@ body.mode-simple #center-tabs button:not([data-tab="today"]):not([data-tab="hold
 .today-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; text-align: left; width: 100%; padding: 8px 10px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; }
 button.today-row { cursor: pointer; } button.today-row:hover { border-color: var(--accent, #4c8dff); }
 .today-go { margin-left: auto; font-size: 12px; color: var(--up); }
+
+/* Practice account */
+.j-practice { border: 1px solid rgba(232,185,49,.45); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.j-practice-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.j-practice-h .link-btn { margin-left: auto; }
+.simple-actions .ghost-btn { margin-left: 8px; }
