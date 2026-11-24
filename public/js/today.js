@@ -9,6 +9,7 @@ import { marketBackdrop, fearGauge } from "./decision.js";
 import { loadEarningsCalendar, upcomingList } from "./earnings.js";
 import { loadCalendar, upcomingHighImpact } from "./calendar.js";
 import { scoreSummary } from "./scorecard.js";
+import { practiceBalance, PRACTICE_START, openTrades, onJournalChange } from "./journal.js";
 
 const $ = (id) => document.getElementById(id);
 let hooks = { getWatchlist: () => [], nameFor: (s) => s, open: () => {}, showTab: () => {} };
@@ -16,6 +17,7 @@ let visible = false, timer = null, mood = null, moodAt = 0;
 
 export function initToday(h) {
   hooks = { ...hooks, ...h };
+  onJournalChange(() => todayRefresh());
   $("tab-today").addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -95,6 +97,12 @@ function botHtml(b) {
     <br><button class="link-btn" data-today-tab="bot">See its trades and what it learned</button></p>`;
 }
 
+function practiceHtml() {
+  const open = openTrades().filter((t) => t.practice).length, bal = practiceBalance();
+  if (!open && Math.abs(bal - PRACTICE_START) < 0.005) return "";
+  return `<p class="small">🎮 <strong>Your practice account:</strong> <span class="${bal >= PRACTICE_START ? "up" : "down"}">$${bal.toFixed(2)}</span> from $${PRACTICE_START}${open ? `, ${open} practice trade${open === 1 ? "" : "s"} open` : ""}. <button class="link-btn" data-today-tab="trades">See them</button></p>`;
+}
+
 function comingHtml() {
   const syms = [...new Set([...hooks.getWatchlist(), ...(holdingsSnapshot() || []).map((h) => h.symbol)])];
   const { mine } = upcomingList(syms, 7);
@@ -118,6 +126,7 @@ function render() {
     <h4>Buy signals on your list</h4>${buysHtml(buys)}
     <h4>What you own</h4>${holdHtml(hold)}
     <h4>🤖 The bot</h4>${botHtml(bot)}
+    ${practiceHtml()}
     <h4>Coming up</h4>${comingHtml()}
     ${sc ? `<p class="small muted">📏 How much to trust the forecasts: price landed inside the 80% range ${sc.in80}% of the time (${sc.n} ${sc.live ? "live checks" : "tests on past data"}). <button class="link-btn" data-today-tab="score">See the scorecard</button></p>` : ""}
     <p class="tiny muted">Entryvex measures what has worked before; it can't see the future. Never trade money you can't afford to lose.</p>`;
