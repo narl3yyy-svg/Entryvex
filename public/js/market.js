@@ -34,9 +34,23 @@ const STOCK_IV = {
   "1w": { interval: "1wk", range: "max", recent: "1y" },
 };
 
-async function stockChart(sym, interval, which = "range") {
+// Several parts of the app often ask for the same chart at the same moment (price tiles, the answer
+// card, the scanner). Share one request between them, and reuse its answer for 3 seconds.
+const chartReq = new Map();   // url -> { t, p }
+function stockChart(sym, interval, which = "range") {
   const m = STOCK_IV[interval] || STOCK_IV["15m"];
   const url = `/api/market?src=chart&symbol=${encodeURIComponent(tickerOf(sym))}&interval=${m.interval}&range=${which === "recent" ? m.recent : m.range}`;
+  const hit = chartReq.get(url);
+  if (hit && (hit.pending || Date.now() - hit.t < 3000)) return hit.p.then(own);
+  const entry = { t: Date.now(), pending: true };
+  entry.p = fetchStockChart(sym, m, url).finally(() => { entry.pending = false; entry.t = Date.now(); });
+  entry.p.catch(() => chartReq.delete(url));
+  chartReq.set(url, entry);
+  if (chartReq.size > 200) for (const [k, v] of chartReq) if (!v.pending && Date.now() - v.t > 3000) chartReq.delete(k);
+  return entry.p.then(own);
+}
+const own = (r) => ({ candles: r.candles.map((c) => ({ ...c })), meta: r.meta });   // each caller gets its own copy
+async function fetchStockChart(sym, m, url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Stock data ${res.status}`);
   const j = await res.json();

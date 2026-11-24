@@ -5,10 +5,20 @@ import { loadCandles, saveCandles, mergeCandles } from "./candlecache.js";
 const REST = "https://api.binance.us/api/v3";
 const WS = "wss://stream.binance.us:9443/stream?streams=";
 
+// Identical requests made at the same moment share one download (each caller parses its own copy).
+const inflight = new Map();   // path -> { t, p }
 async function getJSON(path) {
-  const res = await fetch(REST + path);
-  if (!res.ok) throw new Error(`Binance.US ${res.status} on ${path}`);
-  return res.json();
+  const hit = inflight.get(path);
+  if (hit && (hit.pending || Date.now() - hit.t < 2000)) return JSON.parse(await hit.p);
+  const entry = { t: Date.now(), pending: true };
+  entry.p = fetch(REST + path).then((res) => {
+    if (!res.ok) throw new Error(`Binance.US ${res.status} on ${path}`);
+    return res.text();
+  }).finally(() => { entry.pending = false; entry.t = Date.now(); });
+  entry.p.catch(() => inflight.delete(path));
+  inflight.set(path, entry);
+  if (inflight.size > 200) for (const [k, v] of inflight) if (!v.pending && Date.now() - v.t > 2000) inflight.delete(k);
+  return JSON.parse(await entry.p);
 }
 
 /**
