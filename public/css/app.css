@@ -966,7 +966,7 @@ details.lt-card:not([open]) { padding-bottom: 12px; }
 /* What Simple mode hides (Pro shows everything) */
 body.mode-simple #decision, body.mode-simple #forecast-box, body.mode-simple #longterm, body.mode-simple #earnings-box,
 body.mode-simple .style-bar, body.mode-simple #patterns-toggle, body.mode-simple #ema-toggle, body.mode-simple #fc-caption { display: none !important; }
-body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="bot"]):not([data-tab="score"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
+body.mode-simple #center-tabs button:not([data-tab="today"]):not([data-tab="holdings"]):not([data-tab="bot"]):not([data-tab="score"]):not([data-tab="trades"]):not([data-tab="ai"]) { display: none; }
 @media (max-width: 640px) { .simple { margin: 4px 0 8px; } .simple-word { font-size: 28px; } .mode-seg button { padding: 4px 7px; } }
 .simple-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .wl-sig.wl-bot { background: rgba(122,162,255,.16); padding: 1px 5px; }
@@ -1010,3 +1010,17 @@ body.mode-simple #center-tabs button:not([data-tab="holdings"]):not([data-tab="b
 
 /* Narrow phones: let the top bar wrap instead of pushing the alert/help buttons off screen */
 @media (max-width: 440px) { .topbar { flex-wrap: wrap; row-gap: 6px; } .topbar-right { margin-left: auto; } }
+
+/* Today (daily brief) */
+.today-head h3 { margin: 0 0 4px; }
+.today-head p { margin: 0 0 6px; font-size: 14.5px; line-height: 1.5; }
+#tab-today h4 { margin: 14px 0 6px; }
+.today-moods { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.today-mood { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.today-mood span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.today-mood p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; }
+.today-mood.eff-pos { border-color: rgba(34,197,94,.45); } .today-mood.eff-neg { border-color: rgba(240,80,110,.45); }
+.today-list { display: flex; flex-direction: column; gap: 6px; }
+.today-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; text-align: left; width: 100%; padding: 8px 10px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; }
+button.today-row { cursor: pointer; } button.today-row:hover { border-color: var(--accent, #4c8dff); }
+.today-go { margin-left: auto; font-size: 12px; color: var(--up); }

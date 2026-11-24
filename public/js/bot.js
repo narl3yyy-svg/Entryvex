@@ -34,6 +34,8 @@ export function botViewCached(sym) {
   const t = (data.trades || []).filter((x) => x.sym === sym);
   return { holding, trades: t.length, wins: t.filter((x) => x.pnl > 0).length };
 }
+/** The last loaded record (null until loaded). */
+export function botData() { return data; }
 export function botVisible(on) { visible = on; if (on) { load().then(render); } }
 
 async function load() {

@@ -74,6 +74,8 @@ export function initHoldings(h) {
 export function holdingsVisible(on) { if (on) { render(); refresh(); } }
 
 /** Work out each holding's advice (daily chart; ~1–2 s per holding, cached 10 minutes). */
+/** Work out the advice for every holding (cached 10 minutes); used by the Today brief too. */
+export async function refreshHoldings() { await refresh(); }
 async function refresh() {
   for (const h of holdings) {
     const hit = advice.get(h.symbol);

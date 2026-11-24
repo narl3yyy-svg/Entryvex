@@ -57,7 +57,7 @@ async function bigTrend(sym, interval) {
   };
 }
 
-async function marketBackdrop(stock) {
+export async function marketBackdrop(stock) {
   const ref = stock ? "S:SPY" : "BTCUSDT";
   const [q] = await get24h([ref]);
   if (!q) return null;
@@ -70,7 +70,7 @@ async function marketBackdrop(stock) {
   };
 }
 
-async function fearGauge(stock) {
+export async function fearGauge(stock) {
   if (stock) {
     const res = await fetch("/api/market?src=chart&symbol=%5EVIX&interval=1d&range=5d");
     const v = (await res.json())?.chart?.result?.[0]?.meta?.regularMarketPrice;

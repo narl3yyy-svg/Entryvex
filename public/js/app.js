@@ -29,6 +29,7 @@ import { initBrowse } from "./browse.js";
 import { initBot, botVisible, followBot, botViewCached } from "./bot.js";
 import { initHoldings, holdingsVisible } from "./holdings.js";
 import { initScorecard, scorecardVisible } from "./scorecard.js";
+import { initToday, todayVisible, todayRefresh } from "./today.js";
 import { addPriceAlert } from "./alerts.js";
 import { sizePosition } from "./sizing.js";
 import { settings as moneySettings } from "./money.js";
@@ -1112,7 +1113,7 @@ function copyBotTrade() {
 /* ---------- Simple / Pro mode ---------- */
 // Simple (default for everyone): click a coin or stock and get one big BUY / SELL / WAIT card with how
 // much and when to sell. Pro: every tool, table and number.
-const SIMPLE_TABS = new Set(["holdings", "bot", "score", "trades", "ai"]);
+const SIMPLE_TABS = new Set(["today", "holdings", "bot", "score", "trades", "ai"]);
 function applyMode(mode) {
   if (mode !== "pro") mode = "simple";
   store.set("mode", mode);
@@ -1120,7 +1121,7 @@ function applyMode(mode) {
   document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   if (mode === "simple") {
     const cur = document.querySelector("#center-tabs button.on")?.dataset.tab;
-    if (cur && !SIMPLE_TABS.has(cur)) document.querySelector('#center-tabs button[data-tab="bot"]')?.click();
+    if (cur && !SIMPLE_TABS.has(cur)) document.querySelector('#center-tabs button[data-tab="today"]')?.click();
   }
 }
 function initMode() {
@@ -1309,10 +1310,11 @@ async function boot() {
   const showTab = (tab) => {
     store.set("centerTab", tab);
     document.querySelectorAll("#center-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    for (const t of ["scanner", "movers", "holdings", "bot", "score", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
+    for (const t of ["today", "scanner", "movers", "holdings", "bot", "score", "picks", "opps", "trades", "signals", "ai"]) $("tab-" + t).hidden = t !== tab;
     botVisible(tab === "bot");
     holdingsVisible(tab === "holdings");
     scorecardVisible(tab === "score");
+    todayVisible(tab === "today");
     moversVisible(tab === "movers");
     picksVisible(tab === "picks");
     if (tab === "ai") $("ai-input").focus({ preventScroll: true });
@@ -1372,7 +1374,7 @@ async function boot() {
   document.querySelectorAll("#center-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
   // Links from bot notifications (/?tab=bot) open the Bot tab.
   const urlTab = new URLSearchParams(location.search).get("tab");
-  showTab(urlTab === "bot" ? "bot" : store.get("centerTab", "scanner"));
+  showTab(urlTab === "bot" ? "bot" : store.get("centerTab", "today"));
   if (urlTab === "bot") setTimeout(() => $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }), 800);
 
   const pick = (sym) => { if (!state.watchlist.includes(sym)) addToWatchlist(sym); else selectSymbol(sym); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -1389,19 +1391,27 @@ async function boot() {
   initMovers({
     onOpen: (sym) => { if (isStock(sym)) state.bySymbol.set(sym, stockInfo(sym)); pick(sym); },
   });
+  // Open a market on the chart, at a candle size if given (used by Opportunities and Today).
+  function openAt(sym, iv) {
+    if (iv && iv !== state.interval) { state.interval = iv; state.view = null; store.set("interval", iv); store.set("view", null); markIntervalButtons(); onIntervalChanged(); }
+    if (sym === state.selected) loadChart(); else pick(sym);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  initToday({
+    getWatchlist: () => state.watchlist.slice(),
+    nameFor,
+    open: (sym, iv) => { if (isStock(sym)) { registerStock(sym, {}); state.bySymbol.set(sym, stockInfo(sym)); } openAt(sym, iv); },
+    showTab: (t) => { showTab(t); $("center-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); },
+  });
   initOpportunities({
     getWatchlist: () => state.watchlist.slice(),
     getInfo: (sym) => state.bySymbol.get(sym),
-    onPick: (sym, iv) => {
-      if (iv && iv !== state.interval) { state.interval = iv; state.view = null; store.set("interval", iv); store.set("view", null); markIntervalButtons(); onIntervalChanged(); }
-      if (sym === state.selected) loadChart(); else pick(sym);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    },
+    onPick: openAt,
     getInterval: () => (state.interval === "1w" ? "1d" : state.interval),
     // A watchlist market just turned green: pop-up, sound, and a desktop notification if those are on.
     onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, interval: b.iv, title: `${b.label === "GO" ? "BUY" : "SMALL BUY"}: ${b.base} on ${b.iv} candles`,
       body: `${b.setup} just appeared and has a winning record here. Tap to see the plan.` }),   // weekly has too little history to test setups: use daily
-    onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); },
+    onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); todayRefresh(); },
     onProgress: ({ running, done, total }) => {
       const b = $("scan-top");
       b.disabled = running;

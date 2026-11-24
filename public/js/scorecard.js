@@ -40,6 +40,14 @@ export function scoreFor(sym, iv) {
   return { live: useLive, n: r.n, in80: pct(r.in80, r.n), dir: pct(r.right, r.called), called: r.called, liveN: m.live.n };
 }
 
+/** Overall range record across markets (1h chart), for the daily brief. */
+export function scoreSummary() {
+  const o = data?.overall?.["1h"];
+  if (!o) return null;
+  const live = o.live.n >= LIVE_MIN, r = live ? o.live : o.back;
+  return r.n ? { live, n: r.n, in80: pct(r.in80, r.n) } : null;
+}
+
 /** One plain sentence for the forecast box ("" if this market/chart isn't tracked). */
 export function scoreLine(sym, iv) {
   const s = scoreFor(sym, iv);

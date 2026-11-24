@@ -9,7 +9,11 @@ const TRACKED = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "S:SPY"
 const reads = new Map(), records = new Map();
 let pooled = null;
 
+// Indexes and futures (^DJI, GC=F) have no company headlines; the server doesn't read news for them.
+const NO_NEWS = (sym) => /[\^=]/.test(sym);
+
 export async function getNewsRead(sym, name) {
+  if (NO_NEWS(sym)) return { available: false, reason: "Indexes and futures have no company headlines of their own, so the AI doesn't read news for them. See the News tab for market-wide headlines." };
   const hit = reads.get(sym);
   if (hit && Date.now() - hit.t < 10 * 60e3) return hit.v;
   let v = null;
@@ -22,6 +26,7 @@ export async function getNewsRead(sym, name) {
 }
 
 export async function getNewsRecord(sym) {
+  if (NO_NEWS(sym)) return null;
   const hit = records.get(sym);
   if (hit && Date.now() - hit.t < 30 * 60e3) return hit.v;
   let v = null;
