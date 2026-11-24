@@ -2,10 +2,11 @@
   "name": "entryvex",
   "version": "0.1.0",
   "private": true,
-  "description": "Live crypto market research dashboard: prices, charts and news.",
+  "description": "Plain-English BUY / SELL / WAIT for coins and stocks, measured on real history after fees.",
   "type": "module",
   "scripts": {
     "dev": "node dev-server.mjs",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "walkforward": "node tools/walkforward.mjs"
   }
 }

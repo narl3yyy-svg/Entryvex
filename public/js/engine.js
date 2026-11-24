@@ -386,7 +386,7 @@ function verdictFor(s, strict = false) {
     return { level: "flat", label: "No clear edge", why: `Slightly positive on average (${(s.ev * 100).toFixed(2)}%/trade), but so small compared with how much results vary that it's most likely luck.` };
   const consistent = s.evOld > 0 && s.evNew > 0;
   if (s.winLo > s.breakeven && consistent && s.tStat >= needT)
-    return { level: "edge", label: "Proven edge", why: "Profitable with about 95% statistical confidence, win rate above break-even even at the low end of its range, in both older and recent history." };
+    return { level: "edge", label: "Strong record", why: "Profitable in its past record with about 95% statistical confidence, win rate above break-even even at the low end of its range, in both older and recent history. A past record isn't a promise: see the Scorecard for how BUY answers did on data they never saw." };
   return { level: "weak", label: "Weak edge", why: consistent
     ? "Profitable, and probably not just luck, but not proven: the win rate could still be at or below break-even."
     : "Profitable overall but not consistent: older and recent history disagree." };

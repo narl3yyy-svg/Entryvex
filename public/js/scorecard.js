@@ -20,6 +20,7 @@ export function initScorecard(h) {
     if (b) hooks.openMarket(b.dataset.scoreOpen);
   });
   load();
+  loadWalk();
 }
 export function scorecardVisible(on) { visible = on; if (on) load(true).then(render); }
 
@@ -28,6 +29,46 @@ async function load(force) {
   const first = !data;
   try { const r = await fetch("/api/scorecard"); if (r.ok) { data = await r.json(); loadedAt = Date.now(); if (first) hooks.onLoad(); } } catch {}
   return data;
+}
+
+/* ---------- BUY signals tested on unseen data (tools/walkforward.mjs → public/data/walkforward.json) ---------- */
+let walk = null;
+async function loadWalk() {
+  try { const r = await fetch("/data/walkforward.json"); if (r.ok) { walk = await r.json(); hooks.onLoad(); } } catch {}
+}
+const pp = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(2)}%`;
+/** Plain verdict for one candle size: did BUY/SMALL BUY answers make money on data they never saw? */
+function walkVerdict(g) {
+  const n = (g.buy.n || 0) + (g.smallBuy.n || 0);
+  if (n < 20) return null;
+  const avg = ((g.buy.avg || 0) * (g.buy.n || 0) + (g.smallBuy.avg || 0) * (g.smallBuy.n || 0)) / n;
+  const se = Math.sqrt(((g.buy.se || 0) ** 2) * (g.buy.n || 0) / n + ((g.smallBuy.se || 0) ** 2) * (g.smallBuy.n || 0) / n);
+  const beat = g.random?.n ? avg - g.random.avg : null;
+  const word = avg - 2 * se > 0 ? "made money" : avg > 0 ? "made a little, but not clearly more than luck" : avg > -0.001 ? "about broke even" : "lost money";
+  return { n, avg, word, beat, good: avg - 2 * se > 0 };
+}
+/** One line for the answer card under a BUY / SMALL BUY: how answers like this did on unseen data. */
+export function walkLine(iv) {
+  const g = walk?.byIv?.[iv];
+  const v = g && walkVerdict(g);
+  if (!v) return "";
+  return `🧪 <strong>Tested on unseen data</strong> (${g.markets} markets, ${iv} charts): BUY answers like this ${v.word}, ${pp(v.avg)} per trade after fees over ${v.n} trades${v.beat != null ? ` (buying at random moments with the same exits: ${pp(g.random.avg)})` : ""}. ${v.good ? "" : "<strong>Use the practice account or a small amount.</strong> "}<button class="link-btn" data-open-score>How this was tested</button>`;
+}
+function walkSection() {
+  if (!walk?.byIv) return "";
+  const IVN = { "1h": "1-hour", "4h": "4-hour", "1d": "Daily" };
+  const row = (label, a) => a?.n ? `<td>${label}</td><td class="num">${a.n}</td><td class="num ${a.avg >= 0 ? "up" : "down"}">${pp(a.avg)}</td><td class="num">${Math.round(a.win * 100)}%</td>` : "";
+  const blocks = Object.entries(walk.byIv).map(([iv, g]) => {
+    const v = walkVerdict(g);
+    return `<div class="score-tile"><div class="score-tile-h"><strong>${IVN[iv] || iv} charts</strong> <span class="muted small">${g.markets} markets</span>${v ? ` <span class="small ${v.good ? "up" : v.avg < 0 ? "down" : ""}">BUY answers ${v.word}</span>` : ""}</div>
+      <table class="score-table"><thead><tr><th>Answer</th><th class="num">Trades</th><th class="num">Avg per trade</th><th class="num">Won</th></tr></thead><tbody>
+        <tr>${row("BUY", g.buy)}</tr><tr>${row("SMALL BUY", g.smallBuy)}</tr><tr class="muted">${row("Random moments, same exits", g.random)}</tr>
+      </tbody></table></div>`;
+  }).join("");
+  return `<h4>🧪 BUY signals tested on unseen data</h4>
+    <p class="muted small">Entryvex replayed its own answers on the ${walk.markets.length} markets above from ${walk.period.from} to ${walk.period.to}: at each moment it looked only at the history up to then, exactly as the app does, and took every BUY and SMALL BUY with the app's stop-loss, take-profit and time limit, after fees. "Random moments" is the same trade at random times, to show whether the timing adds anything. Updated ${walk.generated}.</p>
+    <div class="score-tiles">${blocks}</div>
+    <p class="small">What this means: a single setup's past record can look great by chance, because Entryvex checks many setups on many markets. On unseen data the answers ${Object.values(walk.byIv).some((g) => walkVerdict(g)?.good) ? "made money on some chart sizes, shown above" : "have not clearly beaten fees and random timing yet"}. Treat a BUY as a well-defined plan with a stop-loss, not a sure thing: try it in the practice account first, and keep real trades small.</p>`;
 }
 
 /** The record for one market and chart, for the forecast box: live once it has enough checks, else tested. */
@@ -124,6 +165,7 @@ function render() {
       <tbody>${data.markets.map((m) => `<tr><td><button class="link-btn" data-score-open="${fmt.esc(m.sym)}">${fmt.esc(m.name)}</button></td>${data.ivs.map((iv) => cell(m, iv)).join("")}</tr>`).join("")}</tbody>
     </table></div>
     <p class="muted small">Each cell uses the live record once it has ${LIVE_MIN} checks; until then, tests on past data${from && isFinite(from) ? ` (daily tests go back to ${day(from)})` : ""}.</p>
+    ${walkSection()}
     <h4>Latest checks</h4>
     ${data.recent.length ? `<div class="score-list">${data.recent.slice(0, 25).map(recentRow).join("")}</div>`
       : `<p class="muted small">No live forecast has finished yet.${data.nextCheck ? ` The first check is due around ${when(data.nextCheck)}.` : ""}</p>`}
