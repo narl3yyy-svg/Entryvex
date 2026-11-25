@@ -1,24 +1,18 @@
-// Entryvex paper-trading bot (v2): trades a VIRTUAL $100 across 12 markets (crypto + US stocks/ETFs)
-// on the server's 5-minute cron. No real money, no exchange keys: every trade is simulated with
-// fees, a stop-loss, a target and a time limit, like the plans Entryvex shows people.
+// Entryvex paper-trading bot (v3): trades a VIRTUAL $100 across 12 markets (crypto + US stocks/ETFs)
+// on the server's 5-minute cron. No real money, no exchange keys: every trade is simulated with fees.
 //
-// Before every buy it weighs:
-//   • the chart: Entryvex's setups and candle patterns on 1h, 4h and daily candles, and whether
-//     the market is rising or falling;
-//   • the record: a daily re-test of each setup on that market (trusted / unproven / losing);
-//   • the news: the latest AI read of that market's headlines (Entryvex records one every ~2 hours);
-//   • earnings (stocks): it won't buy within 3 trading days of a report, and sells before one,
-//     because prices often jump straight past a stop-loss on the news;
-//   • its own memory of what has worked.
-// It learns from every closed trade (kept permanently):
-//   • per market × setup × candle size × market type: a combination that keeps losing is BENCHED,
-//     an unproven one that keeps winning is PROMOTED;
-//   • per news mood: if buying on negative news keeps losing, it stops doing that;
-//   • per market type: if its exploring trades keep losing there, it stops exploring there.
-// Efficient: candles are only downloaded when one has closed (a few markets per tick), and its
-// memory is saved only when something changed, which stays inside free-tier limits.
+// It follows ONE rule, the one that held up on data it never saw (tools/walkforward.mjs):
+//   • BUY when a daily candle closes at a new 20-day high while the market is in an uptrend
+//     (price above its 200-day average, 50-day average above the 200-day);
+//   • SELL with a trailing stop: 2 ATR under the entry at first, then 3 ATR under the highest price
+//     since it bought, moved up after every daily close and never down. No fixed target.
+// Risk control: it risks 1% of the account per trade at the stop, at most 6 trades at once, each at
+// most 25% of the account. Stocks: no buys within 3 trading days of an earnings report, and it sells
+// before one (prices often jump straight past a stop-loss on the news).
+// v2 (many short-term setups on 1h/4h/daily) is kept in `archive`: on unseen data those setups didn't
+// beat fees or random timing, which is why the bot was rebuilt.
 import { candles } from "./push.js";
-import { SETUPS, RULES, regimeAt, riskDistance, exitOnCandle, analyze } from "../../public/js/engine.js";
+import { TREND, TREND_SETUP, regimeAt, trendStop, trailStop, exitOnCandle } from "../../public/js/engine.js";
 import { computeAll } from "../../public/js/indicators.js";
 
 const KEY = "bot:state";
@@ -33,18 +27,19 @@ export const MARKETS = [
   { sym: "S:AMZN", name: "Amazon", news: "nlog:S:AMZN", stock: true, earnings: "AMZN" },
 ];
 export const BOT = {
+  version: 3,
   fee: { crypto: 0.0005, stock: 0.0002 },   // per side: Binance.US fee + slippage / stock spread ($0 commission)
-  riskTrusted: 0.015, riskExplore: 0.004,   // share of the account lost if the stop is hit
-  maxPositions: 4, maxPositionShare: 0.3,    // at most 4 trades at once, each ≤30% of the account
-  ivs: ["1h", "4h", "1d"],
-  checksPerTick: 12,                         // candle checks per 5-minute tick (all due checks in one go = one save)
-  benchAfter: 5, promoteAfter: 8, exploreStopAfter: 12, newsStopAfter: 6,
+  risk: 0.01,                                // share of the account lost if the first stop is hit
+  maxPositions: 6, maxPositionShare: 0.25,   // at most 6 trades at once, each ≤25% of the account
+  ivs: ["1d"],
+  checksPerTick: 6,                          // daily-candle checks per 5-minute tick
+  stopAtr: TREND.stopAtr, trailAtr: TREND.trailAtr,
   earningsDays: 3, minNotional: 10,
 };
 const IV_MS = { "1h": 3600e3, "4h": 14400e3, "1d": 86400e3 };
 const IV_WORD = { "1h": "1-hour", "4h": "4-hour", "1d": "daily" };
 // Stocks: Yahoo's candles follow the trading session, so they're re-checked on a timer during market hours.
-const STOCK_RECHECK = { "1h": 30 * 60e3, "4h": 2 * 3600e3, "1d": 6 * 3600e3 };
+const STOCK_RECHECK = { "1h": 30 * 60e3, "4h": 2 * 3600e3, "1d": 2 * 3600e3 };
 const bySym = Object.fromEntries(MARKETS.map((m) => [m.sym, m]));
 const feeOf = (sym) => (bySym[sym]?.stock ? BOT.fee.stock : BOT.fee.crypto);
 const pct = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(2)}%`;
@@ -59,24 +54,19 @@ function usMarketOpen(now) {
   return m >= 9 * 60 + 30 && m < 16 * 60;
 }
 const memKey = (...parts) => parts.join("|");
-function memStatus(m, benchAfter = BOT.benchAfter) {
-  if (!m || m.n < (benchAfter || BOT.benchAfter)) return "new";
-  const avg = m.sum / m.n;
-  if (avg < 0) return "benched";
-  if (m.n >= BOT.promoteAfter) return "promoted";
-  return "ok";
-}
+// Per-market record, for display only. The bot doesn't bench a market after a few losses: trend trades
+// lose more often than they win, and a handful of results on one market is mostly luck.
+function memStatus(m) { return !m || m.n < 5 ? "new" : "ok"; }
 function tally(s, key, init, ret, pnl) {
   const m = s.memory[key] || { ...init, n: 0, wins: 0, sum: 0 };
-  const before = memStatus(m, init.benchAfter);
   m.n++; if (pnl > 0) m.wins++; m.sum += ret;
   s.memory[key] = m;
-  return { m, before, after: memStatus(m, init.benchAfter) };
+  return m;
 }
 
 function fresh(now) {
-  return { v: 2, startedAt: now, cash: START_USD, positions: [], trades: [], equity: [], startPrices: {}, lastPrice: {},
-    priors: {}, memory: {}, lastSeen: {}, nextCheck: {}, events: [], earnings: { at: 0, dates: {} }, lastTick: now, archive: [] };
+  return { v: 3, startedAt: now, cash: START_USD, positions: [], trades: [], equity: [], startPrices: {}, lastPrice: {},
+    memory: {}, lastSeen: {}, nextCheck: {}, events: [], earnings: { at: 0, dates: {} }, lastTick: now, archive: [] };
 }
 
 /** The 5-minute tick. */
@@ -84,11 +74,16 @@ export async function cronBot(env, now = Date.now()) {
   if (!env?.PUSH) return;
   let s = await env.PUSH.get(KEY, "json");
   let changed = false, soft = false;   // soft = only bookkeeping (which candles were checked): saved at most every 30 min
-  if (!s || s.v !== 2) {
+  if (!s || s.v !== 3) {
     const old = s;
     s = fresh(now);
-    if (old?.trades?.length) s.archive = old.trades.slice(-200);   // keep the BTC-only bot's trades for reference
-    note(s, now, "info", "The bot now trades 12 markets", "It restarted with a virtual $100 to trade BTC, ETH, SOL, XRP, DOGE, SPY, QQQ, Apple, NVIDIA, Tesla, Microsoft and Amazon.");
+    if (old) {
+      const oldEq = old.v === 2 ? old.cash + (old.positions || []).reduce((x, p) => x + p.qty * (old.lastPrice?.[p.sym] || p.entry), 0) : null;
+      s.archive = [...(old.archive || []), ...(old.trades || [])].slice(-300);
+      s.previous = { version: old.v, startedAt: old.startedAt, trades: old.trades?.length || 0, equity: oldEq != null ? +oldEq.toFixed(2) : null };
+    }
+    note(s, now, "info", "The bot was rebuilt around the tested trend rule",
+      "It now buys only when a daily candle closes at a new 20-day high in an uptrend, and sells with a trailing stop. The old short-term setups didn't beat fees or random timing on data they never saw. It restarted with a virtual $100; the old trades are kept for reference.");
     changed = true;
   }
   const stocksOpen = usMarketOpen(now);
@@ -96,7 +91,7 @@ export async function cronBot(env, now = Date.now()) {
   // 0) Earnings calendar for the stocks it trades (refreshed daily).
   if (now - (s.earnings.at || 0) > 20 * 3600e3) { await refreshEarnings(s, now).catch(() => {}); changed = true; }
 
-  // 1) Manage open trades: stop, target, time limit, and selling before an earnings report.
+  // 1) Watch open trades between daily closes: the (trailing) stop, and selling before an earnings report.
   for (const p of s.positions.slice()) {
     const m = bySym[p.sym];
     if (m?.stock && !stocksOpen) continue;   // can't sell while the market is closed
@@ -108,7 +103,7 @@ export async function cronBot(env, now = Date.now()) {
     let exit = null, outcome = null;
     for (const k of recent) {
       if (k.time * 1000 < p.checkedTo) continue;
-      const r = exitOnCandle(k, p.stop, p.target);
+      const r = exitOnCandle(k, p.stop, Infinity);
       if (r) { exit = r.exit; outcome = r.outcome; break; }
     }
     if (!exit && now >= p.sellBy) { exit = price; outcome = "timeout"; }
@@ -117,61 +112,49 @@ export async function cronBot(env, now = Date.now()) {
     else p.checkedTo = recent.at(-1).time * 1000;
   }
 
-  // 2) Re-test one market's setups per tick when its record is a day old.
-  const stale = MARKETS.filter((m) => now - (s.priors[m.sym]?.at || 0) > 24 * 3600e3)[0];
-  if (stale) {
-    const entry = { at: now };
-    for (const iv of BOT.ivs) {
-      try {
-        const c = await candles(stale.sym, iv, 1000);
-        if (c?.length > 300) {
-          const r = analyze(c, { costPerSide: feeOf(stale.sym), useModel: false });
-          entry[iv] = { regime: r.regime.now, setups: Object.fromEntries(r.setups.map((x) => [x.id, { level: x.verdict.level, ev: x.stats.ev, n: x.stats.n, win: x.stats.winRate }])) };
-          s.lastPrice[stale.sym] = c.at(-1).close;
-        }
-      } catch {}
-    }
-    s.priors[stale.sym] = entry;
-    changed = true;
-  }
-
-  // 3) Check a few markets whose candle just closed (crypto on schedule; stocks during market hours).
+  // 2) After each daily close: move up the trailing stops, then look for new trend breakouts.
   const due = [];
-  for (const m of MARKETS) for (const iv of BOT.ivs) {
-    const k = `${m.sym}|${iv}`;
+  for (const m of MARKETS) {
+    const k = `${m.sym}|1d`;
     if (m.stock && !stocksOpen) continue;
-    if ((s.nextCheck[k] || 0) <= now) due.push({ m, iv, k });
+    if ((s.nextCheck[k] || 0) <= now) due.push({ m, k });
   }
   due.sort((a, b) => (s.nextCheck[a.k] || 0) - (s.nextCheck[b.k] || 0));
   const candidates = [];
-  for (const { m, iv, k } of due.slice(0, BOT.checksPerTick)) {
-    // Next check: just after the next candle closes (crypto), or in 30 minutes (stocks: Yahoo's candles follow the session).
-    s.nextCheck[k] = m.stock ? now + STOCK_RECHECK[iv] : (Math.floor(now / IV_MS[iv]) + 1) * IV_MS[iv] + 60e3;
+  for (const { m, k } of due.slice(0, BOT.checksPerTick)) {
+    // Next check: just after the next daily close (crypto), or every 2 hours in market hours (stocks).
+    s.nextCheck[k] = m.stock ? now + STOCK_RECHECK["1d"] : (Math.floor(now / IV_MS["1d"]) + 1) * IV_MS["1d"] + 60e3;
     changed = true;   // must be saved: otherwise the same candle could be judged again later (a stale signal)
     let c;
-    try { c = await candles(m.sym, iv, 300); } catch { continue; }
+    try { c = await candles(m.sym, "1d", 320); } catch { continue; }
     if (!c?.length || c.length < 220) continue;
     s.lastPrice[m.sym] = c.at(-1).close;
     if (!s.startPrices[m.sym]) s.startPrices[m.sym] = c.at(-1).close;
-    const i = c.length - 2;                      // last CLOSED candle
+    const i = c.length - 2;                      // last CLOSED daily candle
     if (s.lastSeen[k] === c[i].time) continue;   // already judged this candle
     s.lastSeen[k] = c[i].time;
-    if (s.positions.some((p) => p.sym === m.sym)) continue;
     const x = computeAll(c);
-    const regime = regimeAt(c, x, i);
-    for (const setup of SETUPS) {
-      let on = false;
-      try { on = !!setup.test(i, c, x) && isFinite(x.atr14[i]); } catch {}
-      if (on) candidates.push(await judge(env, s, m, iv, setup, regime, x.atr14[i], c.at(-1).close, now));
+    const pos = s.positions.find((p) => p.sym === m.sym);
+    if (pos) {
+      if (c[i].time * 1000 >= pos.openedAt - IV_MS["1d"]) {
+        pos.hi = Math.max(pos.hi || pos.entry, c[i].high);
+        const before = pos.stop;
+        pos.stop = trailStop(pos.stop, pos.hi, x.atr14[i]);
+        if (pos.stop > before * 1.0001) pos.trailMoves = (pos.trailMoves || 0) + 1;
+      }
+      continue;
     }
+    let on = false;
+    try { on = !!TREND_SETUP.test(i, c, x) && isFinite(x.atr14[i]); } catch {}
+    if (on) candidates.push(judge(s, m, regimeAt(c, x, i), x.atr14[i], c.at(-1).close, c[i].close / x.ema200[i], now));
   }
   for (const cand of candidates.filter((x) => x.go).sort((a, b) => b.score - a.score)) {
     if (s.positions.length >= BOT.maxPositions || s.positions.some((p) => p.sym === cand.m.sym)) continue;
     if (openTrade(s, cand, now)) changed = true;
   }
-  for (const cand of candidates.filter((x) => !x.go && x.skipNote)) { note(s, now, "skip", cand.skipNote[0], cand.skipNote[1]); soft = true; }
+  for (const cand of candidates.filter((x) => !x.go && x.skipNote)) { note(s, now, "skip", cand.skipNote[0], cand.skipNote[1], cand.m.sym); soft = true; }
 
-  // 4) Hourly snapshot of the account and of "just holding all 12 equally" (for the chart).
+  // 3) Hourly snapshot of the account and of "just holding all 12 equally" (for the chart).
   const hour = Math.floor(now / 3600e3);
   if (Math.floor((s.equity.at(-1)?.[0] || 0) / 3600e3) !== hour && Object.keys(s.startPrices).length) {
     s.equity.push([now, +equityOf(s).toFixed(4), +basketOf(s).toFixed(4)]);
@@ -182,34 +165,11 @@ export async function cronBot(env, now = Date.now()) {
   if (changed || (soft && now - (s.lastSave || 0) >= 30 * 60e3)) { s.lastSave = now; await env.PUSH.put(KEY, JSON.stringify(s)); }
 }
 
-/** Weigh all the evidence for one active setup. */
-async function judge(env, s, m, iv, setup, regime, atr, price, now) {
-  const prior = s.priors[m.sym]?.[iv]?.setups?.[setup.id];
-  const combo = s.memory[memKey(m.sym, setup.id, iv, regime)];
-  const status = memStatus(combo);
-  const where = `${setup.name} on ${m.name} (${IV_WORD[iv]})`;
-  if (status === "benched") return { skipNote: [`Skipped ${where}`, `It lost on average in its last ${combo.n} tries in a ${regime === "down" ? "falling" : "rising"} market, so the bot benched it.`] };
-  const trusted = prior && (prior.level === "edge" || prior.level === "weak");
-  if (prior && prior.level === "negative" && prior.n >= 30 && status !== "promoted") return {};
-  const mode = trusted || status === "promoted" ? "trusted" : "explore";
-  const ex = s.memory[memKey("*explore*", regime)];
-  if (mode === "explore" && ex && ex.n >= BOT.exploreStopAfter && ex.sum / ex.n < 0) return {};
-  // News: the latest AI read of this market's headlines (if it's recent).
-  let news = null;
-  try {
-    const log = await env.PUSH.get(m.news, "json");
-    const last = log?.at(-1);
-    if (last && now - last.t < 8 * 3600e3) news = { score: last.s, mood: last.s <= -0.25 ? "negative" : last.s >= 0.25 ? "positive" : "neutral" };
-  } catch {}
-  if (news) {
-    const nm = s.memory[memKey("*news*", news.mood)];
-    if (nm && nm.n >= BOT.newsStopAfter && nm.sum / nm.n < 0) return { skipNote: [`Skipped ${where}`, `The news is ${news.mood} (AI score ${news.score.toFixed(2)}), and the bot has learned that buying on ${news.mood} news has lost on average (${nm.wins} wins of ${nm.n}).`] };
-    if (news.mood === "negative" && mode === "explore") return { skipNote: [`Skipped ${where}`, `Unproven setup and negative news (AI score ${news.score.toFixed(2)}): not worth testing now.`] };
-  }
-  // Earnings (stocks).
-  if (m.earnings && earningsWithin(s, m.earnings, now, BOT.earningsDays)) return { skipNote: [`Skipped ${where}`, `${m.name} reports earnings within ${BOT.earningsDays} trading days. Prices often jump past a stop-loss on the news.`] };
-  const score = (mode === "trusted" ? 1 : 0) + (prior?.ev || 0) * 10 + (news ? news.score * 0.2 : 0);
-  return { go: true, m, iv, setup, regime, atr, price, prior, combo, mode, news, score };
+/** A trend breakout just happened: anything that says "not now"? */
+function judge(s, m, regime, atr, price, strength, now) {
+  const where = `${m.name} (daily trend breakout)`;
+  if (m.earnings && earningsWithin(s, m.earnings, now, BOT.earningsDays)) return { m, skipNote: [`Skipped ${where}`, `${m.name} reports earnings within ${BOT.earningsDays} trading days. Prices often jump past a stop-loss on the news.`] };
+  return { go: true, m, regime, atr, price, score: strength };   // strongest uptrend first when slots are short
 }
 
 const equityOf = (s) => s.cash + s.positions.reduce((a, p) => a + p.qty * (s.lastPrice[p.sym] || p.entry), 0);
@@ -222,30 +182,27 @@ function basketOf(s) {
 
 function openTrade(s, c, now) {
   const fee = feeOf(c.m.sym), entry = c.price;
-  const d = riskDistance(c.atr, entry, fee);
-  const stop = entry - d, target = entry + (RULES.targetAtr / RULES.stopAtr) * d;
+  const stop = trendStop(entry, c.atr, fee);
+  if (!(stop > 0 && stop < entry)) return false;
   const eq = equityOf(s);
   const lossPerUnit = entry - stop + fee * (entry + stop);
-  let qty = (eq * (c.mode === "trusted" ? BOT.riskTrusted : BOT.riskExplore)) / lossPerUnit;
+  let qty = (eq * BOT.risk) / lossPerUnit;
   qty = Math.min(qty, (eq * BOT.maxPositionShare) / entry, (s.cash * 0.995) / (entry * (1 + fee)));
   if (c.m.stock) qty = Math.floor(qty * 1000) / 1000;   // fractional shares (most US brokers allow them)
   if (!(qty * entry >= BOT.minNotional)) return false;
   const cost = qty * entry * (1 + fee);
   s.cash -= cost;
   const reasons = [
-    c.mode === "trusted"
-      ? `Trusted setup: ${c.prior ? `won ${Math.round((c.prior.win || 0) * 100)}% of ${c.prior.n} past trades here (${pct(c.prior.ev || 0)} each after fees)` : "promoted by its own winning record"}.`
-      : `Exploring with a small amount: this setup isn't proven on ${c.m.name} ${IV_WORD[c.iv]} candles yet.`,
-    `Market is ${c.regime === "down" ? "falling" : c.regime === "up" ? "rising" : "unclear"} on ${IV_WORD[c.iv]} candles.`,
-    c.news ? `News read by AI: ${c.news.mood} (${c.news.score >= 0 ? "+" : ""}${c.news.score.toFixed(2)}).` : "No recent AI news read.",
+    `A daily candle closed at a new 20-day high while ${c.m.name} is in an uptrend (price ${pct(c.score - 1)} above its 200-day average).`,
+    "This is Entryvex's trend rule, which made money after fees on data it never saw.",
     c.m.earnings ? "No earnings report in the next few days." : "",
   ].filter(Boolean).join(" ");
-  const p = { id: `${now}-${c.m.sym}`, sym: c.m.sym, market: c.m.name, setup: c.setup.id, name: c.setup.name, iv: c.iv, regime: c.regime, mode: c.mode,
-    news: c.news?.mood || "none", newsScore: c.news?.score ?? null, entry, stop, target, qty, cost, openedAt: now,
-    sellBy: now + RULES.maxBars * IV_MS[c.iv], checkedTo: now, last: entry, why: reasons };
+  const p = { id: `${now}-${c.m.sym}`, sym: c.m.sym, market: c.m.name, setup: TREND_SETUP.id, name: TREND_SETUP.name, iv: "1d", regime: c.regime, mode: "trend",
+    entry, stop, firstStop: stop, target: null, trail: true, hi: entry, atr: c.atr, qty, cost, openedAt: now,
+    sellBy: now + TREND.maxBars * IV_MS["1d"], checkedTo: now, last: entry, why: reasons };
   s.positions.push(p);
-  note(s, now, "open", `Bot bought ${c.m.name} at ${px(entry)} (${c.setup.name}, ${IV_WORD[c.iv]})`,
-    `${reasons} Risking ${c.mode === "trusted" ? "1.5%" : "0.4%"} of the account. Stop ${px(stop)}, target ${px(target)}.`, c.m.sym);
+  note(s, now, "open", `Bot bought ${c.m.name} at ${px(entry)} (daily trend breakout)`,
+    `${reasons} Risking 1% of the account. First stop ${px(stop)}; after every daily close it moves the stop up to ${TREND.trailAtr} ATR under the highest price since buying.`, c.m.sym);
   return true;
 }
 
@@ -255,28 +212,16 @@ function closeTrade(s, p, exit, outcome, now) {
   s.cash += proceeds;
   s.positions = s.positions.filter((x) => x !== p);
   const pnl = proceeds - p.cost, ret = pnl / p.cost;
-  const held = Math.max(1, Math.round((now - p.openedAt) / IV_MS[p.iv]));
+  const held = Math.max(1, Math.round((now - p.openedAt) / IV_MS["1d"]));
   const market = p.regime === "down" ? "a falling market" : p.regime === "up" ? "a rising market" : "an unclear market";
   const what = `${p.name} on ${p.market} (${IV_WORD[p.iv]})`;
-  let lesson = outcome === "target" ? `Worked: ${what} reached its target after ${held} candle${held === 1 ? "" : "s"} in ${market}.`
-    : outcome === "stop" ? `Mistake: ${what} hit its stop-loss after ${held} candle${held === 1 ? "" : "s"} in ${market}.`
-    : outcome === "earnings" ? `Sold before earnings: ${what} (${ret >= 0 ? "small gain" : "small loss"}), so a report surprise couldn't jump past the stop.`
-    : `Ran out of time: ${what} hit neither target nor stop within ${RULES.maxBars} candles (${ret >= 0 ? "small gain" : "small loss"}).`;
-  if (p.news !== "none") lesson += ` The news was ${p.news} when it bought.`;
-  // Learn: market × setup × candle size × market type; news mood; exploring per market type.
-  const add = [];
-  const a = tally(s, memKey(p.sym, p.setup, p.iv, p.regime), { market: p.market, name: p.name, iv: p.iv, regime: p.regime }, ret, pnl);
-  if (a.after === "benched" && a.before !== "benched") add.push(`It will now skip ${what} in ${market} (${a.m.wins} wins of ${a.m.n}, average ${pct(a.m.sum / a.m.n)}).`);
-  if (a.after === "promoted" && a.before !== "promoted") add.push(`${what} in ${market} has earned full-size trades (${a.m.wins} wins of ${a.m.n}, average ${pct(a.m.sum / a.m.n)}).`);
-  if (p.news !== "none") {
-    const n = tally(s, memKey("*news*", p.news), { name: `Buying on ${p.news} news`, group: true, benchAfter: BOT.newsStopAfter }, ret, pnl);
-    if (n.after === "benched" && n.before !== "benched") add.push(`Buying when the news is ${p.news} has lost on average (${n.m.wins} wins of ${n.m.n}), so it will stop doing that.`);
-  }
-  if (p.mode === "explore") {
-    const e = tally(s, memKey("*explore*", p.regime), { name: "Exploring unproven setups", group: true, regime: p.regime, benchAfter: BOT.exploreStopAfter }, ret, pnl);
-    if (e.after === "benched" && e.before !== "benched") add.push(`Unproven setups have lost on average in ${market} (${e.m.wins} wins of ${e.m.n}), so it will stop exploring there until that changes.`);
-  }
-  if (add.length) lesson += ` Learned: ${add.join(" ")}`;
+  const days = `${held} day${held === 1 ? "" : "s"}`;
+  let lesson = outcome === "stop" && ret > 0 ? `Trend ride: the trailing stop sold ${p.market} after ${days} and locked in a gain (the stop had been moved up ${p.trailMoves || 0} time${p.trailMoves === 1 ? "" : "s"}).`
+    : outcome === "stop" ? `Stopped out: ${what} fell back to its stop after ${days}. Trend trades lose more often than they win; the rule relies on the winners being bigger.`
+    : outcome === "earnings" ? `Sold before earnings: ${what} (${ret >= 0 ? "gain" : "loss"}), so a report surprise couldn't jump past the stop.`
+    : `Time limit: ${what} was still open after ${TREND.maxBars} days, so it sold at the market price.`;
+  const m = tally(s, memKey(p.sym), { market: p.market, name: p.name, iv: p.iv }, ret, pnl);
+  if (m.n >= 3) lesson += ` On ${p.market} so far: ${m.wins} of ${m.n} trend trades won, average ${pct(m.sum / m.n)}.`;
   s.trades.push({ ...p, exit, outcome, closedAt: now, pnl: +pnl.toFixed(4), ret: +ret.toFixed(5), lesson });
   if (s.trades.length > 1000) s.trades = s.trades.slice(-1000);
   note(s, now, "close", `Bot sold ${p.market} at ${px(exit)}: ${usd(pnl)} (${pct(ret)})`, lesson, p.sym);
@@ -342,14 +287,14 @@ export function summarize(s) {
 export async function onRequestGet(context) {
   const { env } = context;
   const s = env?.PUSH ? await env.PUSH.get(KEY, "json") : null;
-  if (!s || s.v !== 2) return json({ started: false, note: "The bot starts on the next 5-minute check." }, 60);
-  const memory = Object.entries(s.memory).map(([k, m]) => ({ key: k, ...m, avg: m.n ? m.sum / m.n : 0, status: memStatus(m, m.benchAfter) })).sort((a, b) => b.n - a.n);
+  if (!s || s.v !== 3) return json({ started: false, note: "The bot starts on the next 5-minute check." }, 60);
+  const memory = Object.entries(s.memory).map(([k, m]) => ({ key: k, ...m, avg: m.n ? m.sum / m.n : 0, status: memStatus(m) })).sort((a, b) => b.n - a.n);
   const perMarket = MARKETS.map((m) => {
     const t = s.trades.filter((x) => x.sym === m.sym);
     return { sym: m.sym, name: m.name, trades: t.length, wins: t.filter((x) => x.pnl > 0).length, pnl: +t.reduce((a, x) => a + x.pnl, 0).toFixed(2), open: s.positions.some((p) => p.sym === m.sym) };
   });
   return json({
-    started: true, version: 2, startUsd: START_USD, startedAt: s.startedAt, lastTick: s.lastTick, markets: MARKETS.map((m) => ({ sym: m.sym, name: m.name })),
+    started: true, version: 3, previous: s.previous || null, startUsd: START_USD, startedAt: s.startedAt, lastTick: s.lastTick, markets: MARKETS.map((m) => ({ sym: m.sym, name: m.name })),
     settings: BOT, summary: summarize(s), positions: s.positions, trades: s.trades.slice(-200).reverse(), equity: s.equity,
     memory, perMarket, events: s.events.slice(-40).reverse(), earnings: s.earnings?.dates || {}, archiveCount: s.archive?.length || 0,
   }, 60);

@@ -71,13 +71,13 @@ function headline(buys, hold, bot) {
 
 function buysHtml(buys) {
   if (buys.length) return `<div class="today-list">${buys.map((b) => `<button class="today-row" data-today-open="${fmt.esc(b.sym)}" data-iv="${fmt.esc(b.iv)}">
-      <span class="pill pill-edge">${b.label === "GO" ? "BUY" : "SMALL BUY"}</span><strong>${fmt.esc(hooks.nameFor(b.sym))}</strong>
+      <span class="pill pill-edge">BUY</span><strong>${fmt.esc(hooks.nameFor(b.sym))}</strong>
       <span class="muted small">${fmt.esc(b.setup)} on ${IV[b.iv] || b.iv} candles</span><span class="today-go">Open the plan →</span></button>`).join("")}</div>`;
   const w = topWatch(3);
   const checked = lastChecked();
   return `<p class="small">${isRunning() ? "Checking your list now…" : `Nothing on your watchlist has a buy signal${checked ? ` (checked ${fmt.ago(checked)})` : ""}. Most of the time that's the right answer.`}</p>
-    ${w.length ? `<p class="small muted">Closest to a signal (setups with a winning record, waiting for their moment):</p><div class="today-list">${w.map((x) => `<button class="today-row" data-today-open="${fmt.esc(x.sym)}" data-iv="${fmt.esc(x.iv)}">
-      <span class="pill">WATCH</span><strong>${fmt.esc(hooks.nameFor(x.sym))}</strong><span class="muted small">${fmt.esc(x.s.name)} on ${IV[x.iv] || x.iv} · won ${Math.round(x.s.stats.winRate * 100)}% of ${x.s.stats.n}</span></button>`).join("")}</div>` : ""}`;
+    ${w.length ? `<p class="small muted">Closest to a signal (in a daily uptrend, waiting for a new 20-day high):</p><div class="today-list">${w.map((x) => `<button class="today-row" data-today-open="${fmt.esc(x.sym)}" data-iv="${fmt.esc(x.iv)}">
+      <span class="pill">WATCH</span><strong>${fmt.esc(hooks.nameFor(x.sym))}</strong><span class="muted small">BUY above ${fmt.price(x.level)} · ${x.away >= 0 ? "+" : ""}${x.away.toFixed(1)}% away</span></button>`).join("")}</div>` : ""}`;
 }
 
 function holdHtml(hold) {

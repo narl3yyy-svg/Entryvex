@@ -149,10 +149,10 @@ async function snapshot() {
     } : "not loaded",
     scanner: a ? {
       verdictNow: a.overall.label, explanation: a.overall.text,
-      rules: "Each setup was replayed on the last ~3000 candles: buy next candle's open, stop 1x ATR below, target 1.5x ATR above, max 24 candles, fees+spread both ways.",
+      rules: "BUY answers come ONLY from the trend rule on daily candles: uptrend (price above 200-day average, 50-day above 200-day) and a daily close above the previous 20-day high; buy next open, first stop 2x ATR below, then a trailing stop 3x ATR under the highest price since entry, no fixed target, fees both ways. On unseen data across 12 markets it made about +1.4% per trade after fees (random timing with the same exits: about +1.2%), won about 37% of trades, and its median worst drop was 25% vs 56% for just holding, but it earned less than holding (about 3% vs 12% a year). Be honest about this: its main benefit is smaller drops, not beating the market. On candles shorter than a day there are no BUY answers: in walk-forward tests none of the short-term setups beat fees or random timing. The other setups listed (stop 1x ATR, target 1.5x ATR, max 24 candles) are research only.",
       setups: a.setups.map((x) => ({ name: x.name, activeNow: x.activeNow, timesSeen: x.stats.n, endedInProfitPct: x.stats.n ? Math.round(x.stats.winRate * 100) : null,
         avgResultPerTradePct: x.stats.n ? round(x.stats.ev * 100, 3) : null, verdict: x.verdict.label })),
-      tradePlan: a.plan && a.best && a.best.verdict.level !== "negative" ? { buyAround: round(a.plan.entry), stopLoss: round(a.plan.stop), takeProfit: round(a.plan.target) } : null,
+      tradePlan: a.plan ? { buyAround: round(a.plan.entry), firstStopLoss: round(a.plan.stop), takeProfit: a.plan.target ? round(a.plan.target) : "none: trailing stop", trailingStopDistance: a.plan.trail ? round(a.plan.trail) : null } : null,
       costPerSidePct: round(a.costPerSide * 100, 3),
     } : "not loaded",
     news,
@@ -160,7 +160,7 @@ async function snapshot() {
       verdict: a.liquidity && !a.liquidity.ok ? "DON'T BUY (market barely trades)" : a.overall.label,
       liquidity: a.liquidity && !a.liquidity.ok ? a.liquidity.reason : "trades normally",
       marketRegime: a.regime ? `${a.regime.label}; setups are judged by their record in this kind of market when they have 30+ such trades` : null,
-      buyTriggersWithTrackRecord: (a.triggers || []).filter((t) => t.setup && ["edge", "weak"].includes(t.setup.verdict.level)).map((t) => ({
+      buyTriggersWithTrackRecord: (a.triggers || []).filter((t) => t.setup?.trend).map((t) => ({
         setup: t.setup.name, verdict: t.setup.verdict.label, possibleNow: t.ready,
         condition: t.text.replace("{L}", t.level != null ? String(round(t.level)) : ""), distanceFromPricePct: t.away != null ? round(t.away, 3) : null,
         pastRecord: `${Math.round(t.setup.stats.winRate * 100)}% of ${t.setup.stats.n} ended in profit, ${round(t.setup.stats.ev * 100, 3)}%/trade after costs` })),
@@ -175,7 +175,7 @@ async function snapshot() {
     ifUserBuysNow: getBuyNowSummary() || "balance not set or not loaded",
     acrossWatchlist: {
       buySignalsNow: currentBuys().map((b) => `${b.base} ${b.iv}: ${b.label === "GO" ? "BUY" : "SMALL BUY"} (${b.setup})`),
-      setupsToWatch: topWatch(6).map((w) => `${w.base} ${w.iv}: ${w.s.name} (${w.s.verdict.label}, ${Math.round(w.s.stats.winRate * 100)}% of ${w.s.stats.n})`),
+      closestToBuy: topWatch(6).map((w) => `${w.base} daily: in an uptrend, BUY if a day closes above ${round(w.level)} (${round(w.away, 2)}% away)`),
       perSymbol: (hooks.getWatchlistInfo?.() || []).slice(0, 20).map((w) => `${w.ticker}: ${w.changePct != null ? (w.changePct >= 0 ? "+" : "") + w.changePct.toFixed(2) + "% today, " : ""}${signalFor(w.sym)}`),
     },
     worldMarkets: worldSnapshot(),

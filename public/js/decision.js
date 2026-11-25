@@ -197,20 +197,31 @@ function html(c, checks) {
       verdict = lvl === "go" ? "BUY" : "SMALL BUY OR SKIP";
       cls = lvl === "go" ? "buy" : "caution";
       const s = best.stats;
-      const what = best.model
-        ? `<strong>The Entryvex model</strong> is confident this trade works right now${lvl === "go" ? "," : "."}`
-        : `<strong>${fmt.esc(best.name)}</strong> just appeared${lvl === "go" ? "," : "."}`;
-      headline = lvl === "go"
-        ? `${what} and on this ${stock ? "stock" : "coin"} it has ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after costs.`
-        : `${what} It has been only slightly profitable here (${Math.round(s.winRate * 100)}% of ${s.n} times), so it's not a strong signal. Use a smaller amount or skip it.`;
+      if (best.trend) {
+        headline = `<strong>Trend breakout:</strong> ${fmt.esc(c.base)} is in an uptrend and a day just closed at a new 20-day high. That's Entryvex's trend rule: on data it never saw it made money after fees, with much smaller drops than just holding. ${trendRecord(c, s)}`;
+      } else {
+        const what = best.model
+          ? `<strong>The Entryvex model</strong> is confident this trade works right now${lvl === "go" ? "," : "."}`
+          : `<strong>${fmt.esc(best.name)}</strong> just appeared${lvl === "go" ? "," : "."}`;
+        headline = lvl === "go"
+          ? `${what} and on this ${stock ? "stock" : "coin"} it has ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after costs.`
+          : `${what} It has been only slightly profitable here (${Math.round(s.winRate * 100)}% of ${s.n} times), so it's not a strong signal. Use a smaller amount or skip it.`;
+      }
       if (head >= 3) headline += ` <span class="down">Careful: ${head} of ${all.length} outside checks are against it right now.</span>`;
       if (stock && c.marketOpen === false) headline += ` <span class="muted">The market is closed: you can only place this when it opens${stockInfo(c.symbol).currency === "USD" ? " (9:30am New York time)" : ""}, so re-check then.</span>`;
-      meter = confidenceMeter(s.winRate, s.winLo, s.winHi, s.breakeven, s.n);
-      steps = buySteps(c, r, unit);
+      if (!best.trend) meter = confidenceMeter(s.winRate, s.winLo, s.winHi, s.breakeven, s.n);
+      const tested = best.trend ? walkLine(c.interval) : "";
+      steps = (tested ? `<p class="small d-tested">${tested}</p>` : "") + buySteps(c, r, unit);
     } else {
       cls = lvl === "wait" ? "wait" : "no";
       verdict = lvl === "wait" ? "WAIT · DON'T BUY YET" : "DON'T BUY";
-      headline = lvl === "wait"
+      headline = r.overall.shortChart
+        ? `<strong>Short charts don't give BUY signals.</strong> On candles shorter than a day, Entryvex's buy signals lost money after fees when tested on data they never saw, no better than buying at random moments. Check the daily chart for ${fmt.esc(c.base)}. <button class="link-btn" data-goto-iv="1d">Show the daily chart</button>`
+        : lvl === "wait" && r.long
+        ? (r.upNow && isFinite(r.overall.trigger)
+          ? `${fmt.esc(c.base)} is in an uptrend, but hasn't made a new 20-day high yet. Entryvex says <strong>BUY when a day closes above ${fmt.price(r.overall.trigger)}</strong> <span class="muted">(${fmtAway(r.overall.trigger, c.price)} from now)</span>.`
+          : `<strong>No uptrend on ${fmt.esc(c.base)}'s daily chart</strong> (price isn't above its 200-day average with the 50-day above it). The trend rule waits for one, so there's no reason to buy now.`)
+        : lvl === "wait"
         ? `None of the setups Entryvex trusts is happening on ${c.base} right now, so there's no good reason to buy at this moment.`
         : lvl === "no" && best?.verdict.level === "flat"
           ? `A setup is active, but on ${c.base} it has only <strong>broken even</strong> after costs (${fmt.pct(best.stats.ev * 100)} per trade, too small to be more than luck). Skip it.`
@@ -221,8 +232,8 @@ function html(c, checks) {
       if (elsewhere.length) headline += ` <span class="d-elsewhere">Elsewhere right now: ${elsewhere.slice(0, 3).map((b) => `<button class="link-btn" data-goto-opps>${fmt.esc(b.label === "GO" ? "BUY" : "small buy")} on ${fmt.esc(b.base)} (${b.iv})</button>`).join(", ")}.</span>`;
       // The forecast has its own box right below, so it isn't repeated here.
       const bigMove = c.move && c.move.percentile >= 0.8;
-      steps = regimeNote(c, r) + patternNote(c, r) + (bigMove ? moveNote(c) : "") + whenToBuy(c, r, best) + `
-        <div class="d-actions"><span><strong>Do nothing for now.</strong> Entryvex re-checks every ${c.interval} candle.</span>
+      steps = regimeNote(c, r) + patternNote(c, r) + (bigMove ? moveNote(c) : "") + whenToBuy(c, r) + `
+        <div class="d-actions"><span><strong>Do nothing for now.</strong> Entryvex re-checks after every ${r.long ? "daily close" : `${c.interval} candle`}.</span>
           <button class="ghost-btn" data-open-alerts>🔔 Alert me when a BUY appears</button>
           <button class="ghost-btn" data-find-edge>Find an edge</button>
           <button class="ghost-btn" data-scan-all>Scan watchlist</button></div>`;
@@ -251,26 +262,27 @@ function html(c, checks) {
   </div>`;
 }
 
-/** "When would Entryvex say BUY?": the price conditions for setups with a positive track record. */
-function whenToBuy(c, r, best) {
-  const trig = (r.triggers || []).filter((t) => t.setup && (t.setup.verdict.level === "edge" || t.setup.verdict.level === "weak"));
-  const fill = (t) => t.text.replace("{L}", t.level != null
-    ? `<strong>${fmt.price(t.level)}</strong> <span class="muted">(${t.away >= 0 ? "+" : ""}${t.away.toFixed(1)}% from now)</span>` : "");
-  if (!trig.length) {
-    const alt = topWatch(3).filter((w) => w.sym !== c.symbol);
-    return `<div class="d-when"><div class="d-when-title">When would Entryvex say BUY?</div>
-      <p class="small">None of the ${r.setups.length} setups (including candle patterns) has a reliable track record on <strong>${fmt.esc(c.base)}</strong> with ${c.interval} candles, so <strong>there's no price where Entryvex would say BUY here</strong>. Trading it anyway would be a guess.</p>
-      ${alt.length ? `<p class="small">Where Entryvex <em>would</em> buy instead (when the setup appears): ${alt.map((w) => `<button class="link-btn" data-goto-opps>${fmt.esc(w.base)} ${w.iv} · ${fmt.esc(w.s.name)}</button> <span class="muted">(${Math.round(w.s.stats.winRate * 100)}% of ${w.s.stats.n}, ${fmt.pct(w.s.stats.ev * 100)}/trade)</span>`).join(" · ")}</p>`
-        : `<p class="small muted">Try <button class="link-btn" data-find-edge>Find an edge</button> to test other candle sizes for ${fmt.esc(c.base)}.</p>`}
-    </div>`;
-  }
-  return `<div class="d-when"><div class="d-when-title">When would Entryvex say BUY?</div>
-    <ul class="d-trig">${trig.map((t) => `<li class="${t.ready ? "" : "muted"}">
-      <span class="pill pill-${t.setup.verdict.level}">${fmt.esc(t.setup.verdict.label)}</span>
-      <strong>${fmt.esc(t.setup.name)}:</strong> ${t.ready ? "BUY if " + fill(t) : "Not possible right now: " + fill(t)}.
-      <span class="muted small">Past record here: ended in profit ${Math.round(t.setup.stats.winRate * t.setup.stats.n)} of ${t.setup.stats.n} times, ${fmt.pct(t.setup.stats.ev * 100)} per trade after costs.</span></li>`).join("")}</ul>
-    <p class="tiny muted">Entryvex re-checks after every ${c.interval} candle closes and switches to BUY (with the full plan) the moment one of these happens.</p>
+/** "When would Entryvex say BUY?": the trend rule's price trigger on the daily chart. */
+function whenToBuy(c, r) {
+  const head = `<div class="d-when"><div class="d-when-title">When would Entryvex say BUY?</div>`;
+  if (r.overall.shortChart) return `${head}<p class="small">Only on the <strong>daily chart</strong>: when a market in an uptrend closes at a new 20-day high. <button class="link-btn" data-goto-iv="1d">Show ${fmt.esc(c.base)} on daily candles</button></p></div>`;
+  const t = (r.triggers || []).find((x) => x.id === "trend");
+  const alt = topWatch(3).filter((w) => w.sym !== c.symbol);
+  const others = alt.length ? `<p class="small">Closest to a BUY in your watchlist: ${alt.map((w) => `<button class="link-btn" data-goto-opps>${fmt.esc(w.base)} above ${fmt.price(w.level)}</button> <span class="muted">(${w.away >= 0 ? "+" : ""}${w.away.toFixed(1)}%)</span>`).join(" · ")}</p>` : "";
+  if (!t) return `${head}<p class="small">Not enough daily history yet to check for a trend.</p>${others}</div>`;
+  const fill = t.text.replace("{L}", t.level != null ? `<strong>${fmt.price(t.level)}</strong> <span class="muted">(${t.away >= 0 ? "+" : ""}${t.away.toFixed(1)}% from now)</span>` : "");
+  return `${head}
+    <ul class="d-trig"><li class="${t.ready ? "" : "muted"}"><span class="pill pill-edge">Tested rule</span> <strong>Trend breakout:</strong> ${t.ready ? "BUY if " + fill : "Not possible yet: " + fill}.
+      <span class="muted small">${fmt.esc(t.setup.verdict.why)}</span></li></ul>
+    ${others}
+    <p class="tiny muted">Entryvex re-checks after every daily close and switches to BUY (with the full plan) the moment it happens.</p>
   </div>`;
+}
+const fmtAway = (level, price) => { const a = ((level - price) / price) * 100; return `${a >= 0 ? "+" : ""}${a.toFixed(1)}%`; };
+/** One sentence on the trend rule's past record on this market. */
+function trendRecord(c, s) {
+  if (!s || s.n < 8) return `<span class="muted">It has happened only ${s?.n || 0} times on ${fmt.esc(c.base)}'s daily chart, too few to judge it here on its own.</span>`;
+  return `On ${fmt.esc(c.base)} it made <strong class="${s.ev >= 0 ? "up" : "down"}">${fmt.pct(s.ev * 100)}</strong> per trade on average over ${s.n} past trades after fees, winning ${Math.round(s.winRate * 100)}% of them: trend trades lose more often than they win, and the winners are bigger.`;
 }
 
 /** Which kind of market we're in, and that setups are judged by their record in this kind of market. */
@@ -367,6 +379,7 @@ function buySteps(c, r, unit) {
   const bal = rate ? settings.balance * rate : 0;
   const amt = (v, sign) => (cur === "USD" ? `${sign || ""}$${Math.abs(v).toFixed(2)}` : `${sign || ""}${fxMoney(Math.abs(v), cur, rate)}`);
   const sz = bal > 0 ? sizePosition({ balance: bal, riskPct: settings.riskPct, entry: p.entry, stop: p.stop, target: p.target, costPerSide: r.costPerSide, rules: c.rules }) : null;
+  if (p.kind === "trail") return trailSteps(c, r, p, sz, amt, unit);
   const sellBy = new Date(Date.now() + RULES.maxBars * (SEC[c.interval] || 900) * 1000)
     .toLocaleString([], { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
   const amount = sz?.ok
@@ -377,6 +390,20 @@ function buySteps(c, r, unit) {
     <li><strong>Right away, set your sell orders:</strong> take-profit at <strong class="up">${fmt.price(sz?.target ?? p.target)}</strong>${sz?.ok ? ` (${amt(sz.winUsd, "+")})` : ""} and stop-loss at <strong class="down">${fmt.price(sz?.stop ?? p.stop)}</strong>${sz?.ok ? ` (${amt(sz.lossUsd, "−")})` : ""}, as one OCO order.</li>
     <li><strong>If neither is hit by ${sellBy}</strong>, sell at the market price. That's the time limit the track record is based on.</li>
     <li>Click <strong>I took this trade</strong> on the trade card below. Entryvex will then tell you when to sell.</li>
+  </ol>`;
+}
+
+/** Steps for a trend trade: one stop-loss that you move up after each daily close, no fixed target. */
+function trailSteps(c, r, p, sz, amt, unit) {
+  const amount = sz?.ok
+    ? `<strong>${+sz.qty.toFixed(8)} ${fmt.esc(unit)}</strong> (about ${amt(sz.spend)})`
+    : sz ? "a small amount (your balance is too small for Entryvex's sizing; see the trade card)" : "the amount shown on the trade card (enter your balance below to calculate it)";
+  return `<ol class="d-steps">
+    <li><strong>Buy</strong> ${amount} at about <strong>${fmt.price(sz?.entry ?? p.entry)}</strong>. Use a limit order.</li>
+    <li><strong>Right away, set a stop-loss</strong> at <strong class="down">${fmt.price(sz?.stop ?? p.stop)}</strong>${sz?.ok ? ` (${amt(sz.lossUsd, "−")} if hit)` : ""}.</li>
+    <li><strong>After each daily close, move the stop up</strong> to ${p.trailAtr} ATR (about <strong>${fmt.price(p.trail)}</strong>) below the highest price since you bought. Never move it down. Entryvex works out the new stop for you in My trades.</li>
+    <li><strong>No fixed take-profit.</strong> You sell when the price falls back to your stop, which lets winners run. Most trend trades end in a small loss; the few big winners pay for them.</li>
+    <li>Click <strong>I took this trade</strong> on the trade card below. Entryvex will then track your stop.</li>
   </ol>`;
 }
 
@@ -412,9 +439,11 @@ function simpleHtml(c) {
     if (lvl === "go" || lvl === "caution") {
       word = lvl === "go" ? "BUY" : "SMALL BUY"; cls = lvl === "go" ? "buy" : "caution";
       const s = best.stats;
-      why = `${best.model ? "Entryvex's prediction model" : `The “${fmt.esc(best.name)}” setup`} just signalled a buy. On ${fmt.esc(c.base)} it ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after fees${lvl === "go" ? "" : " (only slightly profitable, so use a smaller amount)"}.`;
+      why = best.trend
+        ? `${fmt.esc(c.base)} is in an uptrend and a day just closed at a new 20-day high: Entryvex's trend rule, which made money after fees on data it never saw. ${trendRecord(c, s)}`
+        : `${best.model ? "Entryvex's prediction model" : `The “${fmt.esc(best.name)}” setup`} just signalled a buy. On ${fmt.esc(c.base)} it ended in profit <strong>${Math.round(s.winRate * s.n)} of ${s.n}</strong> times after fees${lvl === "go" ? "" : " (only slightly profitable, so use a smaller amount)"}.`;
       const usd = !stock || stockInfo(c.symbol).currency === "USD";
-      const practice = usd && r.plan ? practiceButton({ symbol: c.symbol, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, setup: best.name, verdict: lvl, interval: c.interval }, r.costPerSide, c.rules) : "";
+      const practice = usd && r.plan ? practiceButton({ symbol: c.symbol, entry: r.plan.entry, stop: r.plan.stop, target: r.plan.target, trail: r.plan.trail || null, setup: best.name, verdict: lvl, interval: c.interval }, r.costPerSide, c.rules) : "";
       const tested = walkLine(c.interval);
       plan = (tested ? `<p class="small simple-bot">${tested}</p>` : "") + buySteps(c, r, unit) + `<div class="simple-actions"><button class="btn" data-take-pro>I took this trade: track it for me</button>${practice}</div>`;
     } else if (falling && (bearishPattern || (f && f.pUp < 0.45))) {
@@ -422,8 +451,13 @@ function simpleHtml(c) {
       why = `The trend is down (price is below its 200-candle average)${bearishPattern ? " and a bearish candle pattern just formed" : ""}${f && f.pUp < 0.45 ? `, and only ${Math.round(f.pUp * 100)}% of similar moments ended higher` : ""}. <strong>Don't buy.</strong> If you own ${fmt.esc(c.base)}, Entryvex would sell or keep a tight stop-loss.`;
     } else {
       word = "WAIT"; cls = "wait";
-      const watch = topWatch(1)[0];
-      why = `No setup with a winning record is happening on ${fmt.esc(c.base)} right now, so buying would be a guess.${watch ? ` Best opportunity to watch: <button class="link-btn" data-goto-opps>${fmt.esc(watch.base)} · ${fmt.esc(watch.s.name)} (${watch.iv})</button>.` : ""}`;
+      const watch = topWatch(2).find((w) => w.sym !== c.symbol);
+      const elsewhere = watch ? ` Closest to a BUY in your watchlist: <button class="link-btn" data-goto-opps>${fmt.esc(watch.base)} above ${fmt.price(watch.level)} (${watch.away >= 0 ? "+" : ""}${watch.away.toFixed(1)}%)</button>.` : "";
+      why = r.overall.shortChart
+        ? `Short charts don't give BUY signals: in testing on data they never saw, Entryvex's signals on candles shorter than a day lost money after fees. <button class="link-btn" data-goto-iv="1d">Check ${fmt.esc(c.base)} on the daily chart</button>.`
+        : r.upNow && isFinite(r.overall.trigger)
+        ? `${fmt.esc(c.base)} is in an uptrend. Entryvex says <strong>BUY if a day closes above ${fmt.price(r.overall.trigger)}</strong> (${fmtAway(r.overall.trigger, c.price)} from now), a new 20-day high.${elsewhere}`
+        : `No uptrend on ${fmt.esc(c.base)}'s daily chart, so Entryvex's trend rule says wait.${elsewhere}`;
     }
     const otherIv = cls !== "buy" && cls !== "caution" ? currentBuys().find((b) => b.sym === c.symbol && b.iv !== c.interval) : null;
     if (otherIv) plan += `<div class="d-other-iv"><span>📈 <strong>${otherIv.label === "GO" ? "BUY" : "SMALL BUY"} on ${fmt.esc(IV_WORD[otherIv.iv] || otherIv.iv)} candles</strong> right now.</span><button class="btn" data-goto-iv="${fmt.esc(otherIv.iv)}">Show it</button></div>`;
@@ -449,8 +483,9 @@ function botLine(sym) {
   if (!v) return "";
   if (v.holding) {
     const p = v.holding, pnl = ((p.last || p.entry) / p.entry - 1) * 100;
-    return `<div class="small simple-bot">🤖 <strong>The Entryvex bot owns ${fmt.esc(p.market)}</strong> (bought at ${fmt.price(p.entry)}, now ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%; it sells at ${fmt.price(p.target)} to take profit or ${fmt.price(p.stop)} to cut the loss). <button class="link-btn" data-open-bot>Why it bought</button>
-      <div class="simple-actions"><button class="btn" data-copy-bot>Copy this trade</button><span class="muted tiny">Adds it to My trades with the bot's stop and target, sized for your balance. You place the real order yourself. The bot isn't proven yet, so keep it small.</span></div></div>`;
+    const exits = p.trail ? `it sells if the price falls to its trailing stop, now ${fmt.price(p.stop)}` : `it sells at ${fmt.price(p.target)} to take profit or ${fmt.price(p.stop)} to cut the loss`;
+    return `<div class="small simple-bot">🤖 <strong>The Entryvex bot owns ${fmt.esc(p.market)}</strong> (bought at ${fmt.price(p.entry)}, now ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%; ${exits}). <button class="link-btn" data-open-bot>Why it bought</button>
+      <div class="simple-actions"><button class="btn" data-copy-bot>Copy this trade</button><span class="muted tiny">Adds it to My trades with the bot's stop, sized for your balance. You place the real order yourself. The bot isn't proven yet, so keep it small.</span></div></div>`;
   }
   if (v.trades) return `<p class="small simple-bot">🤖 The Entryvex bot has traded this ${v.trades} time${v.trades === 1 ? "" : "s"} (${v.wins} won) and doesn't own it now. <button class="link-btn" data-open-bot>See why</button></p>`;
   return "";

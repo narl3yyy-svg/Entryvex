@@ -1,7 +1,7 @@
-// Opportunities board: checks every market in the watchlist on 15m, 1h and 4h candles,
-// using the same measured engine as the scanner, and lists
+// Opportunities board: checks every market in the watchlist on DAILY candles with the trend rule
+// (the BUY rule that held up on unseen data; shorter candles never say BUY), and lists
 //   1) BUY signals active right now, and
-//   2) setups with a positive track record that aren't active yet ("watch these").
+//   2) markets in an uptrend that are close to a BUY ("watch these": the price that would trigger it).
 // Refreshes every 15 minutes while Entryvex is open.
 import { analyzeAsync, trainPooledAsync } from "./pool.js";
 import { getKlineHistory, getBookTicker, isStock } from "./market.js";
@@ -13,7 +13,7 @@ const $ = (id) => document.getElementById(id);
 // the 1Y/5Y/ALL views and the Day/Swing/Long-term style switch).
 const IV_SHORT = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1D", "1w": "1W" };
 const IV_NAME = { "1m": "1-minute", "5m": "5-minute", "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily", "1w": "weekly" };
-let INTERVALS = ["15m"];
+let INTERVALS = ["1d"];
 let fullAgain = false;
 // How often the whole watchlist is re-checked (minutes; 0 = only when you press Scan watchlist).
 // Unchanged markets are reused, so frequent checks are cheap. In a background tab it slows to ≥5 min.
@@ -58,26 +58,23 @@ export function currentBuys() {
   return rows.filter(({ r }) => isBuy(r)).map(({ sym, iv, r }) => ({ sym, iv, label: r.overall.label, setup: r.best.name, base: baseOf(sym) }));
 }
 
-/** Best setups with a positive record that aren't active yet (used by "Entryvex says"). */
-export function topWatch(n = 3) {
+/** Markets in a daily uptrend, closest to a new 20-day high first: { sym, iv, s, base, level, away }. */
+function watchRows() {
   const out = [];
   for (const { sym, iv, r } of rows) {
-    if (r.liquidity && !r.liquidity.ok) continue;
-    for (const s of r.setups) if ((s.verdict.level === "edge" || s.verdict.level === "weak") && !s.activeNow) out.push({ sym, iv, s, base: baseOf(sym) });
+    if ((r.liquidity && !r.liquidity.ok) || !r.long || !r.upNow || r.trend?.activeNow) continue;
+    const t = (r.triggers || []).find((x) => x.id === "trend" && x.ready);
+    if (t) out.push({ sym, iv, s: r.trend, base: baseOf(sym), level: t.level, away: t.away });
   }
-  return out.sort((a, b) => b.s.stats.ev - a.s.stats.ev).slice(0, n);
+  return out.sort((a, b) => a.away - b.away);
 }
+/** Closest markets to a BUY (used by "Entryvex says" and Today). */
+export function topWatch(n = 3) { return watchRows().slice(0, n); }
 
-/** Markets/setups with a track record, for the server's closed-app BUY checks. */
-export function setupMarkets(min = "go") {
-  const out = [];
-  for (const { sym, iv, r } of rows) {
-    if (r.liquidity && !r.liquidity.ok) continue;
-    const good = r.setups.filter((s) => s.verdict.level === "edge" || (min === "caution" && s.verdict.level === "weak"));
-    if (good.length) out.push({ symbol: sym, base: baseOf(sym), interval: iv, setupIds: good.map((s) => s.id),
-      labels: Object.fromEntries(good.map((s) => [s.id, s.verdict.level === "edge" ? "BUY" : "SMALL BUY"])) });
-  }
-  return out.slice(0, 25);
+/** Daily markets for the server's closed-app BUY checks (the trend rule, checked after each daily close). */
+export function setupMarkets() {
+  return rows.filter(({ iv, r }) => iv === "1d" && !(r.liquidity && !r.liquidity.ok))
+    .map(({ sym }) => ({ symbol: sym, base: baseOf(sym), interval: "1d", setupIds: ["trend"], labels: { trend: "BUY" } })).slice(0, 25);
 }
 
 /** One-line summary of Entryvex's signals for a symbol across 15m/1h/4h (for the AI). */
@@ -85,11 +82,11 @@ export function signalFor(sym) {
   const mine = rows.filter((x) => x.sym === sym);
   if (!mine.length) return "not scanned yet";
   const buy = mine.find(({ r }) => isBuy(r));
-  if (buy) return `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} (${buy.r.best.name})`;
-  const watch = mine.flatMap(({ iv, r }) => (r.liquidity && !r.liquidity.ok) ? [] : r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").map((s) => `${iv} ${s.name}`));
-  if (watch.length) return `no buy signal now; setups with a track record: ${watch.slice(0, 2).join(", ")}`;
+  if (buy) return `BUY signal on daily candles (${buy.r.best.name})`;
+  const w = watchRows().find((x) => x.sym === sym);
+  if (w) return `no buy signal now; in a daily uptrend, BUY if a day closes above ${w.level} (${w.away >= 0 ? "+" : ""}${w.away.toFixed(1)}%)`;
   if (mine.every(({ r }) => r.liquidity && !r.liquidity.ok)) return "barely trades on Binance.US (not tradeable here)";
-  return "no setup with a reliable track record";
+  return "no daily uptrend, so no buy signal";
 }
 
 /**
@@ -109,18 +106,16 @@ export function verdictFor(sym) {
     return null;
   }
   const buy = mine.find(({ r }) => isBuy(r));
-  if (buy) return { level: "buy", iv: buy.iv, label: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} ${IV_SHORT[buy.iv] || buy.iv}`,
-    why: `${buy.r.overall.level === "go" ? "BUY" : "SMALL BUY"} signal on ${buy.iv} candles: ${buy.r.best.name} (won ${Math.round(buy.r.best.stats.winRate * 100)}% of ${buy.r.best.stats.n} past trades).` };
+  if (buy) return { level: "buy", iv: buy.iv, label: "BUY 1D",
+    why: "BUY on the daily chart: uptrend, and a day just closed at a new 20-day high (the tested trend rule). Sell with a trailing stop." };
   const usable = mine.filter(({ r }) => !(r.liquidity && !r.liquidity.ok));
-  if (!usable.length) return { level: "unknown", label: "?", why: "Barely trades on this exchange, so its patterns can't be measured reliably." };
-  const measured = usable.some(({ r }) => r.setups.some((x) => x.verdict.level !== "thin"));
-  if (!measured) return { level: "unknown", label: "?", why: "Too few past trades for any setup to measure it accurately yet." };
-  const watching = usable.flatMap(({ iv, r }) => r.setups.filter((x) => x.verdict.level === "edge" || x.verdict.level === "weak").map((x) => ({ iv, x })))
-    .sort((a, b) => (b.x.verdict.level === "edge") - (a.x.verdict.level === "edge") || b.x.stats.ev - a.x.stats.ev);
-  // WATCH: a setup with a winning record exists here; it just isn't happening right now.
-  if (watching.length) return { level: "watch", label: `WATCH ${IV_SHORT[watching[0].iv] || watching[0].iv}`,
-    why: `No buy signal right now, but ${watching.length === 1 ? "a setup has" : `${watching.length} setups have`} a winning record here: ${watching.slice(0, 3).map(({ iv, x }) => `${x.name} on ${iv} (${Math.round(x.stats.winRate * 100)}% wins, ${x.stats.ev >= 0 ? "+" : ""}${(x.stats.ev * 100).toFixed(2)}%/trade)`).join("; ")}. It turns green the moment one appears.` };
-  return { level: "wait", label: "WAIT", why: "Don't buy: on 1h, 4h and daily candles, none of Entryvex's setups (or its prediction model) has made money here after costs lately." };
+  if (!usable.length) return { level: "unknown", label: "?", why: "Barely trades on this exchange, so its prices can't be judged reliably." };
+  if (!usable.some(({ r }) => r.long && r.sample?.candles > 0)) return { level: "unknown", label: "?", why: "Not enough daily price history yet (needs about 250 days)." };
+  const w = watchRows().find((x) => x.sym === sym);
+  // WATCH: in an uptrend; it turns green when a day closes at a new 20-day high.
+  if (w) return { level: "watch", label: "WATCH 1D",
+    why: `In a daily uptrend. Entryvex says BUY if a day closes above ${fmt.price(w.level)} (${w.away >= 0 ? "+" : ""}${w.away.toFixed(1)}% from now), the 20-day high.` };
+  return { level: "wait", label: "WAIT", why: "Don't buy: no uptrend on the daily chart (price isn't above its 200-day average with the 50-day above it). The trend rule waits for one." };
 }
 export function isRunning() { return running; }
 export function lastChecked() { return lastRun; }
@@ -133,9 +128,9 @@ function isBuy(r) {
 /** Check every market in the watchlist (or just `only`, e.g. a newly added symbol). */
 export async function run(only) {
   if (running) { if (only) queued.push(...only); else fullAgain = true; return; }
-  // The chart's candle size plus 1h, 4h and daily: good setups often live on a different candle size
-  // than the one on screen (lately mostly on daily), and the watchlist should still show them.
-  INTERVALS = [...new Set([hooks.getInterval?.() || "1h", "1h", "4h", "1d"])];
+  // Daily only: BUY signals come only from the trend rule on daily candles (shorter candles didn't beat
+  // random timing on unseen data), so checking other candle sizes would only cost time.
+  INTERVALS = ["1d"];
   running = true;
   clearTimeout(timer);
   const fee = (+store.get("feePct", 0.02) || 0) / 100;
@@ -238,15 +233,8 @@ export function pooledModelFor(iv) { return pooledByIv.get(iv)?.model || null; }
 function render() {
   const root = $("tab-opps");
   if (!root) return;
-  const buys = rows.filter(({ r }) => isBuy(r)).sort((a, b) => (b.r.best.stats.ev - a.r.best.stats.ev));
-  const watch = [];
-  for (const { sym, iv, r } of rows) {
-    if (r.liquidity && !r.liquidity.ok) continue;  // thin markets: patterns there aren't tradeable
-    for (const s of r.setups) {
-      if ((s.verdict.level === "edge" || s.verdict.level === "weak") && !s.activeNow) watch.push({ sym, iv, s });
-    }
-  }
-  watch.sort((a, b) => (b.s.verdict.level === "edge") - (a.s.verdict.level === "edge") || b.s.stats.ev - a.s.stats.ev);
+  const buys = rows.filter(({ r }) => isBuy(r));
+  const watch = watchRows();
   const markets = new Set(rows.map((x) => x.sym)).size;
   const thin = rows.filter(({ r }) => r.liquidity && !r.liquidity.ok);
   const thinNames = [...new Set(thin.map((x) => `${baseOf(x.sym)} ${x.iv}`))];
@@ -254,11 +242,10 @@ function render() {
   if (count) { count.textContent = buys.length; count.hidden = !buys.length; }
 
   root.innerHTML = `
-    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on ${INTERVALS.map((iv) => IV_NAME[iv] || iv).join(", ")} candles (the chart's candle size plus 1h, 4h and daily) with the same measured method as the scanner,
-      and refreshes every 15 minutes while it's open. Click any row to open it.</p>
+    <p class="muted small explain">Entryvex checks <strong>every market in your watchlist</strong> on daily candles with its trend rule: BUY when a market in an uptrend closes at a new 20-day high, then sell with a trailing stop. On data it never saw it made money after fees, with much smaller drops than just holding (<button class="link-btn" data-open-score>how it was tested</button>). Click any row to open it.</p>
     <div class="opps-status">
       <span>${running ? `<span class="typing"><i></i><i></i><i></i></span> ${fmt.esc(progress)}` : lastRun
-        ? `Last checked ${new Date(lastRun).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}: ${markets} markets × ${INTERVALS.length} candle sizes.`
+        ? `Last checked ${new Date(lastRun).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}: ${markets} markets on daily candles.`
         : "Starting the first check…"}</span>
       <button class="ghost-btn" id="opps-refresh" ${running ? "disabled" : ""}>Check now</button>
     </div>
@@ -267,21 +254,21 @@ function render() {
     ${buys.length ? `<div class="opps-list">${buys.map(({ sym, iv, r }) => {
       const s = r.best.stats;
       return `<button class="opp-row opp-buy" data-sym="${sym}" data-iv="${iv}">
-        <span class="opp-coin">${fmt.esc(baseOf(sym))}</span><span class="mono opp-iv">${iv}</span>
-        <span class="pill ${r.overall.level === "go" ? "pill-edge" : "pill-weak"}">${r.overall.level === "go" ? "BUY" : "SMALL BUY"}</span>
+        <span class="opp-coin">${fmt.esc(baseOf(sym))}</span><span class="mono opp-iv">${IV_SHORT[iv] || iv}</span>
+        <span class="pill pill-edge">BUY</span>
         <span>${fmt.esc(r.best.name)}</span>
-        <span class="mono small">won ${Math.round(s.winRate * s.n)}/${s.n} · ${fmt.pct(s.ev * 100)}/trade</span></button>`;
+        <span class="mono small">${s.n ? `here: ${fmt.pct(s.ev * 100)}/trade over ${s.n}` : "new market"}</span></button>`;
     }).join("")}</div>`
       : `<p class="muted small">${lastRun ? "No buy signals anywhere in your watchlist right now. That's normal: most of the time the honest answer is to wait." : "…"}</p>`}
 
-    <h3>Watch these: setups with a good track record (not active yet)</h3>
-    ${watch.length ? `<p class="muted tiny">When one of these appears, it becomes a buy signal. Setup alerts (🔔) tell you the moment it happens.</p>
-      <div class="opps-list">${watch.slice(0, 12).map(({ sym, iv, s }) => `
+    <h3>Watch these: in an uptrend, close to a BUY</h3>
+    ${watch.length ? `<p class="muted tiny">Each turns into a BUY when a day closes above the price shown. Setup alerts (🔔) tell you when it happens.</p>
+      <div class="opps-list">${watch.slice(0, 12).map(({ sym, iv, level, away }) => `
         <button class="opp-row" data-sym="${sym}" data-iv="${iv}">
-          <span class="opp-coin">${fmt.esc(baseOf(sym))}</span><span class="mono opp-iv">${iv}</span>
-          <span class="pill pill-${s.verdict.level}">${s.verdict.label}</span>
-          <span>${fmt.esc(s.name)}</span>
-          <span class="mono small">won ${Math.round(s.stats.winRate * 100)}% of ${s.stats.n} · ${fmt.pct(s.stats.ev * 100)}/trade</span></button>`).join("")}</div>`
-      : `<p class="muted small">${lastRun ? "None of the setups has a positive track record on your watchlist right now. Try adding more coins or stocks." : "…"}</p>`}
+          <span class="opp-coin">${fmt.esc(baseOf(sym))}</span><span class="mono opp-iv">${IV_SHORT[iv] || iv}</span>
+          <span class="pill pill-thin">WATCH</span>
+          <span>BUY above <strong class="mono">${fmt.price(level)}</strong></span>
+          <span class="mono small">${away >= 0 ? "+" : ""}${away.toFixed(1)}% away</span></button>`).join("")}</div>`
+      : `<p class="muted small">${lastRun ? "None of your watchlist is in a daily uptrend right now. The trend rule waits; try adding more coins or stocks." : "…"}</p>`}
     ${thinNames.length ? `<p class="muted tiny">Skipped because they barely trade on Binance.US at that candle size (prices jump, stops can't protect you): ${thinNames.map(fmt.esc).join(", ")}.</p>` : ""}`;
 }

@@ -120,10 +120,13 @@ export function renderTradeCard(c) {
     costPerSide: c.costPerSide, rules: c.rules,
   }) : null;
 
+  const trail = c.plan.kind === "trail";
   const levels = `
     <div><span>Buy around</span><strong class="mono">${fmt.price(sz?.entry ?? c.plan.entry)}</strong></div>
-    <div><span>Take profit</span><strong class="mono up">${fmt.price(sz?.target ?? c.plan.target)} <small>(+${pct(c.plan.targetPct)})</small></strong></div>
-    <div><span>Stop-loss</span><strong class="mono down">${fmt.price(sz?.stop ?? c.plan.stop)} <small>(−${pct(c.plan.stopPct)})</small></strong></div>`;
+    ${trail
+      ? `<div><span>Then trail the stop</span><strong class="mono">${fmt.price(c.plan.trail)} <small>under the high</small></strong><small class="muted">${c.plan.trailAtr} ATR below the highest price since you buy, raised after each daily close</small></div>`
+      : `<div><span>Take profit</span><strong class="mono up">${fmt.price(sz?.target ?? c.plan.target)} <small>(+${pct(c.plan.targetPct)})</small></strong></div>`}
+    <div><span>${trail ? "First stop-loss" : "Stop-loss"}</span><strong class="mono down">${fmt.price(sz?.stop ?? c.plan.stop)} <small>(−${pct(c.plan.stopPct)})</small></strong></div>`;
 
   if (!sz) {
     return `<div class="card">
@@ -149,7 +152,10 @@ export function renderTradeCard(c) {
       <ol>
         <li>Open your broker's app or website → <strong>Trade → Stocks &amp; ETFs</strong> → symbol <strong>${fmt.esc(c.base)}</strong>. US stock trades have $0 commission at most big brokers.</li>
         <li><strong>Buy</strong> ${copyable(trimQty(sz.qty))} shares as a <strong>limit order</strong> at ${copyable(plain(sz.entry))}, time-in-force <strong>Day</strong>. ${account(c.symbol).foreign ? "Only while that exchange is open (local market hours)." : "Only during market hours (9:30am–4pm New York time)."}</li>
-        <li>Once it fills, protect it with a <strong>One-Cancels-Other (OCO)</strong> sell for the same ${trimQty(sz.qty)} shares: a <strong>limit sell</strong> at ${copyable(plain(sz.target))} (take-profit) and a <strong>stop sell</strong> at ${copyable(plain(sz.stop))} (stop-loss). Schwab lists this under conditional orders; other brokers call it OCO or a bracket order. If your broker doesn't offer it, at least place the stop sell.</li>
+        ${trail
+          ? `<li>Once it fills, place a <strong>stop sell</strong> (good-'til-canceled) for the same ${trimQty(sz.qty)} shares at ${copyable(plain(sz.stop))}.</li>
+        <li>After each day's close, <strong>raise that stop</strong> to the new level Entryvex shows in My trades (${c.plan.trailAtr} ATR, about ${copyable(plain(c.plan.trail))}, under the highest price since you bought). Never lower it. Easier: many brokers offer a <strong>trailing stop</strong> order; a trail amount of ${copyable(plain(c.plan.trail))} does nearly the same thing automatically.</li>`
+          : `<li>Once it fills, protect it with a <strong>One-Cancels-Other (OCO)</strong> sell for the same ${trimQty(sz.qty)} shares: a <strong>limit sell</strong> at ${copyable(plain(sz.target))} (take-profit) and a <strong>stop sell</strong> at ${copyable(plain(sz.stop))} (stop-loss). Schwab lists this under conditional orders; other brokers call it OCO or a bracket order. If your broker doesn't offer it, at least place the stop sell.</li>`}
         <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
       </ol>
       <p class="small muted">Stocks can jump overnight: a stop-loss can fill below your stop price if the stock opens lower ("gap down").</p>
@@ -159,26 +165,34 @@ export function renderTradeCard(c) {
     <div class="card-title">Trade card · ${fmt.esc(c.setup.name)}</div>
     <div class="plan-grid">
       <div class="hl"><span>Buy</span><strong class="mono">${q}</strong><small class="muted">≈ ${M(sz.spend)} · ${(sz.pctOfBalance * 100).toFixed(0)}% of balance</small></div>
-      <div><span>If target hits</span><strong class="mono up">${M(sz.winUsd, "+")}</strong><small class="muted">after fees &amp; spread</small></div>
-      <div><span>If stop hits</span><strong class="mono down">${M(sz.lossUsd, "−")}</strong><small class="muted">${(sz.lossUsd / bal * 100).toFixed(2)}% of balance</small></div>
+      ${trail
+        ? `<div><span>If it trends</span><strong class="mono up">no cap</strong><small class="muted">you sell when it falls back to the trailing stop</small></div>`
+        : `<div><span>If target hits</span><strong class="mono up">${M(sz.winUsd, "+")}</strong><small class="muted">after fees &amp; spread</small></div>`}
+      <div><span>If ${trail ? "the first stop" : "stop"} hits</span><strong class="mono down">${M(sz.lossUsd, "−")}</strong><small class="muted">${(sz.lossUsd / bal * 100).toFixed(2)}% of balance</small></div>
       ${levels}
-      <div><span>Average per trade (measured)</span><strong class="mono ${evUsd >= 0 ? "up" : "down"}">${M(evUsd, evUsd >= 0 ? "+" : "−")}</strong><small class="muted">from ${s.n} past trades</small></div>
-      <div><span>Reward : risk</span><strong class="mono">${sz.rr.toFixed(2)} : 1</strong><small class="muted">needs ${Math.round(sz.breakevenWin * 100)}% wins to break even</small></div>
-      <div><span>Usually resolves in</span><strong class="mono">${c.minutesToResolve ? humanMinutes(c.minutesToResolve) : "—"}</strong><small class="muted">exit at market after ${c.maxBarsText}</small></div>
+      <div><span>Average per trade (measured)</span><strong class="mono ${evUsd >= 0 ? "up" : "down"}">${s.n ? M(evUsd, evUsd >= 0 ? "+" : "−") : "—"}</strong><small class="muted">from ${s.n} past trades here</small></div>
+      ${trail
+        ? `<div><span>Won here</span><strong class="mono">${s.n ? Math.round(s.winRate * 100) + "%" : "—"}</strong><small class="muted">trend trades win less than half the time; winners are bigger</small></div>
+      <div><span>Typical hold</span><strong class="mono">${s.medianBars ? `${s.medianBars} days` : "—"}</strong><small class="muted">no time limit: the stop decides</small></div>`
+        : `<div><span>Reward : risk</span><strong class="mono">${sz.rr.toFixed(2)} : 1</strong><small class="muted">needs ${Math.round(sz.breakevenWin * 100)}% wins to break even</small></div>
+      <div><span>Usually resolves in</span><strong class="mono">${c.minutesToResolve ? humanMinutes(c.minutesToResolve) : "—"}</strong><small class="muted">exit at market after ${c.maxBarsText}</small></div>`}
     </div>
     ${warn}
     ${sz.ok ? `${steps ?? `<details class="howto"><summary>How to place this on Binance.US</summary>
       <ol>
         <li>Open Binance.US → <strong>Trade</strong> (Advanced/Spot trading, not the simple Buy/Sell screen, which charges more) → <strong>${fmt.esc(c.base)}/${fmt.esc(c.quote)}</strong>.</li>
         <li><strong>Limit buy</strong> ${copyable(trimQty(sz.qty))} ${fmt.esc(c.base)} at price ${copyable(fmt.price(sz.entry).replace(/,/g, ""))}. A limit order is a "maker" order and usually pays 0% fee.</li>
-        <li>Once it fills, place an <strong>OCO sell</strong> for the same amount: limit price (take-profit) ${copyable(plain(sz.target))}, stop ${copyable(plain(sz.stop))}, stop-limit ${copyable(plain(ocoStopLimit))}.</li>
+        ${trail
+          ? `<li>Once it fills, place a <strong>stop-limit sell</strong> for the same amount: stop ${copyable(plain(sz.stop))}, limit ${copyable(plain(ocoStopLimit))}.</li>
+        <li>After each daily close (00:00 UTC), <strong>cancel it and place a new one</strong> at the higher stop Entryvex shows in My trades (${c.plan.trailAtr} ATR, about ${copyable(plain(c.plan.trail))}, under the highest price since you bought). Never lower it.</li>`
+          : `<li>Once it fills, place an <strong>OCO sell</strong> for the same amount: limit price (take-profit) ${copyable(plain(sz.target))}, stop ${copyable(plain(sz.stop))}, stop-limit ${copyable(plain(ocoStopLimit))}.</li>`}
         <li>Click <strong>I took this trade</strong> below so Entryvex tracks it in My trades and records the result automatically.</li>
       </ol>
       <p class="small muted">Prices move. If the price has already run past the buy zone, skip it rather than chasing.</p>
     </details>`}
-    <div class="take-row">${takeButton({ symbol: c.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, qty: sz.qty, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval, source: "entryvex" })}
+    <div class="take-row">${takeButton({ symbol: c.symbol, entry: sz.entry, stop: sz.stop, target: sz.target, trail: c.plan.trail || null, qty: sz.qty, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval, source: "entryvex" })}
       <span class="muted small">Only after you've actually placed the order.</span></div>` : ""}
-    ${account(c.symbol).foreign ? "" : `<div class="take-row">${practiceButton({ symbol: c.symbol, entry: c.plan.entry, stop: c.plan.stop, target: c.plan.target, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval }, c.costPerSide, c.rules)}
+    ${account(c.symbol).foreign ? "" : `<div class="take-row">${practiceButton({ symbol: c.symbol, entry: c.plan.entry, stop: c.plan.stop, target: c.plan.target, trail: c.plan.trail || null, setup: c.setup.name, verdict: c.verdictLevel, interval: c.interval }, c.costPerSide, c.rules)}
       <span class="muted small">Not ready to use real money? Try it with pretend money first.</span></div>`}
   </div>`;
 }

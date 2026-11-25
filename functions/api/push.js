@@ -7,7 +7,8 @@
 //   time limit), big moves, and BUY setups on markets with a track record, then sends notifications.
 // Storage (Cloudflare KV): only an anonymous browser push address + alert settings. No names/emails.
 import { vapidKeys, sendPush } from "./webpush.js";
-import { SETUPS, RULES } from "../../public/js/engine.js";
+import { TREND_SETUP, RULES } from "../../public/js/engine.js";
+const ALERT_SETUPS = [TREND_SETUP];   // BUY alerts: only the trend rule (daily), the one that held up on unseen data
 import { botEventsSince } from "./bot.js";
 import { computeAll } from "../../public/js/indicators.js";
 
@@ -90,7 +91,7 @@ export async function onRequest(context) {
 }
 
 const SYM = /^(S:[A-Z0-9.^=\-]{1,12}|[A-Z0-9]{3,20})$/;
-const IVS = new Set(["15m", "1h", "4h"]);
+const IVS = new Set(["15m", "1h", "4h", "1d"]);
 function cleanPrefs(p) {
   const num = (v) => (Number.isFinite(+v) ? +v : null);
   return {
@@ -103,7 +104,7 @@ function cleanPrefs(p) {
     move: p.move?.on ? { on: true, pct: Math.max(0.5, Math.min(50, num(p.move.pct) || 2)), symbols: (p.move.symbols || []).filter((s) => SYM.test(s)).slice(0, 30) } : { on: false },
     setups: (Array.isArray(p.setups) ? p.setups : []).slice(0, 25)
       .filter((m) => SYM.test(m.symbol) && IVS.has(m.interval) && Array.isArray(m.setupIds))
-      .map((m) => ({ symbol: m.symbol, base: String(m.base || "").slice(0, 12), interval: m.interval, setupIds: m.setupIds.filter((x) => SETUPS.some((s) => s.id === x)).slice(0, 4), labels: m.labels || {} })),
+      .map((m) => ({ symbol: m.symbol, base: String(m.base || "").slice(0, 12), interval: m.interval, setupIds: m.setupIds.filter((x) => ALERT_SETUPS.some((s) => s.id === x)).slice(0, 4), labels: m.labels || {} })),
     followBot: !!p.followBot,
   };
 }
@@ -206,13 +207,13 @@ export async function runAlerts(env, now = Date.now()) {
         if (!c || c.length < RULES.warmup + 2) continue;
         const x = computeAll(c);
         const i = c.length - 2;   // last CLOSED candle
-        for (const s of SETUPS) {
+        for (const s of ALERT_SETUPS) {
           if (!m.setupIds.includes(s.id)) continue;
           let active = false;
           try { active = !!s.test(i, c, x); } catch {}
           if (active) fire(`s:${m.symbol}:${m.interval}:${s.id}:${c[i].time}`, {
             title: `${m.labels?.[s.id] || "BUY signal"}: ${label(m.symbol, m.base)} · ${s.name} (${m.interval})`,
-            body: "A setup with a positive track record just appeared. Open Entryvex for the buy plan, sell prices and size.",
+            body: "Uptrend, and a day just closed at a new 20-day high (Entryvex's tested trend rule). Open Entryvex for the plan, stop-loss and size.",
             url: `/?s=${encodeURIComponent(m.symbol)}&i=${m.interval}`,
           });
         }

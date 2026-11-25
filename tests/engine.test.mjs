@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { exitOnCandle, wilson, analyze, RULES } from "../public/js/engine.js";
+import { exitOnCandle, wilson, analyze, RULES, TREND, trailStop, trendTrade, isLongChart } from "../public/js/engine.js";
+import { computeAll } from "../public/js/indicators.js";
 import { forecast } from "../public/js/forecast.js";
 import { ema, rsi, atr } from "../public/js/indicators.js";
 
@@ -64,7 +65,7 @@ test("every simulated trade exits at the stop, the target, a gap open, or the ti
   for (const s of r.setups) {
     for (const t of s.trades) {
       assert.ok(["stop", "target", "timeout"].includes(t.outcome));
-      assert.ok(t.bars >= 1 && t.bars <= RULES.maxBars);
+      assert.ok(t.bars >= 1 && t.bars <= (s.trend ? TREND.maxBars + 1 : RULES.maxBars));
       assert.ok(t.entryTime > t.signalTime, "entry must be after the signal (no look-ahead)");
     }
   }
@@ -120,4 +121,33 @@ test("stops are never so tight that costs eat the target", () => {
   assert.ok(target >= 3 * 2 * 0.0007 - 1e-12, "target covers the round trip three times");
   // Bigger candles: plain 1 ATR.
   assert.equal(riskDistance(500, 58000, 0.0007), 500);
+});
+
+test("trend rule: BUY only on daily-or-longer candles, never on short ones", () => {
+  const short = randomWalk(3000, 11);
+  const r = analyze(short, { costPerSide: 0.0005, useModel: false });
+  assert.equal(r.long, false);
+  assert.ok(r.overall.level !== "go" && r.overall.level !== "caution", "short charts never say BUY");
+  assert.equal(r.plan, null);
+  const daily = short.map((k, i) => ({ ...k, time: 1_500_000_000 + i * 86400 }));
+  assert.equal(isLongChart(daily), true);
+  const d = analyze(daily, { costPerSide: 0.0005, useModel: false });
+  if (d.overall.level === "go") {
+    assert.equal(d.plan.kind, "trail");
+    assert.equal(d.plan.target, null);
+    assert.ok(d.plan.stop < d.plan.entry);
+  }
+});
+
+test("trailing stop only ever moves up, and follows 3 ATR under the high", () => {
+  assert.equal(trailStop(90, 100, 2), 94);
+  assert.equal(trailStop(95, 100, 2), 95);     // never lowered
+  assert.equal(trailStop(95, 100, NaN), 95);
+  // a steady rise then a drop: exits at the trailed stop, above the first stop
+  const c = [];
+  for (let i = 0; i < 260; i++) c.push({ time: i * 86400, open: 100 + i, high: 101 + i, low: 99 + i, close: 100.5 + i, volume: 1 });
+  for (let i = 0; i < 10; i++) { const p = 350 - i * 8; c.push({ time: (260 + i) * 86400, open: p, high: p + 1, low: p - 8, close: p - 7, volume: 1 }); }
+  const x = computeAll(c);
+  const t = trendTrade(c, x, 220, c.length - 1, 0);
+  assert.ok(t && t.outcome === "stop" && t.exit > t.entry, "trailing stop locks in the gain");
 });

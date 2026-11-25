@@ -26,6 +26,12 @@ const TERMS = [
   ["time limit", "If neither the take-profit nor the stop-loss is hit by then, the plan is to sell at the market price. The track record was measured this way."],
   ["coin flip", "Right about half the time: no real ability to predict the direction."],
   ["track record", "How this exact signal did every time it happened before on this market, after fees."],
+  ["trailing stop", "A stop-loss that you move up as the price rises (here: 3 ATR under the highest price since you bought) and never move down. It locks in gains while letting a winning trade keep running."],
+  ["ATR", "Average True Range: how much the price normally moves in one candle (here, one day). Stops are set in ATRs so they fit how jumpy each market is."],
+  ["20-day high", "The highest price of the previous 20 days. A daily close above it means the price is breaking out to new short-term highs."],
+  ["200-day average", "The average closing price of the last 200 days, a common line for the long-term trend: above it is an uptrend, below it a downtrend."],
+  ["trend rule", "Entryvex's one BUY rule: in an uptrend, buy when a day closes at a new 20-day high; sell with a trailing stop. It's the rule that held up on data it never saw."],
+  ["random timing", "Taking the same trade at random moments. If a signal can't beat that, its timing adds nothing."],
   ["after fees", "With trading costs (fee + spread) already subtracted, so the numbers are what you'd actually keep."],
 ];
 const byWord = new Map(TERMS.map(([w, d]) => [w.toLowerCase(), d]));

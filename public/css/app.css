@@ -194,7 +194,7 @@ h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: u
 .setup-desc { color: var(--muted); font-size: 12px; margin-top: 2px; max-width: 340px; line-height: 1.35; }
 .pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: #2a3140; color: var(--text); }
 .pill-on { background: rgba(46,229,157,.16); color: var(--accent); }
-.pill-edge, .v-pill-go { background: rgba(34,197,94,.18); color: #6ee7a0; }
+.pill-edge, .pill-tested, .v-pill-go { background: rgba(34,197,94,.18); color: #6ee7a0; }
 .pill-weak, .pill-thin, .v-pill-caution { background: rgba(224,179,65,.16); color: #f0cb6a; }
 .pill-negative, .v-pill-no { background: rgba(240,80,110,.16); color: #ff8aa2; }
 .v-pill-wait { background: #2a3140; color: var(--muted); }

@@ -32,6 +32,71 @@ export function riskDistance(atr, price, costPerSide) {
   return Math.max(RULES.stopAtr * atr, RULES.minRiskCosts * costPerSide * price);
 }
 
+/**
+ * The trend rule: the BUY rule that held up best on data it never saw (tools/walkforward.mjs): it made
+ * money after fees, a little more than random timing, with much smaller drops than just holding.
+ * Daily charts only. Buy when the market is in an uptrend (price above its 200-day average, and the
+ * 50-day average above the 200-day) and a day closes above the highest price of the previous 20 days.
+ * Sell with a trailing stop: start 2 ATR below the entry, then keep it 3 ATR below the highest price
+ * since you bought (a "chandelier" stop, a standard trend-following exit), never lowering it.
+ * No fixed take-profit: winners are allowed to run, which is where trend following makes its money.
+ * All numbers are standard textbook values chosen before testing, not tuned to the results.
+ */
+export const TREND = {
+  stopAtr: 2,          // first stop: 2 ATR below entry
+  trailAtr: 3,         // then 3 ATR below the highest high since entry
+  maxBars: 400,        // safety cap for the past-record replay (about 13 months of daily candles)
+  minSpacingSec: 20 * 3600,   // "daily or longer" candles
+};
+export const TREND_SETUP = {
+  id: "trend", name: "Trend breakout", trend: true,
+  plain: "The market is in an uptrend (price above its 200-day average, 50-day average above the 200-day) and a day just closed above the highest price of the previous 20 days.",
+  test: (i, c, x) => c[i].close > x.ema200[i] && x.ema50[i] > x.ema200[i] && c[i].close > x.high20[i],
+};
+/** Candles of a day or longer? (median spacing of the last 30 candles) */
+export function isLongChart(candles) {
+  const t = candles.slice(-31).map((k) => k.time);
+  if (t.length < 3) return false;
+  const gaps = t.slice(1).map((v, i) => v - t[i]).sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] >= TREND.minSpacingSec;
+}
+/** The trailing stop after a candle: never lower than before, 3 ATR under the highest high so far. */
+export function trailStop(prevStop, highSinceEntry, atrNow) {
+  return isFinite(atrNow) ? Math.max(prevStop, highSinceEntry - TREND.trailAtr * atrNow) : prevStop;
+}
+/** First stop for a trend trade bought at `entry`. */
+export function trendStop(entry, atr, cost) {
+  return entry - Math.max(TREND.stopAtr * atr, RULES.minRiskCosts * cost * entry);
+}
+/** Replay one trend trade signalled at candle i: buy next open, exit at the (trailing) stop. null if still open. */
+export function trendTrade(c, x, i, lastClosed, cost) {
+  const e = i + 1;
+  if (e > lastClosed || !isFinite(x.atr14[i])) return null;
+  const entry = c[e].open;
+  let stop = trendStop(entry, x.atr14[i], cost), hi = entry;
+  for (let j = e; j <= lastClosed; j++) {
+    const k = c[j];
+    if (k.open <= stop) return { entry, exit: k.open, outcome: "stop", end: j };
+    if (k.low <= stop) return { entry, exit: stop, outcome: "stop", end: j };
+    if (j - e + 1 >= TREND.maxBars) return { entry, exit: k.close, outcome: "timeout", end: j };
+    hi = Math.max(hi, k.high);
+    stop = trailStop(stop, hi, x.atr14[j]);
+  }
+  return null;
+}
+function trendBacktest(c, x, lastClosed, cost) {
+  const trades = [];
+  for (let i = RULES.warmup; i < lastClosed; i++) {
+    if (!safeTest(TREND_SETUP, i, c, x)) continue;
+    const r = trendTrade(c, x, i, lastClosed, cost);
+    if (!r) break;
+    const net = (r.exit - r.entry) / r.entry - 2 * cost;
+    trades.push({ signalTime: c[i].time, entryTime: c[i + 1].time, exitTime: c[r.end].time, entry: r.entry, exit: r.exit, outcome: r.outcome, net, bars: r.end - i, regime: regimeAt(c, x, i) });
+    i = r.end;
+  }
+  return trades;
+}
+
 export const SETUPS = [
   {
     id: "breakout",
@@ -129,42 +194,81 @@ export function analyze(candles, { costPerSide = 0.0007, formingLast = true, use
   const a = x.atr14[lastClosed];
   const price = candles[candles.length - 1].close;
   const active = setups.filter((s) => s.activeNow);
-  const rank = { edge: 3, weak: 2, thin: 1, flat: 0.5, negative: 0 };
+  const rank = { tested: 4, edge: 3, weak: 2, thin: 1, flat: 0.5, negative: 0 };
   active.sort((p, q) => rank[q.verdict.level] - rank[p.verdict.level] || q.stats.ev - p.stats.ev);
-  const best = active[0] || null;
+  let best = active[0] || null;
 
   const liquidity = checkLiquidity(candles, lastClosed);
 
-  let overall;
-  if (!liquidity.ok) overall = { level: "no", label: "ILLIQUID", text: liquidity.reason };
-  else if (!best) overall ={ level: "wait", label: "WAIT", text: "No setup is active right now. Nothing to do, which is often the right call." };
-  else if (best.verdict.level === "edge") overall = { level: "go", label: "GO", text: `${best.name} is active, and it has a measured, positive edge on this coin and timeframe after costs.` };
-  else if (best.verdict.level === "weak") overall = { level: "caution", label: "CAUTION", text: `${best.name} is active and has been slightly profitable after costs, but the edge isn't statistically clear. Small size or skip.` };
-  else if (best.verdict.level === "thin") overall = { level: "caution", label: "UNPROVEN", text: `${best.name} is active, but it has happened too few times here to measure. Treat it as unproven.` };
-  else if (best.verdict.level === "flat") overall = { level: "no", label: "NO TRADE", text: `${best.name} is active, but after costs it has roughly broken even here. Any profit so far looks like luck. Skip it.` };
-  else overall ={ level: "no", label: "NO TRADE", text: `${best.name} is active, but historically it has lost money after costs on this coin and timeframe. Skip it.` };
+  // BUY answers come ONLY from the trend rule on daily (or longer) candles: on unseen data it made money
+  // after fees with small drops. The other setups are still measured and shown as research, but on
+  // unseen data they lost money after fees (worse than random timing), so they no longer produce a BUY.
+  const long = isLongChart(candles);
+  const trendTrades = trendBacktest(candles, x, lastClosed, costPerSide);
+  const tStats = summarize(trendTrades);
+  const trend = {
+    ...TREND_SETUP, trades: trendTrades, stats: tStats, statsAll: tStats, statsRegime: tStats, basis: "all", exit: "trail",
+    activeNow: long && lastClosed >= RULES.warmup && safeTest(TREND_SETUP, lastClosed, candles, x),
+    verdict: trendVerdict(tStats),
+  };
+  setups.unshift(trend);
+  const upNow = lastClosed >= RULES.warmup && candles[lastClosed].close > x.ema200[lastClosed] && x.ema50[lastClosed] > x.ema200[lastClosed];
+  const hi20 = lastClosed >= 20 ? Math.max(...candles.slice(lastClosed - 19, lastClosed + 1).map((k) => k.high)) : NaN;
 
-  const d = isFinite(a) ? riskDistance(a, price, costPerSide) : NaN;
-  const plan = liquidity.ok && best && isFinite(a) ? {
-    setup: best.id,
+  let overall, buyFrom = null;
+  if (!liquidity.ok) overall = { level: "no", label: "ILLIQUID", text: liquidity.reason };
+  else if (!long) overall = { level: "wait", label: "WAIT", shortChart: true, text: "On candles shorter than a day, Entryvex's buy signals lost money after fees when tested on data they never saw (no better than buying at random moments). BUY signals come from the daily chart." };
+  else if (trend.activeNow) { overall = { level: "go", label: "GO", text: "Uptrend, and a day just closed at a new 20-day high: Entryvex's trend rule, which made money after fees on data it never saw. Sell with a trailing stop." }; buyFrom = trend; }
+  else if (upNow) overall = { level: "wait", label: "WAIT", trigger: hi20, text: `Uptrend, but no new 20-day high yet. Entryvex says BUY when a day closes above ${fmtP(hi20)}.` };
+  else overall = { level: "wait", label: "WAIT", text: "No uptrend: price isn't above its 200-day average with the 50-day above it. The trend rule waits for one." };
+
+  const plan = buyFrom && isFinite(a) ? {
+    setup: buyFrom.id,
+    kind: "trail",
     entry: price,
-    stop: price - d,
-    target: price + (RULES.targetAtr / RULES.stopAtr) * d,
-    stopPct: d / price,
-    targetPct: ((RULES.targetAtr / RULES.stopAtr) * d) / price,
-    medianBars: best.stats.medianBars,
+    stop: trendStop(price, a, costPerSide),
+    target: null,
+    trailAtr: TREND.trailAtr,
+    trail: TREND.trailAtr * a,
+    atr: a,
+    stopPct: (price - trendStop(price, a, costPerSide)) / price,
+    targetPct: null,
+    medianBars: buyFrom.stats.medianBars,
   } : null;
 
-  const triggers = buyTriggers(candles, x, lastClosed, setups, price);
+  const triggers = long ? trendTriggers(candles, x, lastClosed, trend, price, upNow, hi20) : [];
 
+  if (buyFrom) best = buyFrom;
   return {
-    setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers,
+    setups, overall, best, plan, costPerSide, atr: a, price, liquidity, triggers, long, trend, upNow,
     regime: { now: regimeNow, label: REGIME_LABEL[regimeNow] },
     model: model?.ok ? { pNow: model.pNow, threshold: model.threshold, H: model.H, test: model.test, weights: model.weights, shared: !!model.shared } : null,
     sample: {
       candles: Math.max(0, lastClosed - RULES.warmup),
       from: candles[RULES.warmup]?.time, to: candles[lastClosed]?.time,
     },
+  };
+}
+
+const fmtP = (v) => (isFinite(v) ? (v >= 100 ? v.toFixed(2) : v >= 1 ? v.toFixed(3) : v.toPrecision(4)) : "?");
+
+/** "When would Entryvex say BUY?" on a daily chart: the trend rule's price trigger. */
+function trendTriggers(c, x, i, trend, price, upNow, hi20) {
+  if (i < RULES.warmup) return [];
+  return [upNow
+    ? { id: "trend", setup: trend, level: hi20, away: ((hi20 - price) / price) * 100, ready: true, text: "a day closes above {L} (the 20-day high) while the uptrend holds" }
+    : { id: "trend", setup: trend, level: null, away: null, ready: false,
+        text: c[i].close > x.ema200[i]
+          ? "first needs the 50-day average to rise above the 200-day average (the uptrend isn't confirmed yet)"
+          : `first needs an uptrend: price back above its 200-day average (about ${fmtP(x.ema200[i])})` }];
+}
+
+/** The trend rule is judged across many markets (see the Scorecard), so one market's own record is context. */
+function trendVerdict(s) {
+  if (s.n < 8) return { level: "tested", label: "Tested rule", why: `Only ${s.n} past trades on this market, too few to judge it here on its own. Across 12 markets the rule made money after fees on data it never saw.` };
+  return {
+    level: "tested", label: "Tested rule",
+    why: `On this market it made ${(s.ev * 100).toFixed(1)}% per trade on average over ${s.n} past trades (won ${Math.round(s.winRate * 100)}%). Trend trades win less than half the time; the winners are bigger than the losers. Across 12 markets the rule made money after fees on data it never saw.`,
   };
 }
 

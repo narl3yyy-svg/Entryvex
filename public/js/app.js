@@ -1089,7 +1089,7 @@ function copyBotTrade() {
   const price = state.stats.get(sym)?.last ?? lastCandle?.close;
   if (!p || !(price > 0)) return;
   const name = nameFor(sym);
-  if (price <= p.stop || price >= p.target) {
+  if (price <= p.stop || (p.target && price >= p.target)) {
     pushAlert({ kind: "info", symbol: sym, title: "Too late to copy", body: `${name} is already ${price <= p.stop ? "at or below the bot's stop-loss" : "at or above the bot's target"}. Entryvex won't copy a trade whose plan has already played out.` });
     return;
   }
@@ -1106,9 +1106,12 @@ function copyBotTrade() {
     pushAlert({ kind: "info", symbol: sym, title: "Can't size this copy", body: sz?.reason === "too-small" ? "Your balance and max-loss setting make this trade smaller than the exchange minimum." : "The bot's stop and target don't leave room for a trade at today's price." });
     return;
   }
-  addTrade({ symbol: sym, entry: price, qty: sz.qty, stop: p.stop, target: p.target, setup: `Copied the bot: ${p.name}`, interval: p.iv, source: "bot-copy", sellBy: p.sellBy });
+  const trail = p.trail && p.atr ? 3 * p.atr : null;
+  addTrade({ symbol: sym, entry: price, qty: sz.qty, stop: p.stop, target: p.target, trail, setup: `Copied the bot: ${p.name}`, interval: p.iv, source: "bot-copy", sellBy: trail ? null : p.sellBy });
   pushAlert({ kind: "info", symbol: sym, title: `Copied: buy ${+sz.qty.toFixed(8)} ${isStock(sym) ? "shares of " + name : name}`,
-    body: `About $${sz.spend.toFixed(2)} at ${fmt.price(price)}. Now place it at your exchange or broker, then set a take-profit at ${fmt.price(p.target)} and a stop-loss at ${fmt.price(p.stop)}. It's in My trades; Entryvex will tell you when to sell.` });
+    body: trail
+      ? `About $${sz.spend.toFixed(2)} at ${fmt.price(price)}. Now place it at your exchange or broker with a stop-loss at ${fmt.price(p.stop)}. It's in My trades: Entryvex moves the stop up as the price rises and tells you when to raise yours.`
+      : `About $${sz.spend.toFixed(2)} at ${fmt.price(price)}. Now place it at your exchange or broker, then set a take-profit at ${fmt.price(p.target)} and a stop-loss at ${fmt.price(p.stop)}. It's in My trades; Entryvex will tell you when to sell.` });
 }
 
 /* ---------- Simple / Pro mode ---------- */

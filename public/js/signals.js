@@ -4,7 +4,7 @@
 // the outcome is checked against real Binance.US candles using the exact same rules as the
 // backtest (buy next candle's open, 1×ATR stop, 1.5×ATR target, 24-candle limit, costs).
 // Over time this shows whether Entryvex's live confidence actually holds up.
-import { RULES, exitOnCandle, riskDistance } from "./engine.js";
+import { RULES, TREND, exitOnCandle, riskDistance, trendStop } from "./engine.js";
 import { getKlinesSince } from "./market.js";
 import * as fmt from "./format.js";
 
@@ -43,6 +43,24 @@ export function logFromAnalysis(symbol, interval, candles, r) {
 }
 
 /* ---------- Resolve outcomes from real candles ---------- */
+/** Trend-rule signals: first stop 2 ATR under the entry, then 3 ATR under the highest high (ATR at the signal). */
+async function resolveTrend(s, entryTime, now) {
+  let raw;
+  try { raw = await getKlinesSince(s.symbol, s.interval, entryTime, TREND.maxBars); } catch { return; }
+  const c = (Array.isArray(raw) ? raw : []).filter((k) => k.closeTime < now);
+  if (!c.length) return;
+  const entry = c[0].open;
+  let stop = trendStop(entry, s.atr, s.cost ?? 0.0005), hi = entry;
+  for (let j = 0; j < c.length; j++) {
+    const k = c[j];
+    const hit = k.open <= stop ? k.open : k.low <= stop ? stop : null;
+    if (hit != null) { Object.assign(s, { status: "done", entry, exit: hit, outcome: "stop", bars: j + 1, net: (hit - entry) / entry - 2 * (s.cost || 0), resolvedAt: Date.now() }); return; }
+    hi = Math.max(hi, k.high);
+    stop = Math.max(stop, hi - TREND.trailAtr * s.atr);
+  }
+  s.progress = c.length;
+}
+
 let resolving = false;
 async function resolveOpen() {
   if (resolving) return;
@@ -54,6 +72,7 @@ async function resolveOpen() {
       const sec = SEC[s.interval] || 900;
       const entryTime = s.signalTime + sec;
       if (now < entryTime + sec) continue;  // entry candle hasn't closed yet
+      if (s.setupId === "trend") { await resolveTrend(s, entryTime, now); continue; }
       let raw;
       try { raw = await getKlinesSince(s.symbol, s.interval, entryTime, RULES.maxBars + 1); } catch { continue; }
       if (!Array.isArray(raw) || !raw.length) continue;
@@ -93,6 +112,7 @@ export function initSignals(h) {
 }
 
 const GROUPS = [
+  ["tested", "BUY (trend rule)", "uptrend + new 20-day high on daily candles; sold at the trailing stop"],
   ["edge", "GO (proven edge)", "Entryvex said this setup had a proven edge"],
   ["weak", "CAUTION (weak edge)", "slightly profitable before, not statistically clear"],
   ["thin", "UNPROVEN", "too few past examples to measure"],
@@ -136,6 +156,6 @@ function render() {
         <td><span class="pill pill-${s.verdict}">${fmt.esc(s.verdictLabel)}</span></td>
         <td class="num mono ${s.status === "done" ? (s.net > 0 ? "up" : "down") : "muted"}">${s.status === "done"
           ? `${fmt.pct(s.net * 100)} <span class="small muted">${{ target: "🎯", stop: "stop", timeout: "time" }[s.outcome]}</span>`
-          : `playing out${s.progress ? ` (${s.progress}/${RULES.maxBars})` : ""}`}</td></tr>`).join("")}
+          : s.setupId === "trend" ? `holding${s.progress ? ` (${s.progress} days)` : ""}` : `playing out${s.progress ? ` (${s.progress}/${RULES.maxBars})` : ""}`}</td></tr>`).join("")}
       </tbody></table></div>` : `<p class="muted small">No signals recorded yet. Keep Entryvex open (turn on setup alerts in 🔔 to watch your whole watchlist) and signals will appear here as they fire.</p>`}`;
 }

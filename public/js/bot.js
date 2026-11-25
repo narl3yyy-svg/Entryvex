@@ -73,12 +73,11 @@ function render() {
   const statusCls = s.status === "proven" ? "pill-edge" : s.status === "learning" ? "pill-thin" : "pill-negative";
   const feeOf = (sym) => (sym.startsWith("S:") ? data.settings.fee.stock : data.settings.fee.crypto);
   const trades = showAll ? data.trades : data.trades.slice(0, 12);
-  const learned = data.memory.filter((m) => m.status === "benched" || m.status === "promoted");
   el.innerHTML = `
     <div class="bot-head">
       <div>
         <h3>🤖 Entryvex paper-trading bot <span class="pill ${statusCls}">${s.status === "proven" ? "Proven" : s.status === "learning" ? "Learning" : "Not proven"}</span></h3>
-        <p class="muted small">Trades a <strong>virtual $${data.startUsd}</strong> on its own, 24/7, across ${data.markets.length} markets (${data.markets.map((m) => fmt.esc(m.name)).join(", ")}) at live prices, with fees, stop-losses and targets. Before each buy it checks the chart, the setup's record, the AI news read and (for stocks) earnings dates. No real money. Started ${when(data.startedAt)} (${s.days.toFixed(1)} days ago).</p>
+        <p class="muted small">Trades a <strong>virtual $${data.startUsd}</strong> on its own, 24/7, across ${data.markets.length} markets (${data.markets.map((m) => fmt.esc(m.name)).join(", ")}) at live prices, with fees. It follows Entryvex's <strong>trend rule</strong>: buy when a daily candle closes at a new 20-day high in an uptrend, then sell with a trailing stop. No real money. Started ${when(data.startedAt)} (${s.days.toFixed(1)} days ago).${data.previous?.trades ? ` <span class="muted">Rebuilt from an older version that made ${data.previous.trades} short-term trades${data.previous.equity != null ? ` and ended at $${data.previous.equity.toFixed(2)}` : ""}.</span>` : ""}</p>
       </div>
       <button class="${followBot() ? "ghost-btn" : "btn"}" id="bot-follow" title="Get an alert every time the bot buys or sells (in the app; on your phone too if closed-app or ntfy alerts are on)">${followBot() ? "✓ Following" : "🔔 Follow the bot"}</button>
     </div>
@@ -96,11 +95,13 @@ function render() {
     ${positions.length ? positions.map((p) => {
       const openPnl = p.qty * (p.last || p.entry) * (1 - feeOf(p.sym)) - p.cost;
       return `<div class="bot-pos">
-        <div><strong>${fmt.esc(p.market)}: bought at ${fmt.price(p.entry)}</strong> <span class="muted small">${when(p.openedAt)} · ${fmt.esc(p.name)} on ${IV[p.iv] || p.iv} candles · ${p.mode === "trusted" ? "trusted setup" : "exploring (small size)"}</span></div>
-        <div class="small">Now ${fmt.price(p.last || p.entry)} · <span class="${openPnl >= 0 ? "up" : "down"}">${openPnl >= 0 ? "+" : "−"}$${Math.abs(openPnl).toFixed(2)}</span> · stop ${fmt.price(p.stop)} · target ${fmt.price(p.target)} · sells by ${when(p.sellBy)}</div>
+        <div><strong>${fmt.esc(p.market)}: bought at ${fmt.price(p.entry)}</strong> <span class="muted small">${when(p.openedAt)} · ${fmt.esc(p.name)} on ${IV[p.iv] || p.iv} candles${p.mode === "trend" ? "" : p.mode === "trusted" ? " · trusted setup" : " · exploring (small size)"}</span></div>
+        <div class="small">Now ${fmt.price(p.last || p.entry)} · <span class="${openPnl >= 0 ? "up" : "down"}">${openPnl >= 0 ? "+" : "−"}$${Math.abs(openPnl).toFixed(2)}</span> · ${p.trail
+          ? `trailing stop <strong>${fmt.price(p.stop)}</strong>${p.stop > p.firstStop ? ` (moved up from ${fmt.price(p.firstStop)})` : ""} · highest since buying ${fmt.price(p.hi || p.entry)} · no fixed target`
+          : `stop ${fmt.price(p.stop)} · target ${fmt.price(p.target)} · sells by ${when(p.sellBy)}`}</div>
         <div class="muted small">${fmt.esc(p.why)}</div>
         <button class="link-btn small" data-bot-open="${fmt.esc(p.sym)}">Open ${fmt.esc(p.market)} on the chart</button>
-      </div>`; }).join("") : `<p class="muted small">No trade open. It's waiting for a setup with a good record on a 1h, 4h or daily candle close.</p>`}
+      </div>`; }).join("") : `<p class="muted small">No trade open. It's waiting for a daily close at a new 20-day high in one of its markets while that market is in an uptrend. That can take days or weeks; waiting is part of the rule.</p>`}
 
     <h3>By market</h3>
     <div class="bot-mem">${(data.perMarket || []).filter((m) => m.trades || m.open).map((m) => `<div class="bot-mem-row">
@@ -108,30 +109,23 @@ function render() {
         <span class="mono">${m.trades} trade${m.trades === 1 ? "" : "s"} · ${m.wins} won</span>
         <strong class="mono ${m.pnl >= 0 ? "up" : "down"}">${m.pnl >= 0 ? "+" : "−"}$${Math.abs(m.pnl).toFixed(2)}</strong></div>`).join("") || `<p class="muted small">No trades yet.</p>`}</div>
 
-    <h3>What it has learned ${learned.length ? `<span class="pill pill-thin">${learned.length}</span>` : ""}</h3>
-    ${data.memory.length ? `<div class="bot-mem">${data.memory.slice(0, 16).map((m) => `<div class="bot-mem-row ${m.status}">
-        <span>${m.market ? `${fmt.esc(m.market)} · ` : ""}${fmt.esc(m.name)}${m.iv && m.iv !== "*" ? ` · ${IV[m.iv] || m.iv}` : ""}${m.regime ? ` · ${m.regime === "down" ? "falling market" : m.regime === "up" ? "rising market" : "—"}` : ""}</span>
-        <span class="mono">${m.wins}/${m.n} won · avg ${pc(m.avg)}</span>
-        <span class="pill ${m.status === "benched" ? "pill-negative" : m.status === "promoted" ? "pill-edge" : "pill-thin"}">${m.status === "benched" ? (m.group ? "stopped" : "benched") : m.status === "promoted" ? "promoted" : "still testing"}</span></div>`).join("")}</div>`
-      : `<p class="muted small">Nothing yet. Every trade it closes is added here.</p>`}
-
     <h3>Trades and lessons</h3>
     ${trades.length ? `<div class="bot-trades">${trades.map((t) => `<div class="bot-trade">
         <div><span class="pill ${t.pnl >= 0 ? "pill-edge" : "pill-negative"}">${t.pnl >= 0 ? "WIN" : "LOSS"}</span>
           <strong class="${t.pnl >= 0 ? "up" : "down"}">${t.pnl >= 0 ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} (${pc(t.ret)})</strong>
           <strong>${fmt.esc(t.market || "BTC")}</strong>
-          <span class="muted small">${when(t.openedAt)} → ${when(t.closedAt)} · bought ${fmt.price(t.entry)}, sold ${fmt.price(t.exit)} · ${fmt.esc(t.name)} ${IV[t.iv] || t.iv} · ${t.mode === "trusted" ? "trusted" : "exploring"}${t.news && t.news !== "none" ? ` · news ${t.news}` : ""}</span></div>
+          <span class="muted small">${when(t.openedAt)} → ${when(t.closedAt)} · bought ${fmt.price(t.entry)}, sold ${fmt.price(t.exit)} · ${fmt.esc(t.name)} ${IV[t.iv] || t.iv}</span></div>
         <div class="small">${fmt.esc(t.lesson)}</div></div>`).join("")}</div>
       ${data.trades.length > 12 ? `<button class="link-btn small" id="bot-more">${showAll ? "Show fewer" : `Show all ${data.trades.length} trades`}</button>` : ""}`
       : `<p class="muted small">No closed trades yet.</p>`}
 
     <details class="picks-honest"><summary>How the bot works</summary><ul class="small">
-      <li>Every 5 minutes it checks its markets. When a 1h, 4h or daily candle closes (stocks: during market hours) it looks for Entryvex's setups and candle patterns.</li>
-      <li>Before buying it also checks the <strong>AI news read</strong> for that market (it skips unproven setups when the news is negative) and, for stocks, the <strong>earnings calendar</strong>: no buys within 3 trading days of a report, and it sells before one.</li>
-      <li><strong>Trusted</strong> setups (a winning record in a daily re-test, in the current kind of market) get a normal trade: it risks ${(data.settings.riskTrusted * 100).toFixed(1)}% of its balance at the stop-loss. <strong>Unproven</strong> ones get small "exploring" trades (${(data.settings.riskExplore * 100).toFixed(1)}% risk) so it gathers evidence. Setups with a losing record are skipped.</li>
-      <li>It learns from every closed trade, per market: a setup that keeps losing in a kind of market is <strong>benched</strong>; an unproven one that keeps winning is <strong>promoted</strong>; if buying on a news mood keeps losing, it <strong>stops</strong> doing that; if exploring keeps losing in a kind of market, it stops exploring there.</li>
-      <li>Fees: ${(data.settings.fee.crypto * 100).toFixed(2)}% per buy and per sell for crypto, ${(data.settings.fee.stock * 100).toFixed(2)}% for stocks (spread). Up to ${data.settings.maxPositions} trades at once, each at most ${data.settings.maxPositionShare * 100}% of the account, no borrowing.</li>
-      <li>It's called <strong>Proven</strong> only after 30+ trades if it's profitable after fees, ahead of just holding these markets, and unlikely to be luck (t ≥ 2). Replayed on the 30 days before launch, it lost 1.5% while holding all 12 equally lost 18.3%: much better than holding in a falling market, but not yet a winner.</li>
+      <li>After every daily close (stocks: checked during market hours) it looks at each of its ${data.markets.length} markets. It buys when a day closes above the highest price of the previous 20 days while the market is in an uptrend: price above its 200-day average and the 50-day average above the 200-day.</li>
+      <li>It sells with a <strong>trailing stop</strong>: first ${data.settings.stopAtr} ATR (a measure of the normal daily move) under the entry, then ${data.settings.trailAtr} ATR under the highest price since it bought, moved up after every daily close and never down. There's no fixed take-profit, so winners can run. Most trades end in a small loss; a few big winners are what pay for them.</li>
+      <li>Why this rule: Entryvex replayed its signals on years of data they never saw. The old short-term setups didn't beat fees or buying at random moments. This trend rule made money after fees on daily charts (a little more than random timing) and its worst drops were less than half as deep as just holding, though it earned less than holding in these strongly rising markets. See the Scorecard tab.</li>
+      <li>It risks ${(data.settings.risk * 100).toFixed(0)}% of its balance per trade at the first stop, holds up to ${data.settings.maxPositions} trades at once, each at most ${data.settings.maxPositionShare * 100}% of the account, no borrowing. Stocks: no buys within ${data.settings.earningsDays} trading days of an earnings report, and it sells before one.</li>
+      <li>Fees: ${(data.settings.fee.crypto * 100).toFixed(2)}% per buy and per sell for crypto, ${(data.settings.fee.stock * 100).toFixed(2)}% for stocks (spread).</li>
+      <li>It's called <strong>Proven</strong> only after 30+ trades if it's profitable after fees, ahead of just holding these markets, and unlikely to be luck (t ≥ 2). Trend trades are slow, so that will take months.</li>
       <li>This is a simulation for research. Real orders can fill at slightly different prices. It never trades your money.</li>
     </ul></details>`;
   drawChart();

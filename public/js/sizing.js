@@ -27,27 +27,28 @@ export function stepDecimals(step) {
 /**
  * @param o.balance      account cash available for trading (quote currency, e.g. USDT)
  * @param o.riskPct      percent of balance you accept losing if the stop is hit (e.g. 1 = 1%)
- * @param o.entry,o.stop,o.target  prices
+ * @param o.entry,o.stop,o.target  prices (target null = no fixed take-profit: a trailing-stop trade)
  * @param o.costPerSide  fraction charged on buy and on sell (fee + half-spread)
  * @param o.rules        { stepSize, minQty, tickSize, minNotional }
  */
 export function sizePosition(o) {
   const { balance, riskPct, entry, stop, target, costPerSide = 0, rules = {} } = o;
   const out = { ok: false };
-  if (!(balance > 0) || !(riskPct > 0) || !(entry > 0) || !(stop > 0) || !(target > 0)) {
+  const trail = target == null;
+  if (!(balance > 0) || !(riskPct > 0) || !(entry > 0) || !(stop > 0) || !(trail || target > 0)) {
     out.reason = "missing";
     return out;
   }
   if (stop >= entry) { out.reason = "stop-above"; return out; }
-  if (target <= entry) { out.reason = "target-below"; return out; }
+  if (!trail && target <= entry) { out.reason = "target-below"; return out; }
 
   const e = roundTick(entry, rules.tickSize);
   const s = roundTick(stop, rules.tickSize);
-  const t = roundTick(target, rules.tickSize);
+  const t = trail ? null : roundTick(target, rules.tickSize);
 
   // Loss per $1 spent if the stop is hit: price drop + fee/spread on the buy and the sell.
   const lossPerDollar = (e - s) / e + 2 * costPerSide;
-  const gainPerDollar = (t - e) / e - 2 * costPerSide;
+  const gainPerDollar = trail ? NaN : (t - e) / e - 2 * costPerSide;
   const riskBudget = balance * (riskPct / 100);
 
   // Never put more than maxPositionPct of the balance into one position (default 25%), even if the
@@ -72,14 +73,15 @@ export function sizePosition(o) {
   out.breakevenWin = gainPerDollar > 0 ? lossPerDollar / (gainPerDollar + lossPerDollar) : 1;
   out.pctOfBalance = spend / balance;
   out.stopPct = (e - s) / e;
-  out.targetPct = (t - e) / e;
+  out.targetPct = trail ? null : (t - e) / e;
+  out.trail = trail;
 
   if (qty <= 0 || (rules.minQty && qty < rules.minQty) || (rules.minNotional && spend < rules.minNotional)) {
     out.reason = "too-small";
     out.minSpend = Math.max(rules.minNotional || 0, (rules.minQty || 0) * e);
     return out;
   }
-  if (gainPerDollar <= 0) { out.reason = "costs-eat-target"; return out; }
+  if (!trail && gainPerDollar <= 0) { out.reason = "costs-eat-target"; return out; }
   out.ok = true;
   return out;
 }

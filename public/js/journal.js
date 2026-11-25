@@ -51,13 +51,15 @@ export function addTrade(t) {
     id: Math.random().toString(36).slice(2, 10),
     symbol: t.symbol, entry: +t.entry, qty: +t.qty,
     stop: t.stop ? +t.stop : null, target: t.target ? +t.target : null,
+    trail: t.trail > 0 ? +t.trail : null, hi: +t.entry,
     setup: t.setup || null, verdict: t.verdict || null, interval: t.interval || null,
     source: t.source || "manual", fee: feeRate(), practice: !!t.practice,
     openedAt: Date.now(), status: "open",
   };
   // Entryvex's plan has a time limit: if neither level is hit within 24 candles, sell at market.
   const sec = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 }[trade.interval];
-  if (sec && trade.source !== "manual") trade.sellBy = trade.openedAt + 24 * sec * 1000;
+  // Trend trades (trailing stop) have no time limit: the stop decides when to sell.
+  if (sec && trade.source !== "manual" && !trade.trail) trade.sellBy = trade.openedAt + 24 * sec * 1000;
   if (t.sellBy > Date.now()) trade.sellBy = +t.sellBy;   // e.g. copying the bot: same sell-by time as the bot
   hooks.ensureWatched(trade.symbol);
   trades.push(trade);
@@ -82,8 +84,20 @@ export function onTicker(symbol, price) {
     if (t.stop && price <= t.stop) {
       // Practice fills at the worse of the stop and the price (a gap can jump past a stop-loss).
       closeQuiet(t, t.practice ? Math.min(price, t.stop) : t.stop, "stop");
-      hooks.notify({ kind: "down", symbol, title: `${baseOf(symbol)} stop-loss hit${t.practice ? " (practice)" : ""}`, body: t.practice ? `Practice account: −$${Math.abs(t.pnl).toFixed(2)} after fees. Losses are part of every strategy; what matters is the total over many trades.` : `My Trades recorded −$${Math.abs(t.pnl).toFixed(2)} after fees. The daily loss guard is updated.` });
+      const gain = t.pnl >= 0;
+      hooks.notify({ kind: gain ? "up" : "down", symbol, title: `${baseOf(symbol)} ${t.trail && gain ? "trailing stop hit: gain locked in" : "stop-loss hit"}${t.practice ? " (practice)" : ""}`, body: t.practice ? `Practice account: ${gain ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.${gain ? "" : " Losses are part of every strategy; what matters is the total over many trades."}` : `My Trades recorded ${gain ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.${gain ? "" : " The daily loss guard is updated."}` });
       changed = true;
+    } else if (t.trail && price > (t.hi || t.entry)) {
+      // Trend trade: the stop follows the highest price since buying (never moves down).
+      t.hi = price;
+      const next = +(price - t.trail).toPrecision(8);
+      if (next > t.stop) {
+        t.stop = next; changed = true;
+        if (!t.practice && Date.now() - (t.trailNotified || 0) > 20 * 3600e3 && next > t.entry * 0.99) {
+          t.trailNotified = Date.now();
+          hooks.notify({ kind: "info", symbol, title: `${baseOf(symbol)}: raise your stop to ${fmt.price(next)}`, body: "Your trend trade is rising, so its trailing stop moved up. Update the stop-loss order at your exchange or broker (never lower it)." });
+        }
+      }
     } else if (t.target && price >= t.target) {
       closeQuiet(t, t.target, "target");
       hooks.notify({ kind: "up", symbol, title: `${baseOf(symbol)} take-profit hit 🎯${t.practice ? " (practice)" : ""}`, body: `${t.practice ? "Practice account" : "My Trades recorded"} ${t.pnl >= 0 ? "+" : "−"}$${Math.abs(t.pnl).toFixed(2)} after fees.` });
@@ -118,7 +132,8 @@ export function tradeAdvice(t, price) {
   const now = Date.now();
   if (t.sellBy && now >= t.sellBy) return { action: "SELL NOW", level: "sell", why: "The plan's time limit has passed without hitting the target or stop. Sell at the market price." };
   if (price && t.target && price >= t.target) return { action: "SELL NOW", level: "sell", why: "The take-profit price has been reached." };
-  if (price && t.stop && price <= t.stop) return { action: "SELL NOW", level: "sell", why: "The stop-loss price has been reached. Selling limits the loss." };
+  if (price && t.stop && price <= t.stop) return { action: "SELL NOW", level: "sell", why: t.trail && price > t.entry ? "The trailing stop has been reached. Selling locks in the gain." : "The stop-loss price has been reached. Selling limits the loss." };
+  if (t.trail) return { action: "HOLD", level: "hold", why: `Keep holding: this is a trend trade with no fixed target. Your stop is now <strong>${fmt.price(t.stop)}</strong> (${fmt.price(t.trail)} under the highest price since you bought, ${fmt.price(t.hi || t.entry)}). ${t.practice ? "Entryvex sells this practice trade automatically when the price falls to it." : "If the stop at your broker is lower, raise it to this. Sell only when the price falls to it."}` };
   const parts = [];
   if (t.target) parts.push(`sell for a profit at <strong>${fmt.price(t.target)}</strong>`);
   if (t.stop) parts.push(`sell to limit the loss at <strong>${fmt.price(t.stop)}</strong>`);

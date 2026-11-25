@@ -21,7 +21,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
   const clearMarkers = () => (restoreMarkers ? restoreMarkers() : chartSeries.setMarkers([]));
   let showAllSetups = false;
   // Active setups first, then the best records (proven → weak → unproven → losing), then by profit per trade.
-  const RANK = { edge: 4, weak: 3, flat: 2, thin: 1, negative: 0 };
+  const RANK = { tested: 5, edge: 4, weak: 3, flat: 2, thin: 1, negative: 0 };
   const sortedSetups = (r) => [...r.setups].sort((a, b) =>
     (b.activeNow - a.activeNow) || (RANK[b.verdict.level] - RANK[a.verdict.level]) || ((b.stats.ev || -9) - (a.stats.ev || -9)));
   let ctx = null;          // { symbol, interval, candles, spreadPct }
@@ -88,39 +88,15 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
 
   /* ----- "Find an edge": test this coin on several candle sizes ----- */
   $("find-edges").addEventListener("click", findEdges);
+  // "Find an edge" used to test short candle sizes. On unseen data none of the short-term setups beat
+  // random timing, so BUY signals now come only from the trend rule on daily candles: go there.
   async function findEdges() {
     if (!ctx) return;
-    const sym = ctx.symbol;
     const box = $("edges");
-    const btn = $("find-edges");
-    btn.disabled = true;
-    box.innerHTML = `<div class="verdict-loading">Testing ${fmt.esc(coinName(getBase()))} on 5m, 15m, 1h and 4h candles…</div>`;
-    const rows = [];
-    for (const iv of ["5m", "15m", "1h", "4h"]) {
-      try {
-        const [c, book] = await Promise.all([getKlineHistory(sym, iv, HISTORY), getBookTicker(sym).catch(() => ({ spreadPct: NaN }))]);
-        const r = analyze(c, { costPerSide: costPerSide(book.spreadPct, sym) });
-        for (const s of r.setups) if (s.stats.n) rows.push({ iv, s });
-      } catch {}
-    }
-    btn.disabled = false;
-    if (sym !== ctx?.symbol) return;
-    rows.sort((a, b) => b.s.stats.ev - a.s.stats.ev);
-    const good = rows.filter((x) => x.s.verdict.level === "edge" || x.s.verdict.level === "weak");
-    box.innerHTML = `<div class="edges-card">
-      <div class="edges-head"><strong>Where ${fmt.esc(coinName(getBase()))} has had an edge</strong><button class="link-btn" data-close-edges>Hide</button></div>
-      ${good.length ? `<p class="small muted">These setup + candle-size combos made money after costs in the past. Click one to switch to it; then wait for it to show "Active".</p>`
-        : `<p class="small">No setup has made money after costs on any candle size for this coin recently. <strong>That's useful to know: don't force trades here.</strong> Try another coin with "Scan watchlist".</p>`}
-      <div class="edge-list">${rows.slice(0, 8).map(({ iv, s }) => `
-        <button class="edge-row" data-iv="${iv}">
-          <span class="mono edge-iv">${iv}</span><span>${fmt.esc(s.name)}</span>
-          <span class="pill pill-${s.verdict.level}">${s.verdict.label}</span>
-          <span class="mono small">${pctRound(s.stats.winRate)} of ${s.stats.n}</span>
-          <span class="mono small ${s.stats.ev > 0 ? "up" : "down"}">${fmt.pct(s.stats.ev * 100)}/trade</span>
-          ${s.activeNow ? `<span class="pill pill-on">Active now</span>` : ""}
-        </button>`).join("")}</div></div>`;
-    box.querySelectorAll(".edge-row").forEach((b) => b.addEventListener("click", () => onPickInterval?.(b.dataset.iv)));
+    box.innerHTML = `<div class="edges-card"><div class="edges-head"><strong>Where Entryvex looks for buys</strong><button class="link-btn" data-close-edges>Hide</button></div>
+      <p class="small">Only on the <strong>daily chart</strong>, with the trend rule (uptrend + a new 20-day high). In tests on data they never saw, the short-term setups on 5m–4h candles lost money after fees, no better than buying at random moments, so Entryvex no longer says BUY on them. Switched to daily candles.</p></div>`;
     box.querySelector("[data-close-edges]").addEventListener("click", () => (box.innerHTML = ""));
+    if (ctx.interval !== "1d") onPickInterval?.("1d");
   }
 
   function render() {
@@ -130,7 +106,7 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
 
     // Verdict banner
     let conf = "";
-    if (best && best.stats.n) {
+    if (best && best.stats.n && !best.trend) {
       const s = best.stats;
       conf = `<div class="conf">
         <div class="conf-big mono">${Math.round(s.winRate * 100)}%</div>
@@ -163,10 +139,10 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
         maxBarsText: `${RULES.maxBars} candles (${humanMinutes(RULES.maxBars * (MINUTES[interval] || 0))})`,
       });
       priceLines = [
-        chartSeries.createPriceLine({ price: p.target, color: "#22c55e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "Target" }),
+        p.target ? chartSeries.createPriceLine({ price: p.target, color: "#22c55e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "Target" }) : null,
         chartSeries.createPriceLine({ price: p.entry, color: "#8a94a6", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "Entry" }),
-        chartSeries.createPriceLine({ price: p.stop, color: "#f0506e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "Stop" }),
-      ];
+        chartSeries.createPriceLine({ price: p.stop, color: "#f0506e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: p.kind === "trail" ? "First stop" : "Stop" }),
+      ].filter(Boolean);
     } else {
       $("plan").innerHTML = "";
     }
@@ -180,10 +156,10 @@ export function createScanner({ chartSeries, getWatchlist, getBase, getInfo, onP
     const lastTxt = last
       ? `Last setup here: <strong>${fmt.esc(last.s.name)}</strong> ${fmt.ago(last.t.signalTime * 1000)}, which ${last.t.net > 0 ? `<span class="up">ended in profit (${fmt.pct(last.t.net * 100)})</span>` : `<span class="down">ended in a loss (${fmt.pct(last.t.net * 100)})</span>`}.`
       : "No setup has fired in the loaded history.";
-    const edgeCount = r.setups.filter((s) => s.verdict.level === "edge" || s.verdict.level === "weak").length;
+    const edgeCount = r.setups.filter((s) => !s.trend && (s.verdict.level === "edge" || s.verdict.level === "weak")).length;
     const liq = r.liquidity && !r.liquidity.ok ? `<span class="down"><strong>⚠ Thin market.</strong> ${fmt.esc(r.liquidity.reason)}</span>` : "";
-    $("scan-context").innerHTML = liq + `<span>Watching for 4 setups on <strong>${interval}</strong> candles; checks again every time a candle closes. ${lastTxt}</span>
-      <span>${edgeCount ? `<strong>${edgeCount}</strong> of ${r.setups.length} setups have a positive record here; you'll get a trade card when one is active.` : `None of the ${r.setups.length} setups has made money here after costs. Try <button class="link-btn" data-find-edge>Find an edge</button> or another coin.`}</span>`;
+    $("scan-context").innerHTML = liq + `<span>${r.long ? `<strong>BUY signals:</strong> the trend rule (top row) on these daily candles; checks again after every daily close.` : `<strong>No BUY signals on ${interval} candles:</strong> they come only from the trend rule on the <button class="link-btn" data-find-edge>daily chart</button>.`} ${lastTxt}</span>
+      <span class="muted">The other ${r.setups.length - 1} setups are shown as research: their past records here${edgeCount ? ` (${edgeCount} look positive)` : ""} didn't hold up on data they never saw, so they don't produce a BUY.</span>`;
     $("scan-context").querySelector("[data-find-edge]")?.addEventListener("click", findEdges);
 
     // Setups table

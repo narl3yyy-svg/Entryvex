@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-24",
+ "generated": "2026-11-25",
  "markets": [
   "BTCUSDT",
   "ETHUSDT",
@@ -15,106 +15,270 @@
   "S:AMZN"
  ],
  "period": {
-  "from": "2022-11-10",
-  "to": "2026-11-22"
+  "from": "2020-12-03",
+  "to": "2026-11-25"
  },
- "rules": {
-  "stopAtr": 1,
-  "targetAtr": 1.5,
-  "maxBars": 24
+ "rule": {
+  "name": "Trend breakout",
+  "interval": "1d",
+  "stopAtr": 2,
+  "trailAtr": 3,
+  "warmup": 200
  },
- "byIv": {
-  "1h": {
-   "markets": 12,
-   "buy": {
-    "n": 0
-   },
-   "smallBuy": {
-    "n": 519,
-    "avg": -0.0012,
-    "win": 0.385,
-    "se": 0.00057
-   },
-   "model": {
-    "n": 120,
-    "avg": -0.00191,
-    "win": 0.35,
-    "se": 0.00097
-   },
-   "setups": {
-    "n": 399,
-    "avg": -0.00099,
-    "win": 0.396,
-    "se": 0.00069
-   },
-   "random": {
-    "n": 1176,
-    "avg": -0.0011,
-    "win": 0.384,
-    "se": 0.00038
-   }
+ "trend": {
+  "buy": {
+   "n": 230,
+   "avg": 0.01398,
+   "win": 0.365,
+   "se": 0.00838,
+   "days": 17.4
   },
-  "4h": {
-   "markets": 5,
-   "buy": {
-    "n": 0
-   },
-   "smallBuy": {
-    "n": 235,
-    "avg": -0.0015,
-    "win": 0.379,
-    "se": 0.00125
-   },
-   "model": {
-    "n": 43,
-    "avg": -0.00037,
-    "win": 0.442,
-    "se": 0.00267
-   },
-   "setups": {
-    "n": 192,
-    "avg": -0.00176,
-    "win": 0.365,
-    "se": 0.00141
-   },
-   "random": {
-    "n": 483,
-    "avg": -0.00171,
-    "win": 0.391,
-    "se": 0.0009
-   }
+  "random": {
+   "n": 479.95,
+   "avg": 0.0117,
+   "win": 0.37,
+   "se": 0.00692,
+   "days": 18.2
   },
-  "1d": {
-   "markets": 12,
-   "buy": {
-    "n": 39,
-    "avg": -0.00194,
-    "win": 0.41,
-    "se": 0.00547
+  "randomUp": {
+   "n": 314.95,
+   "avg": 0.00758,
+   "win": 0.384,
+   "se": 0.00695,
+   "days": 17.3
+  },
+  "markets": 11,
+  "beatRandom": 4,
+  "beatRandomUp": 7,
+  "median": {
+   "cagr": 0.0315,
+   "holdCagr": 0.1202,
+   "dd": 0.248,
+   "holdDd": 0.561,
+   "inMarket": 0.298
+  },
+  "perMarket": [
+   {
+    "sym": "BTCUSDT",
+    "trades": 18,
+    "avg": 0.02283,
+    "cagr": 0.0962,
+    "dd": 0.216,
+    "inMarket": 0.273,
+    "holdCagr": 0.1831,
+    "holdDd": 0.53
    },
-   "smallBuy": {
-    "n": 802,
-    "avg": -0.00146,
-    "win": 0.41,
-    "se": 0.00187
+   {
+    "sym": "ETHUSDT",
+    "trades": 13,
+    "avg": -0.01495,
+    "cagr": -0.0802,
+    "dd": 0.285,
+    "inMarket": 0.13,
+    "holdCagr": -0.0343,
+    "holdDd": 0.676
    },
-   "model": {
-    "n": 189,
-    "avg": -0.00327,
-    "win": 0.407,
-    "se": 0.00384
+   {
+    "sym": "SOLUSDT",
+    "trades": 5,
+    "avg": 0.00768,
+    "cagr": 0.006,
+    "dd": 0.248,
+    "inMarket": 0.098,
+    "holdCagr": -0.363,
+    "holdDd": 0.763
    },
-   "setups": {
-    "n": 652,
-    "avg": -0.00096,
-    "win": 0.411,
-    "se": 0.00203
+   {
+    "sym": "XRPUSDT",
+    "trades": 0,
+    "avg": null,
+    "cagr": 0,
+    "dd": 0,
+    "inMarket": 0,
+    "holdCagr": -0.5043,
+    "holdDd": 0.42
    },
-   "random": {
-    "n": 696,
-    "avg": 0.00146,
-    "win": 0.427,
-    "se": 0.00206
+   {
+    "sym": "DOGEUSDT",
+    "trades": 8,
+    "avg": 0.13196,
+    "cagr": 0.2452,
+    "dd": 0.305,
+    "inMarket": 0.076,
+    "holdCagr": -0.1395,
+    "holdDd": 0.883
+   },
+   {
+    "sym": "S:SPY",
+    "trades": 33,
+    "avg": 0.00131,
+    "cagr": 0.0044,
+    "dd": 0.135,
+    "inMarket": 0.438,
+    "holdCagr": 0.1202,
+    "holdDd": 0.254
+   },
+   {
+    "sym": "S:QQQ",
+    "trades": 27,
+    "avg": 0.01375,
+    "cagr": 0.0568,
+    "dd": 0.089,
+    "inMarket": 0.374,
+    "holdCagr": 0.1358,
+    "holdDd": 0.356
+   },
+   {
+    "sym": "S:AAPL",
+    "trades": 26,
+    "avg": 0.01048,
+    "cagr": 0.0315,
+    "dd": 0.146,
+    "inMarket": 0.341,
+    "holdCagr": 0.191,
+    "holdDd": 0.334
+   },
+   {
+    "sym": "S:NVDA",
+    "trades": 28,
+    "avg": 0.0524,
+    "cagr": 0.1845,
+    "dd": 0.329,
+    "inMarket": 0.34,
+    "holdCagr": 0.5228,
+    "holdDd": 0.664
+   },
+   {
+    "sym": "S:TSLA",
+    "trades": 25,
+    "avg": -0.01331,
+    "cagr": -0.0854,
+    "dd": 0.547,
+    "inMarket": 0.171,
+    "holdCagr": 0.1182,
+    "holdDd": 0.736
+   },
+   {
+    "sym": "S:MSFT",
+    "trades": 22,
+    "avg": 0.01559,
+    "cagr": 0.0509,
+    "dd": 0.127,
+    "inMarket": 0.302,
+    "holdCagr": 0.1496,
+    "holdDd": 0.376
+   },
+   {
+    "sym": "S:AMZN",
+    "trades": 26,
+    "avg": -0.00957,
+    "cagr": -0.0454,
+    "dd": 0.293,
+    "inMarket": 0.298,
+    "holdCagr": 0.0822,
+    "holdDd": 0.561
+   }
+  ]
+ },
+ "before": {
+  "generated": "2026-11-24",
+  "period": {
+   "from": "2022-11-10",
+   "to": "2026-11-22"
+  },
+  "byIv": {
+   "1h": {
+    "markets": 12,
+    "buy": {
+     "n": 0
+    },
+    "smallBuy": {
+     "n": 519,
+     "avg": -0.0012,
+     "win": 0.385,
+     "se": 0.00057
+    },
+    "model": {
+     "n": 120,
+     "avg": -0.00191,
+     "win": 0.35,
+     "se": 0.00097
+    },
+    "setups": {
+     "n": 399,
+     "avg": -0.00099,
+     "win": 0.396,
+     "se": 0.00069
+    },
+    "random": {
+     "n": 1176,
+     "avg": -0.0011,
+     "win": 0.384,
+     "se": 0.00038
+    }
+   },
+   "4h": {
+    "markets": 5,
+    "buy": {
+     "n": 0
+    },
+    "smallBuy": {
+     "n": 235,
+     "avg": -0.0015,
+     "win": 0.379,
+     "se": 0.00125
+    },
+    "model": {
+     "n": 43,
+     "avg": -0.00037,
+     "win": 0.442,
+     "se": 0.00267
+    },
+    "setups": {
+     "n": 192,
+     "avg": -0.00176,
+     "win": 0.365,
+     "se": 0.00141
+    },
+    "random": {
+     "n": 483,
+     "avg": -0.00171,
+     "win": 0.391,
+     "se": 0.0009
+    }
+   },
+   "1d": {
+    "markets": 12,
+    "buy": {
+     "n": 39,
+     "avg": -0.00194,
+     "win": 0.41,
+     "se": 0.00547
+    },
+    "smallBuy": {
+     "n": 802,
+     "avg": -0.00146,
+     "win": 0.41,
+     "se": 0.00187
+    },
+    "model": {
+     "n": 189,
+     "avg": -0.00327,
+     "win": 0.407,
+     "se": 0.00384
+    },
+    "setups": {
+     "n": 652,
+     "avg": -0.00096,
+     "win": 0.411,
+     "se": 0.00203
+    },
+    "random": {
+     "n": 696,
+     "avg": 0.00146,
+     "win": 0.427,
+     "se": 0.00206
+    }
    }
   }
  }

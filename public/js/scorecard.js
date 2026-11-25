@@ -37,38 +37,43 @@ async function loadWalk() {
   try { const r = await fetch("/data/walkforward.json"); if (r.ok) { walk = await r.json(); hooks.onLoad(); } } catch {}
 }
 const pp = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(2)}%`;
-/** Plain verdict for one candle size: did BUY/SMALL BUY answers make money on data they never saw? */
+/** Plain verdict for one candle size of the OLD answers (before the rebuild). */
 function walkVerdict(g) {
-  const n = (g.buy.n || 0) + (g.smallBuy.n || 0);
+  const n = (g.buy?.n || 0) + (g.smallBuy?.n || 0);
   if (n < 20) return null;
   const avg = ((g.buy.avg || 0) * (g.buy.n || 0) + (g.smallBuy.avg || 0) * (g.smallBuy.n || 0)) / n;
-  const se = Math.sqrt(((g.buy.se || 0) ** 2) * (g.buy.n || 0) / n + ((g.smallBuy.se || 0) ** 2) * (g.smallBuy.n || 0) / n);
-  const beat = g.random?.n ? avg - g.random.avg : null;
-  const word = avg - 2 * se > 0 ? "made money" : avg > 0 ? "made a little, but not clearly more than luck" : avg > -0.001 ? "about broke even" : "lost money";
-  return { n, avg, word, beat, good: avg - 2 * se > 0 };
+  return { n, avg };
 }
-/** One line for the answer card under a BUY / SMALL BUY: how answers like this did on unseen data. */
+const pct0 = (x) => `${Math.round(x * 100)}%`;
+/** One line for the answer card under a BUY: how the trend rule did on unseen data. */
 export function walkLine(iv) {
-  const g = walk?.byIv?.[iv];
-  const v = g && walkVerdict(g);
-  if (!v) return "";
-  return `🧪 <strong>Tested on unseen data</strong> (${g.markets} markets, ${iv} charts): BUY answers like this ${v.word}, ${pp(v.avg)} per trade after fees over ${v.n} trades${v.beat != null ? ` (buying at random moments with the same exits: ${pp(g.random.avg)})` : ""}. ${v.good ? "" : "<strong>Use the practice account or a small amount.</strong> "}<button class="link-btn" data-open-score>How this was tested</button>`;
+  const t = walk?.trend;
+  if (!t?.buy?.n || iv !== "1d") return "";
+  return `🧪 <strong>Tested on unseen data</strong> (${t.markets} markets, ${walk.period.from.slice(0, 4)}–${walk.period.to.slice(0, 4)}): this rule made ${pp(t.buy.avg)} per trade after fees over ${t.buy.n} trades, winning ${pct0(t.buy.win)}. Buying at random moments with the same stops made ${pp(t.random.avg)}, so the timing edge is small; the bigger benefit is risk: its worst drop was ${pct0(t.median.dd)} vs ${pct0(t.median.holdDd)} for just holding (typical market). <strong>Start with the practice account or a small amount.</strong> <button class="link-btn" data-open-score>How this was tested</button>`;
 }
 function walkSection() {
-  if (!walk?.byIv) return "";
+  const t = walk?.trend;
+  if (!t?.buy?.n) return "";
+  const row = (label, a, cls = "") => a?.n ? `<tr class="${cls}"><td>${label}</td><td class="num">${Math.round(a.n)}</td><td class="num ${a.avg >= 0 ? "up" : "down"}">${pp(a.avg)}</td><td class="num">${pct0(a.win)}</td><td class="num">${a.days ? Math.round(a.days) + "d" : "—"}</td></tr>` : "";
+  const m = t.median;
   const IVN = { "1h": "1-hour", "4h": "4-hour", "1d": "Daily" };
-  const row = (label, a) => a?.n ? `<td>${label}</td><td class="num">${a.n}</td><td class="num ${a.avg >= 0 ? "up" : "down"}">${pp(a.avg)}</td><td class="num">${Math.round(a.win * 100)}%</td>` : "";
-  const blocks = Object.entries(walk.byIv).map(([iv, g]) => {
-    const v = walkVerdict(g);
-    return `<div class="score-tile"><div class="score-tile-h"><strong>${IVN[iv] || iv} charts</strong> <span class="muted small">${g.markets} markets</span>${v ? ` <span class="small ${v.good ? "up" : v.avg < 0 ? "down" : ""}">BUY answers ${v.word}</span>` : ""}</div>
-      <table class="score-table"><thead><tr><th>Answer</th><th class="num">Trades</th><th class="num">Avg per trade</th><th class="num">Won</th></tr></thead><tbody>
-        <tr>${row("BUY", g.buy)}</tr><tr>${row("SMALL BUY", g.smallBuy)}</tr><tr class="muted">${row("Random moments, same exits", g.random)}</tr>
-      </tbody></table></div>`;
-  }).join("");
+  const before = walk.before?.byIv ? Object.entries(walk.before.byIv).map(([iv, g]) => { const v = walkVerdict(g); return v ? `${IVN[iv] || iv} ${pp(v.avg)} (random ${pp(g.random.avg)})` : ""; }).filter(Boolean).join(" · ") : "";
   return `<h4>🧪 BUY signals tested on unseen data</h4>
-    <p class="muted small">Entryvex replayed its own answers on the ${walk.markets.length} markets above from ${walk.period.from} to ${walk.period.to}: at each moment it looked only at the history up to then, exactly as the app does, and took every BUY and SMALL BUY with the app's stop-loss, take-profit and time limit, after fees. "Random moments" is the same trade at random times, to show whether the timing adds anything. Updated ${walk.generated}.</p>
-    <div class="score-tiles">${blocks}</div>
-    <p class="small">What this means: a single setup's past record can look great by chance, because Entryvex checks many setups on many markets. On unseen data the answers ${Object.values(walk.byIv).some((g) => walkVerdict(g)?.good) ? "made money on some chart sizes, shown above" : "have not clearly beaten fees and random timing yet"}. Treat a BUY as a well-defined plan with a stop-loss, not a sure thing: try it in the practice account first, and keep real trades small.</p>`;
+    <p class="muted small">Entryvex says BUY only with its <strong>trend rule</strong> on daily candles: an uptrend (price above its 200-day average, 50-day above the 200-day) and a day closing above the previous 20-day high; then a stop ${walk.rule.stopAtr} ATR under the entry that trails ${walk.rule.trailAtr} ATR under the highest price since buying. Its numbers are textbook values fixed before testing, so nothing was fitted to these results. Replayed on ${t.markets} markets from ${walk.period.from} to ${walk.period.to}, after fees, looking only at the history up to each moment. Updated ${walk.generated}.</p>
+    <div class="score-tiles">
+      <div class="score-tile"><div class="score-tile-h"><strong>Per trade</strong> <span class="small ${t.buy.avg > t.random.avg ? "up" : ""}">${t.buy.avg > 0 ? "made money after fees" : "lost money"}</span></div>
+        <table class="score-table"><thead><tr><th>Entries</th><th class="num">Trades</th><th class="num">Avg per trade</th><th class="num">Won</th><th class="num">Held</th></tr></thead><tbody>
+          ${row("Trend rule (the BUY answers)", t.buy)}${row("Random moments, same stops", t.random, "muted")}${row("Random moments in an uptrend", t.randomUp, "muted")}
+        </tbody></table>
+        <p class="tiny muted">Beat random timing in ${t.beatRandom} of ${t.markets} markets, and random timing in an uptrend in ${t.beatRandomUp} of ${t.markets}.</p></div>
+      <div class="score-tile"><div class="score-tile-h"><strong>Versus just holding</strong> <span class="small muted">typical (median) market</span></div>
+        <table class="score-table"><thead><tr><th></th><th class="num">Per year</th><th class="num">Worst drop</th><th class="num">In the market</th></tr></thead><tbody>
+          <tr><td>Trend rule</td><td class="num ${m.cagr >= 0 ? "up" : "down"}">${pp(m.cagr)}</td><td class="num down">−${pct0(m.dd)}</td><td class="num">${pct0(m.inMarket)} of the time</td></tr>
+          <tr class="muted"><td>Just holding</td><td class="num">${pp(m.holdCagr)}</td><td class="num down">−${pct0(m.holdDd)}</td><td class="num">100%</td></tr>
+        </tbody></table></div>
+    </div>
+    <p class="small"><strong>What this means:</strong> the trend rule made money after fees, a little more per trade than random timing, and cut the worst drops by more than half. But over these years, when most of these markets rose a lot, simply holding earned more. Its job is to keep you out of the big crashes and catch the strong runs, not to beat the market. Most trend trades lose a little; a few big winners pay for them, so judge it over many trades.</p>
+    ${before ? `<p class="small muted"><strong>Why Entryvex was rebuilt:</strong> its earlier BUY answers (short-term setups) lost money per trade on unseen data: ${before}. They no longer produce a BUY.</p>` : ""}`;
 }
 
 /** The record for one market and chart, for the forecast box: live once it has enough checks, else tested. */
