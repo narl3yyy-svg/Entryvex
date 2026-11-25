@@ -47,7 +47,9 @@ export function initOpportunities(h) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.sym) hooks.onPick(b.dataset.sym, b.dataset.iv);
+    if (b.dataset.anySym) (hooks.onPickAny || hooks.onPick)(b.dataset.anySym, "1d");
     if (b.id === "opps-refresh") run();
+    if (b.id === "radar-refresh") runRadar(true);
   });
   render();
   setTimeout(() => run(), 4_000);  // let the page finish loading first
@@ -116,6 +118,50 @@ export function verdictFor(sym) {
   if (w) return { level: "watch", label: "WATCH 1D",
     why: `In a daily uptrend. Entryvex says BUY if a day closes above ${fmt.price(w.level)} (${w.away >= 0 ? "+" : ""}${w.away.toFixed(1)}% from now), the 20-day high.` };
   return { level: "wait", label: "WAIT", why: "Don't buy: no uptrend on the daily chart (price isn't above its 200-day average with the 50-day above it). The trend rule waits for one." };
+}
+/* ---------- Trend radar: the trend rule on ~40 popular markets that aren't on the watchlist ----------
+   Trend following works best spread over many markets, and a new user's watchlist is short. Checked at
+   most every 6 hours (daily candles change once a day); only a small summary is kept in this browser. */
+const RADAR = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "LTCUSDT", "DOTUSDT", "BCHUSDT",
+  "S:SPY", "S:QQQ", "S:IWM", "S:DIA", "S:GLD", "S:SLV", "S:TLT", "S:XLE", "S:XLF", "S:XLK", "S:AAPL", "S:MSFT", "S:NVDA", "S:AMZN",
+  "S:GOOGL", "S:META", "S:TSLA", "S:AVGO", "S:AMD", "S:NFLX", "S:JPM", "S:V", "S:LLY", "S:XOM", "S:COST", "S:WMT", "S:ORCL", "S:PLTR", "S:KO"];
+const RADAR_EVERY = 6 * 3600e3;
+let radar = store.get("radar", null), radarRunning = false;
+export function radarList() { return RADAR.slice(); }
+/** Popular markets (not on the watchlist) with a trend-rule BUY right now. */
+export function radarBuys() {
+  const mine = new Set(hooks.getWatchlist());
+  return (radar?.rows || []).filter((x) => x.buy && !mine.has(x.sym));
+}
+/** Popular markets in an uptrend, closest to a BUY. */
+export function radarWatch(n = 6) {
+  const mine = new Set(hooks.getWatchlist());
+  return (radar?.rows || []).filter((x) => !x.buy && x.up && isFinite(x.away) && !mine.has(x.sym)).sort((a, b) => a.away - b.away).slice(0, n);
+}
+async function runRadar(force) {
+  if (radarRunning || (!force && radar && Date.now() - radar.at < RADAR_EVERY)) return;
+  radarRunning = true; render();
+  const fee = (+store.get("feePct", 0.02) || 0) / 100;
+  const out = [], queue = RADAR.slice();
+  const worker = async () => {
+    while (queue.length) {
+      const sym = queue.shift();
+      try {
+        const c = await getKlineHistory(sym, "1d", 3000);
+        if (c.length < 260) continue;
+        const r = await analyzeAsync(c, { costPerSide: isStock(sym) ? 0.0002 : fee + 0.0003, useModel: false });
+        if (r.liquidity && !r.liquidity.ok) continue;
+        const t = (r.triggers || []).find((x) => x.id === "trend" && x.ready);
+        out.push({ sym, buy: isBuy(r), up: !!r.upNow, level: t?.level ?? null, away: t?.away ?? null, price: r.price, n: r.trend?.stats?.n || 0, ev: r.trend?.stats?.ev ?? null });
+      } catch { /* skip markets that fail to load */ }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  radar = { at: Date.now(), rows: out };
+  try { localStorage.setItem("evx.radar", JSON.stringify(radar)); } catch {}
+  radarRunning = false;
+  render();
+  hooks.onUpdate(currentBuys());
 }
 export function isRunning() { return running; }
 export function lastChecked() { return lastRun; }
@@ -218,6 +264,7 @@ export async function run(only) {
   }
   if (!only) prevBuys = new Set(buysNow.map((b) => `${b.sym}|${b.iv}`));
   hooks.onUpdate(buysNow);
+  if (!only) setTimeout(() => runRadar(), 1500);
   const d = nextDelay();
   schedule(d == null ? null : only && lastRun ? Math.max(5_000, d - (Date.now() - lastRun)) : d);
   if (fullAgain) { fullAgain = false; queued.length = 0; run(); return; }
@@ -229,6 +276,19 @@ const SHARED_MODEL_IVS = new Set(["1d"]);
 const pooledByIv = new Map();    // interval → { sig, model } (the shared prediction model)
 /** The shared prediction model for a candle size, if the watchlist check has trained one (for the chart). */
 export function pooledModelFor(iv) { return pooledByIv.get(iv)?.model || null; }   // "SYM|interval" → { t: last closed candle time, cost, r }
+
+function radarHtml() {
+  const buys = radarBuys(), watch = radarWatch(8);
+  const name = (s) => fmt.esc(s.replace(/^S:/, "").replace(/(USDT|USDC|USD)$/, ""));
+  const row = (x, pill) => `<button class="opp-row${x.buy ? " opp-buy" : ""}" data-any-sym="${fmt.esc(x.sym)}">
+      <span class="opp-coin">${name(x.sym)}</span><span class="mono opp-iv">1D</span>${pill}
+      <span>${x.buy ? "Trend breakout" : `BUY above <strong class="mono">${fmt.price(x.level)}</strong>`}</span>
+      <span class="mono small">${x.buy ? (x.n ? `here: ${fmt.pct(x.ev * 100)}/trade over ${x.n}` : "") : (x.away > 0 ? `+${x.away.toFixed(1)}% away` : "above it now: watch the close")}</span></button>`;
+  return `<h3>📡 Trend radar: ${RADAR.length} popular markets ${buys.length ? `<span class="pill pill-edge">${buys.length}</span>` : ""}</h3>
+    <p class="muted tiny">The same trend rule on big coins, stocks and ETFs that aren't on your list (trend following works best spread over many markets). ${radarRunning ? `<span class="typing"><i></i><i></i><i></i></span> Checking…` : radar ? `Checked ${new Date(radar.at).toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}. <button class="link-btn tiny" id="radar-refresh">Check again</button>` : "Starts after your watchlist check."}</p>
+    ${buys.length ? `<div class="opps-list">${buys.map((x) => row(x, `<span class="pill pill-edge">BUY</span>`)).join("")}</div>` : radar ? `<p class="muted small">No BUY signals in these markets right now.</p>` : ""}
+    ${watch.length ? `<p class="muted tiny">Closest to a BUY:</p><div class="opps-list">${watch.map((x) => row(x, `<span class="pill pill-thin">WATCH</span>`)).join("")}</div>` : ""}`;
+}
 
 function render() {
   const root = $("tab-opps");
@@ -268,7 +328,8 @@ function render() {
           <span class="opp-coin">${fmt.esc(baseOf(sym))}</span><span class="mono opp-iv">${IV_SHORT[iv] || iv}</span>
           <span class="pill pill-thin">WATCH</span>
           <span>BUY above <strong class="mono">${fmt.price(level)}</strong></span>
-          <span class="mono small">${away >= 0 ? "+" : ""}${away.toFixed(1)}% away</span></button>`).join("")}</div>`
+          <span class="mono small">${away > 0 ? `+${away.toFixed(1)}% away` : "above it now: watch the close"}</span></button>`).join("")}</div>`
       : `<p class="muted small">${lastRun ? "None of your watchlist is in a daily uptrend right now. The trend rule waits; try adding more coins or stocks." : "…"}</p>`}
+    ${radarHtml()}
     ${thinNames.length ? `<p class="muted tiny">Skipped because they barely trade on Binance.US at that candle size (prices jump, stops can't protect you): ${thinNames.map(fmt.esc).join(", ")}.</p>` : ""}`;
 }

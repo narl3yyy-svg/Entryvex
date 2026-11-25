@@ -1413,10 +1413,11 @@ async function boot() {
     getWatchlist: () => state.watchlist.slice(),
     getInfo: (sym) => state.bySymbol.get(sym),
     onPick: openAt,
+    onPickAny: (sym, iv) => { if (isStock(sym)) { registerStock(sym, {}); state.bySymbol.set(sym, stockInfo(sym)); } openAt(sym, iv); },
     getInterval: () => (state.interval === "1w" ? "1d" : state.interval),
     // A watchlist market just turned green: pop-up, sound, and a desktop notification if those are on.
-    onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, interval: b.iv, title: `${b.label === "GO" ? "BUY" : "SMALL BUY"}: ${b.base} on ${b.iv} candles`,
-      body: `${b.setup} just appeared and has a winning record here. Tap to see the plan.` }),   // weekly has too little history to test setups: use daily
+    onNewBuy: (b) => pushAlert({ kind: "setup", symbol: b.sym, interval: b.iv, title: `BUY: ${b.base} (daily trend breakout)`,
+      body: "Uptrend, and a day just closed at a new 20-day high. Tap to see the plan and where to put your stop." }),
     onUpdate: () => { refreshDecision(decisionCtx()); scheduleSync(); paintSignals(); todayRefresh(); },
     onProgress: ({ running, done, total }) => {
       const b = $("scan-top");

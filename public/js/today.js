@@ -2,7 +2,7 @@
 // markets has a BUY signal right now, what to do with what you own, what the bot did, and what's coming
 // up (earnings, big economic news). Everything here comes from data the rest of the app already measures.
 import * as fmt from "./format.js";
-import { currentBuys, topWatch, lastChecked, isRunning } from "./opportunities.js";
+import { currentBuys, topWatch, lastChecked, isRunning, radarBuys } from "./opportunities.js";
 import { holdingsSnapshot, refreshHoldings } from "./holdings.js";
 import { botData } from "./bot.js";
 import { marketBackdrop, fearGauge } from "./decision.js";
@@ -75,11 +75,13 @@ function buysHtml(buys) {
   if (buys.length) return `<div class="today-list">${buys.map((b) => `<button class="today-row" data-today-open="${fmt.esc(b.sym)}" data-iv="${fmt.esc(b.iv)}">
       <span class="pill pill-edge">BUY</span><strong>${fmt.esc(hooks.nameFor(b.sym))}</strong>
       <span class="muted small">${fmt.esc(b.setup)} on ${IV[b.iv] || b.iv} candles</span><span class="today-go">Open the plan →</span></button>`).join("")}</div>`;
-  const w = topWatch(3);
+  const w = topWatch(3), elsewhere = radarBuys();
   const checked = lastChecked();
+  const radarRows = elsewhere.length ? `<p class="small muted">📡 BUY signals in popular markets that aren't on your list:</p><div class="today-list">${elsewhere.slice(0, 4).map((x) => `<button class="today-row" data-today-open="${fmt.esc(x.sym)}" data-iv="1d">
+      <span class="pill pill-edge">BUY</span><strong>${fmt.esc(hooks.nameFor(x.sym))}</strong><span class="muted small">trend breakout on daily candles</span><span class="today-go">Open the plan →</span></button>`).join("")}</div>` : "";
   return `<p class="small">${isRunning() ? "Checking your list now…" : `Nothing on your watchlist has a buy signal${checked ? ` (checked ${fmt.ago(checked)})` : ""}. Most of the time that's the right answer.`}</p>
     ${w.length ? `<p class="small muted">Closest to a signal (in a daily uptrend, waiting for a new 20-day high):</p><div class="today-list">${w.map((x) => `<button class="today-row" data-today-open="${fmt.esc(x.sym)}" data-iv="${fmt.esc(x.iv)}">
-      <span class="pill">WATCH</span><strong>${fmt.esc(hooks.nameFor(x.sym))}</strong><span class="muted small">BUY above ${fmt.price(x.level)} · ${x.away >= 0 ? "+" : ""}${x.away.toFixed(1)}% away</span></button>`).join("")}</div>` : ""}`;
+      <span class="pill">WATCH</span><strong>${fmt.esc(hooks.nameFor(x.sym))}</strong><span class="muted small">BUY above ${fmt.price(x.level)} · ${x.away > 0 ? `+${x.away.toFixed(1)}% away` : "above it now: watch today's close"}</span></button>`).join("")}</div>` : ""}${radarRows}`;
 }
 
 function holdHtml(hold) {

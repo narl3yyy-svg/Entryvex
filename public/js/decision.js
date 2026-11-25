@@ -219,7 +219,9 @@ function html(c, checks) {
         ? `<strong>Short charts don't give BUY signals.</strong> On candles shorter than a day, Entryvex's buy signals lost money after fees when tested on data they never saw, no better than buying at random moments. Check the daily chart for ${fmt.esc(c.base)}. <button class="link-btn" data-goto-iv="1d">Show the daily chart</button>`
         : lvl === "wait" && r.long
         ? (r.upNow && isFinite(r.overall.trigger)
-          ? `${fmt.esc(c.base)} is in an uptrend, but hasn't made a new 20-day high yet. Entryvex says <strong>BUY when a day closes above ${fmt.price(r.overall.trigger)}</strong> <span class="muted">(${fmtAway(r.overall.trigger, c.price)} from now)</span>.`
+          ? (c.price > r.overall.trigger
+            ? `${fmt.esc(c.base)} is in an uptrend and trading <strong>above its 20-day high (${fmt.price(r.overall.trigger)})</strong> right now. If today's candle closes above it, Entryvex says <strong>BUY</strong> after the close.`
+            : `${fmt.esc(c.base)} is in an uptrend, but hasn't made a new 20-day high yet. Entryvex says <strong>BUY when a day closes above ${fmt.price(r.overall.trigger)}</strong> <span class="muted">(${fmtAway(r.overall.trigger, c.price)} from now)</span>.`)
           : `<strong>No uptrend on ${fmt.esc(c.base)}'s daily chart</strong> (price isn't above its 200-day average with the 50-day above it). The trend rule waits for one, so there's no reason to buy now.`)
         : lvl === "wait"
         ? `None of the setups Entryvex trusts is happening on ${c.base} right now, so there's no good reason to buy at this moment.`
@@ -456,7 +458,9 @@ function simpleHtml(c) {
       why = r.overall.shortChart
         ? `Short charts don't give BUY signals: in testing on data they never saw, Entryvex's signals on candles shorter than a day lost money after fees. <button class="link-btn" data-goto-iv="1d">Check ${fmt.esc(c.base)} on the daily chart</button>.`
         : r.upNow && isFinite(r.overall.trigger)
-        ? `${fmt.esc(c.base)} is in an uptrend. Entryvex says <strong>BUY if a day closes above ${fmt.price(r.overall.trigger)}</strong> (${fmtAway(r.overall.trigger, c.price)} from now), a new 20-day high.${elsewhere}`
+        ? (c.price > r.overall.trigger
+          ? `${fmt.esc(c.base)} is in an uptrend and trading above its 20-day high (${fmt.price(r.overall.trigger)}) right now. <strong>If today's candle closes above it, Entryvex says BUY</strong> after the close. Don't jump in before the close: the rule was tested on closing prices.${elsewhere}`
+          : `${fmt.esc(c.base)} is in an uptrend. Entryvex says <strong>BUY if a day closes above ${fmt.price(r.overall.trigger)}</strong> (${fmtAway(r.overall.trigger, c.price)} from now), a new 20-day high.${elsewhere}`)
         : `No uptrend on ${fmt.esc(c.base)}'s daily chart, so Entryvex's trend rule says wait.${elsewhere}`;
     }
     const otherIv = cls !== "buy" && cls !== "caution" ? currentBuys().find((b) => b.sym === c.symbol && b.iv !== c.interval) : null;
