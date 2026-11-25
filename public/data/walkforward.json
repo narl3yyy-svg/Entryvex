@@ -6,13 +6,41 @@
   "SOLUSDT",
   "XRPUSDT",
   "DOGEUSDT",
+  "ADAUSDT",
+  "AVAXUSDT",
+  "LINKUSDT",
+  "LTCUSDT",
+  "DOTUSDT",
+  "BCHUSDT",
   "S:SPY",
   "S:QQQ",
+  "S:IWM",
+  "S:DIA",
+  "S:GLD",
+  "S:SLV",
+  "S:TLT",
+  "S:XLE",
+  "S:XLF",
+  "S:XLK",
   "S:AAPL",
-  "S:NVDA",
-  "S:TSLA",
   "S:MSFT",
-  "S:AMZN"
+  "S:NVDA",
+  "S:AMZN",
+  "S:GOOGL",
+  "S:META",
+  "S:TSLA",
+  "S:AVGO",
+  "S:AMD",
+  "S:NFLX",
+  "S:JPM",
+  "S:V",
+  "S:LLY",
+  "S:XOM",
+  "S:COST",
+  "S:WMT",
+  "S:ORCL",
+  "S:PLTR",
+  "S:KO"
  ],
  "period": {
   "from": "2020-12-03",
@@ -27,35 +55,35 @@
  },
  "trend": {
   "buy": {
-   "n": 230,
-   "avg": 0.01398,
-   "win": 0.365,
-   "se": 0.00838,
+   "n": 791,
+   "avg": 0.00961,
+   "win": 0.384,
+   "se": 0.00348,
    "days": 17.4
   },
   "random": {
-   "n": 479.95,
-   "avg": 0.0117,
-   "win": 0.37,
-   "se": 0.00692,
-   "days": 18.2
+   "n": 1647.5500000000002,
+   "avg": 0.00869,
+   "win": 0.385,
+   "se": 0.00288,
+   "days": 18.1
   },
   "randomUp": {
-   "n": 314.95,
-   "avg": 0.00758,
-   "win": 0.384,
-   "se": 0.00695,
-   "days": 17.3
+   "n": 1070.6499999999999,
+   "avg": 0.00738,
+   "win": 0.392,
+   "se": 0.00301,
+   "days": 17.7
   },
-  "markets": 11,
-  "beatRandom": 4,
-  "beatRandomUp": 7,
+  "markets": 36,
+  "beatRandom": 11,
+  "beatRandomUp": 15,
   "median": {
-   "cagr": 0.0315,
-   "holdCagr": 0.1202,
-   "dd": 0.248,
-   "holdDd": 0.561,
-   "inMarket": 0.298
+   "cagr": 0.0223,
+   "holdCagr": 0.1177,
+   "dd": 0.22,
+   "holdDd": 0.443,
+   "inMarket": 0.292
   },
   "perMarket": [
    {
@@ -65,7 +93,7 @@
     "cagr": 0.0962,
     "dd": 0.216,
     "inMarket": 0.273,
-    "holdCagr": 0.1831,
+    "holdCagr": 0.1823,
     "holdDd": 0.53
    },
    {
@@ -75,7 +103,7 @@
     "cagr": -0.0802,
     "dd": 0.285,
     "inMarket": 0.13,
-    "holdCagr": -0.0343,
+    "holdCagr": -0.0346,
     "holdDd": 0.676
    },
    {
@@ -85,7 +113,7 @@
     "cagr": 0.006,
     "dd": 0.248,
     "inMarket": 0.098,
-    "holdCagr": -0.363,
+    "holdCagr": -0.3644,
     "holdDd": 0.763
    },
    {
@@ -95,7 +123,7 @@
     "cagr": 0,
     "dd": 0,
     "inMarket": 0,
-    "holdCagr": -0.5043,
+    "holdCagr": -0.5063,
     "holdDd": 0.42
    },
    {
@@ -105,8 +133,68 @@
     "cagr": 0.2452,
     "dd": 0.305,
     "inMarket": 0.076,
-    "holdCagr": -0.1395,
+    "holdCagr": -0.1407,
     "holdDd": 0.883
+   },
+   {
+    "sym": "ADAUSDT",
+    "trades": 7,
+    "avg": 0.0553,
+    "cagr": 0.0852,
+    "dd": 0.345,
+    "inMarket": 0.056,
+    "holdCagr": -0.239,
+    "holdDd": 0.883
+   },
+   {
+    "sym": "AVAXUSDT",
+    "trades": 0,
+    "avg": null,
+    "cagr": 0,
+    "dd": 0,
+    "inMarket": 0,
+    "holdCagr": -0.5169,
+    "holdDd": 0.598
+   },
+   {
+    "sym": "LINKUSDT",
+    "trades": 2,
+    "avg": -0.06257,
+    "cagr": -0.1586,
+    "dd": 0.141,
+    "inMarket": 0.055,
+    "holdCagr": 0.0099,
+    "holdDd": 0.445
+   },
+   {
+    "sym": "LTCUSDT",
+    "trades": 8,
+    "avg": -0.07746,
+    "cagr": -0.198,
+    "dd": 0.655,
+    "inMarket": 0.06,
+    "holdCagr": -0.1634,
+    "holdDd": 0.709
+   },
+   {
+    "sym": "DOTUSDT",
+    "trades": 0,
+    "avg": null,
+    "cagr": 0,
+    "dd": 0,
+    "inMarket": 0,
+    "holdCagr": -0.7385,
+    "holdDd": 0.716
+   },
+   {
+    "sym": "BCHUSDT",
+    "trades": 13,
+    "avg": -0.0439,
+    "cagr": -0.1859,
+    "dd": 0.514,
+    "inMarket": 0.172,
+    "holdCagr": -0.0688,
+    "holdDd": 0.727
    },
    {
     "sym": "S:SPY",
@@ -129,6 +217,86 @@
     "holdDd": 0.356
    },
    {
+    "sym": "S:IWM",
+    "trades": 26,
+    "avg": -0.01385,
+    "cagr": -0.0604,
+    "dd": 0.327,
+    "inMarket": 0.25,
+    "holdCagr": 0.0636,
+    "holdDd": 0.331
+   },
+   {
+    "sym": "S:DIA",
+    "trades": 31,
+    "avg": -0.00299,
+    "cagr": -0.017,
+    "dd": 0.118,
+    "inMarket": 0.403,
+    "holdCagr": 0.0877,
+    "holdDd": 0.219
+   },
+   {
+    "sym": "S:GLD",
+    "trades": 30,
+    "avg": 0.00737,
+    "cagr": 0.0324,
+    "dd": 0.133,
+    "inMarket": 0.262,
+    "holdCagr": 0.1161,
+    "holdDd": 0.349
+   },
+   {
+    "sym": "S:SLV",
+    "trades": 24,
+    "avg": 0.01494,
+    "cagr": 0.0404,
+    "dd": 0.261,
+    "inMarket": 0.246,
+    "holdCagr": 0.0966,
+    "holdDd": 0.65
+   },
+   {
+    "sym": "S:TLT",
+    "trades": 4,
+    "avg": -0.01732,
+    "cagr": -0.0116,
+    "dd": 0.068,
+    "inMarket": 0.023,
+    "holdCagr": -0.1041,
+    "holdDd": 0.514
+   },
+   {
+    "sym": "S:XLE",
+    "trades": 26,
+    "avg": 0.00703,
+    "cagr": 0.0215,
+    "dd": 0.265,
+    "inMarket": 0.304,
+    "holdCagr": 0.2091,
+    "holdDd": 0.269
+   },
+   {
+    "sym": "S:XLF",
+    "trades": 23,
+    "avg": 0.00755,
+    "cagr": 0.0265,
+    "dd": 0.145,
+    "inMarket": 0.354,
+    "holdCagr": 0.1177,
+    "holdDd": 0.269
+   },
+   {
+    "sym": "S:XLK",
+    "trades": 33,
+    "avg": 0.00696,
+    "cagr": 0.0276,
+    "dd": 0.162,
+    "inMarket": 0.346,
+    "holdCagr": 0.1737,
+    "holdDd": 0.34
+   },
+   {
     "sym": "S:AAPL",
     "trades": 26,
     "avg": 0.01048,
@@ -137,26 +305,6 @@
     "inMarket": 0.341,
     "holdCagr": 0.191,
     "holdDd": 0.334
-   },
-   {
-    "sym": "S:NVDA",
-    "trades": 28,
-    "avg": 0.0524,
-    "cagr": 0.1845,
-    "dd": 0.329,
-    "inMarket": 0.34,
-    "holdCagr": 0.5228,
-    "holdDd": 0.664
-   },
-   {
-    "sym": "S:TSLA",
-    "trades": 25,
-    "avg": -0.01331,
-    "cagr": -0.0854,
-    "dd": 0.547,
-    "inMarket": 0.171,
-    "holdCagr": 0.1182,
-    "holdDd": 0.736
    },
    {
     "sym": "S:MSFT",
@@ -169,6 +317,16 @@
     "holdDd": 0.376
    },
    {
+    "sym": "S:NVDA",
+    "trades": 28,
+    "avg": 0.0524,
+    "cagr": 0.1845,
+    "dd": 0.329,
+    "inMarket": 0.34,
+    "holdCagr": 0.5228,
+    "holdDd": 0.664
+   },
+   {
     "sym": "S:AMZN",
     "trades": 26,
     "avg": -0.00957,
@@ -177,6 +335,146 @@
     "inMarket": 0.298,
     "holdCagr": 0.0822,
     "holdDd": 0.561
+   },
+   {
+    "sym": "S:GOOGL",
+    "trades": 25,
+    "avg": 0.01787,
+    "cagr": 0.058,
+    "dd": 0.231,
+    "inMarket": 0.317,
+    "holdCagr": 0.2084,
+    "holdDd": 0.443
+   },
+   {
+    "sym": "S:META",
+    "trades": 24,
+    "avg": 0.02059,
+    "cagr": 0.0522,
+    "dd": 0.231,
+    "inMarket": 0.316,
+    "holdCagr": 0.1341,
+    "holdDd": 0.767
+   },
+   {
+    "sym": "S:TSLA",
+    "trades": 25,
+    "avg": -0.01331,
+    "cagr": -0.0854,
+    "dd": 0.547,
+    "inMarket": 0.171,
+    "holdCagr": 0.1182,
+    "holdDd": 0.736
+   },
+   {
+    "sym": "S:AVGO",
+    "trades": 33,
+    "avg": 0.00793,
+    "cagr": 0.0223,
+    "dd": 0.229,
+    "inMarket": 0.353,
+    "holdCagr": 0.4119,
+    "holdDd": 0.415
+   },
+   {
+    "sym": "S:AMD",
+    "trades": 24,
+    "avg": 0.04154,
+    "cagr": 0.1327,
+    "dd": 0.242,
+    "inMarket": 0.225,
+    "holdCagr": 0.3055,
+    "holdDd": 0.654
+   },
+   {
+    "sym": "S:NFLX",
+    "trades": 23,
+    "avg": 0.00565,
+    "cagr": 0.0132,
+    "dd": 0.22,
+    "inMarket": 0.299,
+    "holdCagr": 0.0263,
+    "holdDd": 0.759
+   },
+   {
+    "sym": "S:JPM",
+    "trades": 27,
+    "avg": 0.00933,
+    "cagr": 0.0366,
+    "dd": 0.288,
+    "inMarket": 0.378,
+    "holdCagr": 0.1744,
+    "holdDd": 0.406
+   },
+   {
+    "sym": "S:V",
+    "trades": 21,
+    "avg": 0.0022,
+    "cagr": 0.0047,
+    "dd": 0.181,
+    "inMarket": 0.292,
+    "holdCagr": 0.12,
+    "holdDd": 0.292
+   },
+   {
+    "sym": "S:LLY",
+    "trades": 27,
+    "avg": 0.03271,
+    "cagr": 0.1359,
+    "dd": 0.161,
+    "inMarket": 0.345,
+    "holdCagr": 0.4571,
+    "holdDd": 0.348
+   },
+   {
+    "sym": "S:XOM",
+    "trades": 29,
+    "avg": 0.0044,
+    "cagr": 0.011,
+    "dd": 0.338,
+    "inMarket": 0.279,
+    "holdCagr": 0.2561,
+    "holdDd": 0.207
+   },
+   {
+    "sym": "S:COST",
+    "trades": 22,
+    "avg": 0.02749,
+    "cagr": 0.1022,
+    "dd": 0.109,
+    "inMarket": 0.336,
+    "holdCagr": 0.1976,
+    "holdDd": 0.315
+   },
+   {
+    "sym": "S:WMT",
+    "trades": 28,
+    "avg": 0.00667,
+    "cagr": 0.0276,
+    "dd": 0.123,
+    "inMarket": 0.372,
+    "holdCagr": 0.1738,
+    "holdDd": 0.26
+   },
+   {
+    "sym": "S:ORCL",
+    "trades": 23,
+    "avg": 0.02314,
+    "cagr": 0.0743,
+    "dd": 0.147,
+    "inMarket": 0.291,
+    "holdCagr": 0.1152,
+    "holdDd": 0.692
+   },
+   {
+    "sym": "S:KO",
+    "trades": 29,
+    "avg": -0.00905,
+    "cagr": -0.0461,
+    "dd": 0.269,
+    "inMarket": 0.322,
+    "holdCagr": 0.1051,
+    "holdDd": 0.209
    }
   ]
  },

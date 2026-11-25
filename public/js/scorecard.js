@@ -46,10 +46,16 @@ function walkVerdict(g) {
 }
 const pct0 = (x) => `${Math.round(x * 100)}%`;
 /** One line for the answer card under a BUY: how the trend rule did on unseen data. */
+/** How the entry timing compares with random entries using the same stops: "better" / "same" / "worse". */
+function timing(t) {
+  const d = t.buy.avg - t.random.avg, se = Math.hypot(t.buy.se || 0, t.random.se || 0);
+  return d > 2 * se ? "better" : d < -2 * se ? "worse" : "same";
+}
 export function walkLine(iv) {
   const t = walk?.trend;
   if (!t?.buy?.n || iv !== "1d") return "";
-  return `🧪 <strong>Tested on unseen data</strong> (${t.markets} markets, ${walk.period.from.slice(0, 4)}–${walk.period.to.slice(0, 4)}): this rule made ${pp(t.buy.avg)} per trade after fees over ${t.buy.n} trades, winning ${pct0(t.buy.win)}. Buying at random moments with the same stops made ${pp(t.random.avg)}, so the timing edge is small; the bigger benefit is risk: its worst drop was ${pct0(t.median.dd)} vs ${pct0(t.median.holdDd)} for just holding (typical market). <strong>Start with the practice account or a small amount.</strong> <button class="link-btn" data-open-score>How this was tested</button>`;
+  const tm = timing(t);
+  return `🧪 <strong>Tested on unseen data</strong> (${t.markets} markets, ${walk.period.from.slice(0, 4)}–${walk.period.to.slice(0, 4)}): this rule made ${pp(t.buy.avg)} per trade after fees over ${t.buy.n} trades, winning ${pct0(t.buy.win)}. ${tm === "better" ? `That beat buying at random moments with the same stops (${pp(t.random.avg)}).` : `Buying at random moments with the same stops made about the same (${pp(t.random.avg)}), so the timing itself adds little: what helps is the stop, which cuts losers early and lets winners run.`} Its worst drop in a typical market was ${pct0(t.median.dd)}, vs ${pct0(t.median.holdDd)} for just holding. <strong>Start with the practice account or a small amount.</strong> <button class="link-btn" data-open-score>How this was tested</button>`;
 }
 function walkSection() {
   const t = walk?.trend;
@@ -72,7 +78,7 @@ function walkSection() {
           <tr class="muted"><td>Just holding</td><td class="num">${pp(m.holdCagr)}</td><td class="num down">−${pct0(m.holdDd)}</td><td class="num">100%</td></tr>
         </tbody></table></div>
     </div>
-    <p class="small"><strong>What this means:</strong> the trend rule made money after fees, a little more per trade than random timing, and cut the worst drops by more than half. But over these years, when most of these markets rose a lot, simply holding earned more. Its job is to keep you out of the big crashes and catch the strong runs, not to beat the market. Most trend trades lose a little; a few big winners pay for them, so judge it over many trades.</p>
+    <p class="small"><strong>What this means:</strong> the trend rule made money after fees in ${t.perMarket.filter((m) => m.avg > 0).length} of ${t.perMarket.length} markets. ${timing(t) === "better" ? "Per trade it beat random timing with the same stops." : "Per trade, its timing was about the same as buying at random moments with the same stops: the profit comes from the exit (cut losers early, let winners run), not from picking the perfect moment."} Its real strength is risk: the worst drop was smaller than just holding in ${t.perMarket.filter((m) => m.dd < m.holdDd).length} of ${t.perMarket.length} markets, and in coins that crashed it stayed near flat while holding lost half or more. The price: in markets that kept rising, simply holding earned much more (${pp(m.holdCagr)} vs ${pp(m.cagr)} a year in a typical market). Use it to take part in strong trends with a firm exit, not to beat the market. Most trend trades lose a little; a few big winners pay for them, so judge it over many trades.</p>
     ${before ? `<p class="small muted"><strong>Why Entryvex was rebuilt:</strong> its earlier BUY answers (short-term setups) lost money per trade on unseen data: ${before}. They no longer produce a BUY.</p>` : ""}`;
 }
 

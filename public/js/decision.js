@@ -198,7 +198,7 @@ function html(c, checks) {
       cls = lvl === "go" ? "buy" : "caution";
       const s = best.stats;
       if (best.trend) {
-        headline = `<strong>Trend breakout:</strong> ${fmt.esc(c.base)} is in an uptrend and a day just closed at a new 20-day high. That's Entryvex's trend rule: on data it never saw it made money after fees, with much smaller drops than just holding. ${trendRecord(c, s)}`;
+        headline = `<strong>Trend breakout:</strong> ${fmt.esc(c.base)} is in an uptrend and a day just closed at a new 20-day high. That's Entryvex's trend rule: on data it never saw it made money after fees, with worst drops about half as deep as just holding. ${trendRecord(c, s)}`;
       } else {
         const what = best.model
           ? `<strong>The Entryvex model</strong> is confident this trade works right now${lvl === "go" ? "," : "."}`

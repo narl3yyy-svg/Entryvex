@@ -34,7 +34,8 @@ export function riskDistance(atr, price, costPerSide) {
 
 /**
  * The trend rule: the BUY rule that held up best on data it never saw (tools/walkforward.mjs): it made
- * money after fees, a little more than random timing, with much smaller drops than just holding.
+ * money after fees with much smaller drops than just holding. Its entry timing was about as good as
+ * random; the trailing-stop exit (cut losers, let winners run) is what does the work.
  * Daily charts only. Buy when the market is in an uptrend (price above its 200-day average, and the
  * 50-day average above the 200-day) and a day closes above the highest price of the previous 20 days.
  * Sell with a trailing stop: start 2 ATR below the entry, then keep it 3 ATR below the highest price
@@ -265,10 +266,10 @@ function trendTriggers(c, x, i, trend, price, upNow, hi20) {
 
 /** The trend rule is judged across many markets (see the Scorecard), so one market's own record is context. */
 function trendVerdict(s) {
-  if (s.n < 8) return { level: "tested", label: "Tested rule", why: `Only ${s.n} past trades on this market, too few to judge it here on its own. Across 12 markets the rule made money after fees on data it never saw.` };
+  if (s.n < 8) return { level: "tested", label: "Tested rule", why: `Only ${s.n} past trades on this market, too few to judge it here on its own. Across 40 markets the rule made money after fees on data it never saw, with smaller drops than just holding.` };
   return {
     level: "tested", label: "Tested rule",
-    why: `On this market it made ${(s.ev * 100).toFixed(1)}% per trade on average over ${s.n} past trades (won ${Math.round(s.winRate * 100)}%). Trend trades win less than half the time; the winners are bigger than the losers. Across 12 markets the rule made money after fees on data it never saw.`,
+    why: `On this market it made ${(s.ev * 100).toFixed(1)}% per trade on average over ${s.n} past trades (won ${Math.round(s.winRate * 100)}%). Trend trades win less than half the time; the winners are bigger than the losers. Across 40 markets the rule made money after fees on data it never saw, with smaller drops than just holding.`,
   };
 }
 

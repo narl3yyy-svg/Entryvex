@@ -6,7 +6,7 @@
 // 3 ATR under the highest price since buying; no fixed target; fees both ways. The rule's numbers are
 // textbook values fixed before testing, so nothing is fitted: every trade in the test period is "unseen".
 //
-// For each of the bot's 12 markets it replays the newest half of up to 3000 daily candles exactly as the
+// For each of the 40 Trend-radar markets it replays the newest half of up to 3000 daily candles exactly as the
 // app would (only candles up to each moment), and compares with:
 //   • random timing: the same trade (same stops) entered at random moments, 20 random runs;
 //   • random timing in an uptrend: same, but only when the trend filter is on (shows what the breakout adds);
@@ -20,8 +20,10 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { TREND_SETUP, trendTrade, checkLiquidity, RULES } from "../public/js/engine.js";
 import { computeAll } from "../public/js/indicators.js";
 
-const CRYPTO = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT"];
-const STOCKS = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
+// The 40 markets of the Trend radar (opportunities.js): big coins, US stocks and ETFs (incl. gold, bonds, energy).
+const CRYPTO = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "LTCUSDT", "DOTUSDT", "BCHUSDT"];
+const STOCKS = ["SPY", "QQQ", "IWM", "DIA", "GLD", "SLV", "TLT", "XLE", "XLF", "XLK", "AAPL", "MSFT", "NVDA", "AMZN",
+  "GOOGL", "META", "TSLA", "AVGO", "AMD", "NFLX", "JPM", "V", "LLY", "XOM", "COST", "WMT", "ORCL", "PLTR", "KO"];
 const HISTORY = 3000, START = 1500;
 const OUT = new URL("../public/data/walkforward.json", import.meta.url);
 
