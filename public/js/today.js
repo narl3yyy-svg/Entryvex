@@ -62,6 +62,8 @@ function headline(buys, hold, bot) {
   const neg = (mood || []).filter((m) => m?.effect < 0).length, pos = (mood || []).filter((m) => m?.effect > 0).length;
   parts.push(!mood ? "" : neg >= 2 ? "Markets are rough today, so be extra careful." : pos >= 3 ? "Markets look healthy today." : "Markets are mixed today.");
   parts.push(buys.length ? `${buys.length} buy signal${buys.length === 1 ? "" : "s"} on your list.` : "No buy signals on your list right now. Waiting is fine.");
+  const raised = openTrades().filter((x) => x.trail && !x.practice && x.stop > (x.firstStop ?? x.stop - 1)).length;
+  if (raised) parts.push(`Check the stop on ${raised} trend trade${raised === 1 ? "" : "s"}.`);
   const act = hold.filter((h) => h.entryvexCall === "BUY MORE" || h.entryvexCall === "TRIM").length;
   const unchecked = hold.filter((h) => !CALL_SET.has(h.entryvexCall)).length;
   if (hold.length) parts.push(act ? `${act} of your holdings need${act === 1 ? "s" : ""} a decision.` : unchecked ? "Checking your holdings…" : "Your holdings: nothing to do.");
@@ -97,6 +99,18 @@ function botHtml(b) {
     <br><button class="link-btn" data-today-tab="bot">See its trades and what it learned</button></p>`;
 }
 
+/** Open trend trades (real money): the stop to have at the broker today. */
+function stopsHtml() {
+  const t = openTrades().filter((x) => x.trail && !x.practice);
+  if (!t.length) return "";
+  return `<h4>🛡️ Your stops today</h4><div class="today-list">${t.map((x) => {
+    const px = x.last, pl = px ? (px / x.entry - 1) * 100 : null;
+    return `<button class="today-row" data-today-open="${fmt.esc(x.symbol)}" data-iv="1d">
+      <span class="pill ${x.stop > x.entry ? "pill-edge" : ""}">STOP ${fmt.price(x.stop)}</span><strong>${fmt.esc(hooks.nameFor(x.symbol))}</strong>
+      <span class="muted small">${pl != null ? `<span class="${pl >= 0 ? "up" : "down"}">${pc(pl)}</span> since you bought · ` : ""}${x.stop > x.entry ? "gain locked in: " : ""}make sure the stop-loss at your broker is at least this</span></button>`;
+  }).join("")}</div>`;
+}
+
 function practiceHtml() {
   const open = openTrades().filter((t) => t.practice).length, bal = practiceBalance();
   if (!open && Math.abs(bal - PRACTICE_START) < 0.005) return "";
@@ -124,6 +138,7 @@ function render() {
     <div class="today-head"><h3>☀️ Today · ${date}</h3><p>${fmt.esc(headline(buys, hold, bot))}</p></div>
     <h4>Market mood</h4>${moodTiles()}
     <h4>Buy signals on your list</h4>${buysHtml(buys)}
+    ${stopsHtml()}
     <h4>What you own</h4>${holdHtml(hold)}
     <h4>🤖 The bot</h4>${botHtml(bot)}
     ${practiceHtml()}

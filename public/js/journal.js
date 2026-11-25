@@ -51,7 +51,7 @@ export function addTrade(t) {
     id: Math.random().toString(36).slice(2, 10),
     symbol: t.symbol, entry: +t.entry, qty: +t.qty,
     stop: t.stop ? +t.stop : null, target: t.target ? +t.target : null,
-    trail: t.trail > 0 ? +t.trail : null, hi: +t.entry,
+    trail: t.trail > 0 ? +t.trail : null, hi: +t.entry, firstStop: t.stop ? +t.stop : null,
     setup: t.setup || null, verdict: t.verdict || null, interval: t.interval || null,
     source: t.source || "manual", fee: feeRate(), practice: !!t.practice,
     openedAt: Date.now(), status: "open",
@@ -288,6 +288,11 @@ function openCard(t) {
     const pct = Math.max(0, Math.min(1, (price - t.stop) / (t.target - t.stop)));
     progress = `<div class="j-progress" title="Where the price is between your stop-loss (left) and take-profit (right)"><i style="left:${(pct * 100).toFixed(1)}%"></i></div>
       <div class="j-progress-labels mono small"><span class="down">stop ${fmt.price(t.stop)}</span><span class="up">target ${fmt.price(t.target)}</span></div>`;
+  }
+  if (t.trail && price) {
+    const locked = t.stop > t.entry;
+    progress = `<div class="j-trail small"><span class="pill ${locked ? "pill-edge" : "pill-thin"}">TRAILING STOP ${fmt.price(t.stop)}</span>
+      <span class="muted">${locked ? "above your buy price: a gain is locked in" : `first stop ${fmt.price(t.firstStop ?? t.stop)}`} · highest since buying ${fmt.price(t.hi || t.entry)} · the stop stays ${fmt.price(t.trail)} under it and never moves down</span></div>`;
   }
   const adv = tradeAdvice(t, price);
   return `<div class="j-card" data-open="${t.id}">
