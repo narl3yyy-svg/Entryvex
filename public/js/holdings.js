@@ -140,14 +140,33 @@ async function adviseOne(h) {
     call = "HOLD"; cls = "hold";
     text = earningsSoon ? `Earnings are days away, so wait until after the report before adding.`
       : regime === "down" ? `The daily trend is falling, so <strong>don't add yet</strong>: buying more just to lower your average price in a downtrend is a common, costly mistake. Keep what you have, set an alert at <strong>${fmt.price(dip)}</strong> to re-check, and add only when Entryvex shows a BUY signal${addUsd ? ` (about <strong>$${addUsd.toFixed(0)}</strong>)` : ""}.`
-      : `Nothing strong either way right now. To add on a dip, set an alert at <strong>${fmt.price(dip)}</strong>${addUsd ? ` and add about <strong>$${addUsd.toFixed(0)}</strong> there` : ""}. If it falls below ${fmt.price(deep)} (it ended that low only about 1 in 10 times), re-check before doing anything.`;
+      : trig ? `Keep holding. Entryvex says BUY MORE only when its trend rule fires: <strong>a day closing above ${fmt.price(trig.level)}</strong> (the 20-day high). In testing, buying dips in an uptrend didn't do better than random timing.`
+      : `Nothing strong either way right now: keep holding. Entryvex says BUY MORE only when its trend rule fires (an uptrend plus a new 20-day high). If it falls below ${fmt.price(deep)} (it ended that low only about 1 in 10 times), re-check before doing anything.`;
   }
   // A bad month for this market: the 1-in-20 worst one-month change in its own daily history.
   const span = stock ? 21 : 30, monthly = [];
   for (let i = span; i < daily.length; i++) monthly.push(daily[i].close / daily[i - span].close - 1);
   monthly.sort((x, y) => x - y);
   const badMonth = monthly.length >= 40 ? monthly[Math.floor(monthly.length * 0.05)] : null;
-  return { price, call, cls, text, reasons, dip, deep, addUsd, regime, pUp, earn, badMonth };
+  // Protective stop, the same exit the trend rule uses (the part that did the work in testing): 3 ATR
+  // under the highest high of the last 22 days (a standard "chandelier" stop).
+  let protect = null;
+  if (daily.length > 40) {
+    const atr = atr14(daily), hi = Math.max(...daily.slice(-22).map((k) => k.high));
+    const level = hi - 3 * atr;
+    if (level > 0 && level < price) protect = { level, pct: (price - level) / price, hi };
+  }
+  return { price, call, cls, text, reasons, dip, deep, addUsd, regime, pUp, earn, badMonth, protect };
+}
+
+/** 14-day Average True Range (Wilder), for the protective stop. */
+function atr14(c) {
+  let a = null;
+  for (let i = 1; i < c.length; i++) {
+    const tr = Math.max(c[i].high - c[i].low, Math.abs(c[i].high - c[i - 1].close), Math.abs(c[i].low - c[i - 1].close));
+    a = a == null ? tr : (a * 13 + tr) / 14;
+  }
+  return a;
 }
 
 /** Whole-portfolio check: too much in one place, how much is crypto, and what a bad month could cost. */
@@ -208,8 +227,10 @@ function render() {
       ${a?.error ? `<p class="muted small">Not enough price history to advise on this one.</p>`
         : a ? `<div class="hold-call d-${a.cls}"><strong>${a.call}</strong><span>${a.text}</span></div>
           <ul class="hold-why small muted">${a.reasons.map((x) => `<li>${fmt.esc(x)}</li>`).join("")}</ul>
+          ${a.protect ? `<p class="small hold-protect">🛡️ <strong>Protective stop: ${pre}${fmt.price(a.protect.level)}</strong> <span class="muted">(${(a.protect.pct * 100).toFixed(1)}% below now). If it closes below this, the trend has likely turned: Entryvex's trend rule would sell there. Optional for long-term holders: you'll sell sooner in normal dips, but you avoid riding a crash all the way down. It moves up as the price makes new highs.</span></p>` : ""}
           <div class="simple-actions">
-            ${a.dip ? `<button class="btn" data-hold-alert="${fmt.esc(h.symbol)}|below|${a.dip}">🔔 Alert me ${a.call === "TRIM" ? "to buy back" : a.regime === "down" ? "to re-check" : "to buy more"} at ${pre}${fmt.price(a.dip)}</button>` : ""}
+            ${a.protect ? `<button class="ghost-btn" data-hold-alert="${fmt.esc(h.symbol)}|below|${a.protect.level}">🛡️ Alert me at the protective stop</button>` : ""}
+            ${a.dip ? `<button class="btn" data-hold-alert="${fmt.esc(h.symbol)}|below|${a.dip}">🔔 Alert me ${a.call === "TRIM" ? "to buy back" : "to re-check"} at ${pre}${fmt.price(a.dip)}</button>` : ""}
             <button class="ghost-btn" data-hold-open="${fmt.esc(h.symbol)}">Open chart</button>
             <button class="link-btn small" data-hold-del="${fmt.esc(h.id)}">Remove</button>
           </div>`
