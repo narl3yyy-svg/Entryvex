@@ -104,13 +104,17 @@ async function adviseOne(h) {
   const last = f?.bands?.at(-1);
   const dip = last ? last.q[1] : null;          // ~20 days out: price ended at or below this about 1 in 4 times
   const deep = f ? f.range80[0] : null;         // … and below this only about 1 in 10 times
-  const buyNow = v?.level === "buy" || r?.overall?.level === "go";
-  const bearish = regime === "down" && pUp != null && pUp < 0.47;
+  const buyNow = r?.overall?.level === "go";   // the trend rule fires on this market's daily chart
+  // Full downtrend: price below its 200-day average AND the 50-day below the 200-day. The trend rule
+  // would be out of this market. (The 20-day up/down lean isn't used: it's close to a coin flip.)
+  const bearish = lt ? (!lt.above200 && !lt.golden) : regime === "down";
   const earningsSoon = earn && earn.days <= 3;
 
   // How much to add, if adding: risk your max-loss % if it falls to the "deep" level; never over 25% of your balance.
   let addUsd = null;
-  if (settings.balance > 0 && deep && deep < price) {
+  if (settings.balance > 0 && buyNow && r?.plan?.stop < price) {
+    addUsd = Math.min(settings.balance * 0.25, (settings.balance * settings.riskPct / 100) / ((price - r.plan.stop) / price));
+  } else if (settings.balance > 0 && deep && deep < price) {
     const stopDist = (price - deep) / price;
     addUsd = Math.min(settings.balance * 0.25, (settings.balance * settings.riskPct / 100) / stopDist);
   }
@@ -118,18 +122,20 @@ async function adviseOne(h) {
   if (regime !== "unknown") reasons.push(regime === "down" ? "Daily trend: falling (price below its 200-day average)." : "Daily trend: rising (price above its 200-day average).");
   if (pUp != null) reasons.push(`Next ~20 days: ${Math.round(pUp * 100)}% chance of being higher (measured, ${Math.round((f.accuracy80 || 0) * 100)}% accurate range).`);
   if (lt?.hold) reasons.push(`Held ~3 months from moments like now, it ended higher ${Math.round(lt.hold.pUp * 100)}% of the time.`);
-  if (v?.level === "buy") reasons.push(`Buy signal: ${v.label}.`);
-  else if (v?.level === "watch") reasons.push(`A setup with a winning record exists here (${v.label}), not active yet.`);
+  const trig = (r?.triggers || []).find((x) => x.id === "trend" && x.ready);
+  if (buyNow) reasons.push("Trend rule: BUY (uptrend, and a day just closed at a new 20-day high).");
+  else if (trig) reasons.push(`Trend rule: in an uptrend; it says BUY if a day closes above ${fmt.price(trig.level)}.`);
+  else if (bearish) reasons.push("Trend rule: full downtrend (50-day average below the 200-day), so it would be out of this market.");
   if (earn) reasons.push(`Earnings in ${earn.days} trading day${earn.days === 1 ? "" : "s"} (${earn.date}): prices often jump on the report.`);
 
   let call, cls, text;
   if (buyNow && !bearish && !earningsSoon) {
     call = "BUY MORE"; cls = "buy";
-    text = `A setup with a winning record is active now. If you want more, ${addUsd ? `about <strong>$${addUsd.toFixed(0)}</strong> keeps your risk at your ${settings.riskPct}% max loss if it falls to ${fmt.price(deep)}` : "enter your trading balance to get a sized amount"}.`;
+    text = `Entryvex's trend rule says BUY here now. If you want more, ${addUsd ? `about <strong>$${addUsd.toFixed(0)}</strong> keeps your risk at your ${settings.riskPct}% max loss with a stop-loss at ${fmt.price(r.plan.stop)}, then move that stop up as the price rises (open the chart for the full plan)` : "enter your trading balance to get a sized amount"}.`;
   } else if (bearish) {
     call = "TRIM"; cls = "sell";
-    text = `The trend is down and the odds lean lower. <strong>Don't buy more yet.</strong> If you want to cut risk, sell part (for example a third) now and set an alert to buy back at <strong>${fmt.price(dip)}</strong>. `
-      + `That only pays if it really dips there (it ended at or below that about 1 in 4 times), and selling then re-buying costs fees both ways${stock ? " plus tax on any gain in many countries" : " and possibly tax on gains"}. If you're holding for years, simply holding is often the cheaper choice.`;
+    text = `The trend is down (price under its 200-day average, 50-day under the 200-day): Entryvex's trend rule would be out of this market. <strong>Don't buy more.</strong> If a further drop would hurt you, sell part (for example a third) to cut risk, and buy back when the trend rule says BUY again. `
+      + `In testing, staying out of downtrends cut the worst drops by more than half, but in these strongly rising years simply holding earned more, and selling then re-buying costs fees${stock ? " plus tax on any gain in many countries" : " and possibly tax on gains"}. If you're holding for years and can sit through big drops, holding is a reasonable choice.`;
   } else {
     call = "HOLD"; cls = "hold";
     text = earningsSoon ? `Earnings are days away, so wait until after the report before adding.`
@@ -225,6 +231,6 @@ function render() {
     ${msg ? `<p class="small note">${msg}</p>` : ""}
     ${holdings.length ? `${portfolioCheck()}<div class="hold-list">${cards}</div>
       <div class="simple-actions"><button class="btn" id="hold-ask-ai">🤖 Ask the AI about my holdings</button><button class="link-btn small" id="hold-refresh">Re-check all</button></div>
-      <p class="tiny muted">Calls use each market's daily chart: Entryvex's setups and their record, the trend, the measured 20-day price range, 3-month history, signals on other candle sizes and (stocks) earnings dates. They describe measured odds, not certainties. Not financial advice.</p>`
+      <p class="tiny muted">Calls use each market's daily chart: Entryvex's trend rule (BUY MORE only when it says BUY; TRIM only in a full downtrend), the measured 20-day price range, 3-month history and (stocks) earnings dates. They describe measured odds, not certainties. Not financial advice.</p>`
       : `<p class="muted small">Nothing added yet. Enter something you own above.</p>`}`;
 }
