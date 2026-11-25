@@ -1,6 +1,6 @@
 // "💼 My holdings": coins and stocks you already own (how many, what you paid). For each one,
 // Entryvex gives one measured call and a concrete next step:
-//   BUY MORE  – a setup with a winning record is active (with an amount sized to your account);
+//   BUY MORE  – the trend rule says BUY on its daily chart (with an amount sized to your account);
 //   HOLD      – nothing strong either way (with a measured dip level to buy more at);
 //   TRIM      – the trend is down with bearish odds: selling some and buying back lower is the
 //               measured option (with the real costs of doing that spelled out);

@@ -113,7 +113,7 @@ export function initSignals(h) {
 
 const GROUPS = [
   ["tested", "BUY (trend rule)", "uptrend + new 20-day high on daily candles; sold at the trailing stop"],
-  ["edge", "GO (proven edge)", "Entryvex said this setup had a proven edge"],
+  ["edge", "Old GO (research)", "before the rebuild: a setup with a strong past record"],
   ["weak", "CAUTION (weak edge)", "slightly profitable before, not statistically clear"],
   ["thin", "UNPROVEN", "too few past examples to measure"],
   ["flat", "NO CLEAR EDGE", "roughly break-even before; any profit looked like luck"],

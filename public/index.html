@@ -235,19 +235,17 @@
             <div id="scan-sub" class="muted small"></div>
           </div>
           <div class="scan-controls">
-            <button id="find-edges" class="ghost-btn" title="Test this coin on 5m, 15m, 1h and 4h candles to find where a setup has a real track record">Find an edge for this coin</button>
-            <button id="scan-all" class="btn" title="Check every coin and stock in your watchlist on 15m, 1h and 4h candles">Scan whole watchlist</button>
+            <button id="find-edges" class="ghost-btn" title="BUY signals come from the daily chart: switch to it">Where are the BUY signals?</button>
+            <button id="scan-all" class="btn" title="Check every coin and stock in your watchlist with the trend rule on daily candles">Scan whole watchlist</button>
           </div>
         </div>
         <details class="howto-scan" id="howto-scan">
           <summary>What does the scanner do?</summary>
           <ol>
-            <li>It watches for <strong>4 common trading setups</strong> (patterns traders buy on) on the coin and candle size you're viewing.</li>
-            <li>For each one, it looks back at <strong>every time that setup happened</strong> in the last 3,000 candles and checks what would have happened if you bought: did it hit the profit target or the stop-loss first, after fees?</li>
-            <li>That gives a <strong>measured confidence</strong>: e.g. "ended in profit 21 of 38 times". Not a guess.</li>
-            <li>When a setup is active <em>right now</em>, you get a verdict: <span class="pill pill-edge">GO</span> proven edge · <span class="pill pill-weak">CAUTION</span> slight edge ·
-              <span class="pill pill-thin">UNPROVEN</span> too few examples · <span class="pill pill-flat">NO CLEAR EDGE</span> break-even, any profit looks like luck · <span class="pill pill-negative">NO TRADE</span> it loses money. <strong>WAIT</strong> means no setup is active: there's nothing to do.</li>
-            <li>Most of the time it says WAIT or NO TRADE. That's normal: most patterns don't beat fees. Use <strong>Find an edge</strong> to see which candle size works best for this coin, and turn on <strong>setup alerts</strong> (🔔) so you're told when a GO appears.</li>
+            <li><strong>BUY signals come from one rule</strong>, on daily candles: the market is in an uptrend (price above its 200-day average, 50-day above the 200-day) and a day closes above the highest price of the previous 20 days. You then sell with a trailing stop. It's the top row of the table.</li>
+            <li>Why only this rule: Entryvex replayed its signals on years of data they never saw. This rule made money after fees with much smaller drops than just holding; the short-term setups lost money. See the <strong>📏 Scorecard</strong>.</li>
+            <li>The other rows are <strong>research</strong>: classic setups and candle patterns, each replayed on every past occurrence in the last 3,000 candles (target 1.5 ATR, stop 1 ATR, 24-candle limit, after fees). A good-looking past record there didn't hold up on new data, so they never produce a BUY.</li>
+            <li>Most of the time it says WAIT. That's normal: the trend rule fires only a few times a year per market. Turn on <strong>BUY alerts</strong> (🔔) to be told when it happens.</li>
           </ol>
         </details>
         <div id="verdict"></div>

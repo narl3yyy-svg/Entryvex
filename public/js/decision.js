@@ -1,6 +1,6 @@
 // "Entryvex says": one plain answer for the coin/stock on screen.
 //   - Already own it?  -> HOLD or SELL NOW, with the exact sell prices and a sell-by time.
-//   - Otherwise        -> BUY / SMALL BUY OR SKIP / DON'T BUY / WAIT, from the scanner's MEASURED verdict.
+//   - Otherwise        -> BUY / DON'T BUY / WAIT. BUY comes only from the trend rule on daily candles (engine.js).
 // Five outside checks (bigger trend, overall market, fear gauge, news mood, forecast odds) are shown
 // as tailwinds/headwinds. They're context only: they are not part of the measured win rate.
 import { getKlineHistory, get24h, isStock, stockInfo } from "./market.js";
@@ -237,7 +237,7 @@ function html(c, checks) {
       steps = regimeNote(c, r) + patternNote(c, r) + (bigMove ? moveNote(c) : "") + whenToBuy(c, r) + `
         <div class="d-actions"><span><strong>Do nothing for now.</strong> Entryvex re-checks after every ${r.long ? "daily close" : `${c.interval} candle`}.</span>
           <button class="ghost-btn" data-open-alerts>🔔 Alert me when a BUY appears</button>
-          <button class="ghost-btn" data-find-edge>Find an edge</button>
+          ${r.long ? "" : `<button class="ghost-btn" data-goto-iv="1d">Show the daily chart</button>`}
           <button class="ghost-btn" data-scan-all>Scan watchlist</button></div>`;
     }
   }
@@ -412,9 +412,9 @@ function trailSteps(c, r, p, sz, amt, unit) {
 /* ---------------- Simple mode: one big answer ---------------- */
 /**
  * BUY / SELL / WAIT for a beginner, from the same measured evidence as the full card:
- *   BUY  – a setup with a winning record is active on this chart (with how much, and when to sell);
+ *   BUY  – the trend rule fires on this daily chart (with how much, and the trailing stop);
  *   SELL – you own it and the plan says sell, or the trend is down with a bearish sign (for owners);
- *   WAIT – nothing with a winning record right now (and where to look instead).
+ *   WAIT – no trend breakout right now (with the price that would trigger one, or where to look instead).
  * Plus what the Entryvex paper-trading bot is doing on this market.
  */
 function simpleHtml(c) {

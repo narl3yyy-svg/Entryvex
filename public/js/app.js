@@ -464,7 +464,7 @@ function paintSignals() {
   const at = oppsLastChecked();
   // One line that is also the color key: green = buy now, red = don't buy yet, yellow = not enough data.
   const el = $("wl-summary");
-  el.title = "Row colors: green = buy signal now · blue = watch: a setup with a winning record exists here, waiting for it to appear · red = don't buy: nothing has a winning record here lately · yellow = not enough data to judge. Checked on the candle size shown on the chart. No buy signals is normal: most of the time, waiting is the right call.";
+  el.title = "Row colors: green = BUY now (daily trend breakout) · blue = watch: in a daily uptrend, waiting for a new 20-day high · red = don't buy: no daily uptrend · yellow = not enough data to judge. Checked on daily candles. No buy signals is normal: most of the time, waiting is the right call.";
   el.innerHTML = oppsRunning() ? `<span>Checking every market…</span><span class="when"></span>${autoSelect()}`
     : at ? `<span><i class="dot" style="background:var(--up)"></i><strong class="b">${n.buy}</strong> buy</span>
         <span><i class="dot" style="background:#4c9aff"></i><strong class="wt">${n.watch}</strong> watch</span>

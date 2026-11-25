@@ -174,7 +174,7 @@ async function snapshot() {
     companyFundamentals: (cachedFundamentals(live.symbol) || []).map((l) => `${l.k}: ${String(l.t).replace(/<[^>]+>/g, "")}`),
     ifUserBuysNow: getBuyNowSummary() || "balance not set or not loaded",
     acrossWatchlist: {
-      buySignalsNow: currentBuys().map((b) => `${b.base} ${b.iv}: ${b.label === "GO" ? "BUY" : "SMALL BUY"} (${b.setup})`),
+      buySignalsNow: currentBuys().map((b) => `${b.base} daily: BUY (${b.setup})`),
       closestToBuy: topWatch(6).map((w) => `${w.base} daily: in an uptrend, BUY if a day closes above ${round(w.level)} (${round(w.away, 2)}% away)`),
       perSymbol: (hooks.getWatchlistInfo?.() || []).slice(0, 20).map((w) => `${w.ticker}: ${w.changePct != null ? (w.changePct >= 0 ? "+" : "") + w.changePct.toFixed(2) + "% today, " : ""}${signalFor(w.sym)}`),
     },

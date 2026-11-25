@@ -152,8 +152,10 @@ let badges = {};               // symbol -> {level,label,interval}
 function scheduleScan() {
   clearTimeout(scanTimer);
   if (!cfg.setup.on) { badges = {}; hooks.onBadges(badges); return; }
-  const ms = MINUTES[cfg.setup.interval] * 60_000;
-  const next = Math.ceil(Date.now() / ms) * ms + 4000;  // a few seconds after the candle closes
+  // BUY alerts use the trend rule on daily candles. Daily candles close at different times (crypto at
+  // 00:00 UTC, stocks after the US close), so it checks hourly; each closed candle alerts at most once.
+  const ms = 60 * 60_000;
+  const next = Math.ceil(Date.now() / ms) * ms + 4000;
   scanTimer = setTimeout(async () => { await runScan(); scheduleScan(); }, Math.max(1000, next - Date.now()));
 }
 
@@ -182,7 +184,7 @@ let ntfyMsg = "";
 export async function runScan() {
   if (scanning || !cfg.setup.on) return;
   scanning = true;
-  const interval = cfg.setup.interval;
+  const interval = "1d";
   const fee = (+store.get("feePct", 0.02) || 0) / 100;
   const syms = hooks.getWatchlist();
   const queue = [...syms];
@@ -195,16 +197,15 @@ export async function runScan() {
         const r = analyze(c, { costPerSide: (isStock(sym) ? 0 : fee) + (isFinite(book.spreadPct) ? book.spreadPct / 2 : 0) });
         logFromAnalysis(sym, interval, c, r);
         next[sym] = { level: r.overall.level, label: r.overall.label, interval };
-        const ok = r.overall.level === "go" || (cfg.setup.min === "caution" && r.overall.level === "caution" && r.best?.verdict.level === "weak");
+        const ok = r.overall.level === "go";
         const key = `${sym}:${c[c.length - 2]?.time}`;
         if (ok && lastSetupAlert.get(sym) !== key) {
           lastSetupAlert.set(sym, key);
-          const s = r.best.stats;
           const base = baseOf(sym);
           notify({
-            kind: r.overall.level === "go" ? "go" : "caution", symbol: sym, interval,
-            title: `${r.overall.label}: ${base} · ${r.best.name} (${interval})`,
-            body: `Ended in profit ${Math.round(s.winRate * s.n)} of ${s.n} past times, avg ${fmt.pct(s.ev * 100)} per trade after costs. Open it for the trade card.`,
+            kind: "go", symbol: sym, interval,
+            title: `BUY: ${base} (daily trend breakout)`,
+            body: "Uptrend, and a day just closed at a new 20-day high. Open it for the plan: how much to buy and where to put the stop.",
           });
         }
       } catch (e) { console.warn("alert scan", sym, e); }
@@ -214,11 +215,8 @@ export async function runScan() {
   badges = next;
   hooks.onBadges(badges);
   const go = Object.values(next).filter((b) => b.level === "go").length;
-  const caution = Object.entries(next).filter(([, b]) => b.level === "caution" && b.label === "CAUTION").length;
   const when = new Date().toLocaleTimeString([], { hour: "2-digit", hourCycle: "h23", minute: "2-digit" });
-  lastScanText = `Last checked ${when}: ${syms.length} markets on ${interval}. ` + (go || caution
-    ? `${go} GO (proven edge)${caution ? `, ${caution} CAUTION (weak edge)${cfg.setup.min === "go" ? ": you're only alerted on GO, so these didn't alert you. Switch \"Alert on\" to include CAUTION if you want them" : ""}` : ""}.`
-    : "Nothing worth trading right now.");
+  lastScanText = `Last checked ${when}: ${syms.length} markets on daily candles. ` + (go ? `${go} BUY signal${go === 1 ? "" : "s"}.` : "No BUY signals right now.");
   if ($("alert-scan-status")) $("alert-scan-status").textContent = lastScanText;
   scanning = false;
 }
@@ -381,15 +379,9 @@ function renderDrawer() {
 
     <section>
       <h3>Setup alerts</h3>
-      <label class="switch"><input type="checkbox" id="al-setup-on" ${cfg.setup.on ? "checked" : ""}/> Tell me when a setup with a positive track record appears on my watchlist</label>
-      <div class="al-row">
-        <label class="small muted">Candles <select id="al-setup-int">${Object.keys(MINUTES).map((k) => `<option ${k === cfg.setup.interval ? "selected" : ""}>${k}</option>`).join("")}</select></label>
-        <label class="small muted">Alert on <select id="al-setup-min">
-          <option value="go" ${cfg.setup.min === "go" ? "selected" : ""}>GO only (proven edge)</option>
-          <option value="caution" ${cfg.setup.min === "caution" ? "selected" : ""}>GO + CAUTION (weak edge)</option></select></label>
-      </div>
-      <p class="muted small" id="alert-scan-status">${cfg.setup.on ? (lastScanText || "Checking your watchlist…") + " Re-checks after every candle closes." : "Off."}</p>
-      <p class="muted tiny">GO alerts are rare by design: most setups don't beat fees and spread. Expect days with none.</p>
+      <label class="switch"><input type="checkbox" id="al-setup-on" ${cfg.setup.on ? "checked" : ""}/> Tell me when the trend rule says BUY on my watchlist (daily candles)</label>
+      <p class="muted small" id="alert-scan-status">${cfg.setup.on ? (lastScanText || "Checking your watchlist…") + " Re-checks every hour; daily candles close once a day." : "Off."}</p>
+      <p class="muted tiny">BUY alerts are rare by design: the trend rule fires only a few times a year on each market. Expect weeks with none.</p>
     </section>
 
     <section>
