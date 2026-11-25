@@ -46,12 +46,21 @@ const store = {
   set(k, v) { try { localStorage.setItem("evx." + k, JSON.stringify(v)); } catch {} },
 };
 
+// BUY signals now come only from daily charts (the trend rule). New visitors start on daily candles,
+// and Simple-mode users who had a shorter chart are moved to daily once (Pro users keep their choice).
+if (!store.get("trendV1", false)) {
+  store.set("trendV1", true);
+  if (store.get("mode", "simple") !== "pro" && !["1d", "1w"].includes(store.get("interval", "1d"))) {
+    store.set("interval", "1d"); store.set("view", null); store.set("style", "hold");
+  }
+}
+
 const state = {
   allSymbols: [],
   bySymbol: new Map(),
   watchlist: store.get("watchlist", DEFAULT_WATCHLIST),
   selected: store.get("selected", "BTCUSDT"),
-  interval: store.get("interval", "15m"),
+  interval: store.get("interval", "1d"),
   view: store.get("view", null),          // "1y" | "5y" | "all" | null
   showPatterns: store.get("patterns", true),
   patternsNow: null,
@@ -1165,12 +1174,12 @@ function scanWholeWatchlist() {
 
 /* ---------- Trading style: Day trader / Swing trader / Long-term holder ---------- */
 const STYLES = {
-  day: { interval: "5m", hint: "Fast signals on 5-minute candles. Check the calendar before big news." },
-  swing: { interval: "4h", hint: "Trades lasting days to weeks on 4-hour candles." },
-  hold: { interval: "1d", hint: "Months to years on daily candles: long-term view first." },
+  day: { interval: "5m", hint: "5-minute candles for watching moves. No BUY signals here: short-term signals lost money in testing. Check the calendar before big news." },
+  swing: { interval: "4h", hint: "4-hour candles. No BUY signals here: they come from the daily chart." },
+  hold: { interval: "1d", hint: "Daily candles: where Entryvex's BUY signals (the trend rule) come from. Long-term view first." },
 };
 function applyStyle(style, changeInterval) {
-  if (!STYLES[style]) style = "swing";
+  if (!STYLES[style]) style = "hold";
   store.set("style", style);
   document.body.classList.remove("style-day", "style-swing", "style-hold");
   document.body.classList.add("style-" + style);
@@ -1183,7 +1192,7 @@ function applyStyle(style, changeInterval) {
   renderLongTerm({ ...decisionCtx(), onLoaded: () => updateBuyNow(decisionCtx()) });
 }
 function initStyle() {
-  applyStyle(store.get("style", "swing"), false);
+  applyStyle(store.get("style", "hold"), false);
   $("style-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-style]");
     if (b) applyStyle(b.dataset.style, true);
